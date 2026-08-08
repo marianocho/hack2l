@@ -1,4 +1,4 @@
-# hack2l
+﻿# hack2l
 .venv/
 __pycache__/
 *.py[cod]
@@ -14,3 +14,4 @@ saidas/*
 # Artefatos dos testes da propria pericia. Os artefatos de prova de verdade
 # ficam versionados -- sao a evidencia.
 artefatos/*selftest*
+artefatos/*docker_quebrado*
