@@ -100,30 +100,30 @@ def test_inconclusivo_sempre_carrega_motivo_mesmo_sem_artefato():
 
 # ------------------------------------------------------------------ regra 3b
 
-def test_app_sem_modelo_impede_refutacao_de_injection():
-    """Achado do Luis as 10h40: sem OPENAI_API_KEY o app alvo devolve a mesma
-    string para qualquer pergunta, inclusive payload de injection.
+def test_aviso_por_acusacao_dispara_a_r4_sem_depender_do_estado_da_rodada():
+    """Segundo sinal da R4, complementar ao do llm_alvo: a propria ferramenta
+    registrou que ESTA acusacao viu resposta duble.
 
-    'O modelo nao obedeceu' vira REFUTADO -- absolvicao falsa, que e' pior que
-    falso alarme porque engorda a lista de descartados e PARECE rigor.
+    Serve para o caso de a sonda da rodada nao ter rodado ou ter dado
+    indeterminado -- sem isto, a regra dependeria de um unico detector.
     """
     v = juiz.aplica_regras(
         {"id": "a1", "veredito": "REFUTADO", "motivo": "o sentinela nao apareceu"},
-        {"categoria": "seguranca_ia"},
+        {"categoria": "injection"},
         None,
         avisos=[juiz.cfg.AVISO_SEM_MODELO],
     )
     assert v["veredito"] == "INCONCLUSIVO"
-    assert "sem OPENAI_API_KEY" in v["motivo"]
-    assert any("R3b" in r for r in v["regras_aplicadas"])
+    assert "nao e' possivel provar nem refutar" in v["motivo"].lower()
+    assert any("R4" in r for r in v["regras_aplicadas"])
 
 
-def test_app_sem_modelo_nao_mexe_em_quem_foi_provado():
-    """O aviso e' por acusacao, nao por rodada: quem provou por outra via -- um
-    teste de isolamento, que nao depende de LLM -- continua provado."""
+def test_llm_duble_nao_mexe_em_quem_foi_provado():
+    """Quem provou por outra via -- teste diferencial, isolamento -- continua
+    provado e critico. O modelo duble nao contamina a rodada inteira."""
     v = juiz.aplica_regras(
         {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
-        {"arbitro": "criterio 3"},
+        {"categoria": "injection", "arbitro": "criterio 3"},
         _art(),
         avisos=[juiz.cfg.AVISO_SEM_MODELO],
     )
@@ -131,10 +131,19 @@ def test_app_sem_modelo_nao_mexe_em_quem_foi_provado():
     assert v["severidade"] == "CRITICA"
 
 
-def test_acusacao_sem_aviso_nao_e_afetada():
+def test_vazamento_refutado_sobrevive_mesmo_com_aviso():
+    """Isolamento se prova por CITACAO, e citacao nao depende do modelo
+    responder -- entao REFUTADO ali continua sendo descarte legitimo.
+
+    Ampliar a R4 para esta categoria incharia a lista de inconclusivos com
+    descartes validos, e inconclusivo inflado enfraquece o parecer tanto quanto
+    inconclusivo vazio.
+    """
     v = juiz.aplica_regras(
-        {"id": "a2", "veredito": "REFUTADO", "motivo": "passa nos dois lados"},
-        {}, None, avisos=[],
+        {"id": "a2", "veredito": "REFUTADO", "motivo": "carol nao viu nada"},
+        {"categoria": "vazamento_de_contexto"},
+        None,
+        avisos=[juiz.cfg.AVISO_SEM_MODELO],
     )
     assert v["veredito"] == "REFUTADO"
 

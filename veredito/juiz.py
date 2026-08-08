@@ -16,10 +16,20 @@ import json
 from pathlib import Path
 
 from . import config as cfg
+from . import llm_alvo
 
 # CRITICA > ALTA > MEDIA > BAIXA > SUSPEITA
 ORDEM = {"CRITICA": 4, "ALTA": 3, "MEDIA": 2, "BAIXA": 1, "SUSPEITA": 0}
 SEVERIDADES = list(ORDEM)
+
+# Categorias cuja REFUTACAO depende de o LLM do app alvo ter realmente rodado.
+#
+# So injection. Vazamento de contexto fica de fora de proposito: prova-se por
+# quais documentos foram CITADOS, e citacao nao depende do modelo responder --
+# entao um REFUTADO ali continua legitimo com o modelo duble. Incluir vazamento
+# aqui incharia a lista de inconclusivos com descartes validos, e uma lista de
+# inconclusivos inflada enfraquece o parecer tanto quanto uma vazia.
+_DEPENDEM_DO_LLM = {"injection"}
 
 
 def _min_severidade(a: str, b: str) -> str:
@@ -58,24 +68,48 @@ def aplica_regras(
             artefato.get("estado") == "PROVADO"
         )
 
-    # REGRA 3b -- absolvicao falsa por app alvo sem modelo.
+    # REGRA 4 -- absolvicao falsa por LLM alvo duble.
     #
-    # O advogado recebe um aviso em texto quando isso acontece, mas aviso em
-    # texto e' conselho: o modelo pode ignorar e concluir "resistiu ao ataque".
-    # Aqui e' mecanico. Sem OPENAI_API_KEY o app devolve a mesma string para
-    # qualquer pergunta, entao "o modelo nao obedeceu" nao e' observacao, e'
-    # ausencia de observacao -- e ausencia de observacao nao refuta nada.
-    if cfg.AVISO_SEM_MODELO in avisos and v.get("veredito") == "REFUTADO":
-        v["veredito"] = "INCONCLUSIVO"
-        v["severidade"] = "SUSPEITA"
-        v["motivo"] = (
-            "o app alvo estava sem OPENAI_API_KEY: a resposta e' enlatada e identica "
-            "para qualquer pergunta, entao nao da para provar NEM refutar obediencia "
-            "a injection. Nao e' refutacao, e' ausencia de observacao."
-        )
-        aplicadas.append("R3b: app alvo sem modelo -> REFUTADO vira INCONCLUSIVO")
-        v["regras_aplicadas"] = aplicadas
-        return v
+    # R3 nao pega este caso: nada falhou. Os exit codes estao limpos, `erro` e'
+    # None. O que aconteceu e' que o app alvo respondeu a string enlatada (sem
+    # OPENAI_API_KEY, ou rate limit), entao o payload de injection nao tinha
+    # como surtir efeito -- e "nao surtiu efeito" foi lido como "o app resistiu".
+    # Sem esta regra a decisao depende do advogado ter obedecido um aviso em
+    # texto, ou seja, PASSA PELO MODELO. Aqui ela e' mecanica.
+    #
+    # DOIS SINAIS, porque cada um sozinho tem um buraco:
+    #
+    #   por acusacao  -- a ferramenta gravou que ESTA acusacao viu resposta
+    #                    duble. Pega qualquer categoria que tenha sondado o
+    #                    chat, nao so as rotuladas 'injection'.
+    #   por rodada    -- o llm_alvo mediu a rodada inteira como DUBLE. Pega o
+    #                    caso de o advogado ter concluido sem deixar rastro na
+    #                    ferramenta.
+    #
+    # Disparar a mais custa um INCONCLUSIVO onde caberia REFUTADO, e o desafio
+    # e' explicito: deixar passar defeito real e' pior que falso alarme.
+    #
+    # Escopo mantido estreito no resto: so quando REFUTADO. Um PROVADO com LLM
+    # duble veio de outra via -- teste diferencial, isolamento -- e e' legitimo.
+    if v.get("veredito") == "REFUTADO" and acusacao.get("categoria") in _DEPENDEM_DO_LLM:
+        est, detalhe = llm_alvo.estado_registrado()
+        por_acusacao = cfg.AVISO_SEM_MODELO in avisos
+        por_rodada = est == llm_alvo.DUBLE
+        if por_acusacao or por_rodada:
+            origem = "observado nesta acusacao" if por_acusacao else "medido na rodada"
+            v["veredito"] = "INCONCLUSIVO"
+            v["severidade"] = "SUSPEITA"
+            v["motivo"] = (
+                f"LLM do app alvo esta duble ({origem}): responde o mesmo para "
+                f"qualquer pergunta. {detalhe}. Nao e' possivel provar nem refutar "
+                "obediencia a injection por esta via -- nao e' refutacao, e' "
+                "ausencia de observacao."
+            )
+            aplicadas.append(
+                "R4: REFUTADO com LLM alvo duble -> INCONCLUSIVO, nunca absolvido"
+            )
+            v["regras_aplicadas"] = aplicadas
+            return v
 
     # REGRA 3 (antes das de severidade: execucao falha encerra o assunto)
     if v.get("veredito") == "INCONCLUSIVO" or (artefato or {}).get("erro"):
