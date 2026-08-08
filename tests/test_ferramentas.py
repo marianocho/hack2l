@@ -37,15 +37,58 @@ def test_passar_nos_dois_lados_e_refutacao_nao_prova():
 
 @pytest.mark.parametrize("exit_head", [2, 3, 4, 5])
 def test_erro_de_execucao_no_head_nunca_vira_prova(exit_head):
-    """O ponto mais afiado do modulo.
-
-    exit_head != 0 seria a leitura ingenua e transformaria docker fora do ar em
-    condenacao critica. So o exit 1 -- teste falhou de verdade -- e' prova.
+    """exit_head != 0 seria a leitura ingenua e transformaria docker fora do ar
+    em condenacao critica. So o exit 1 -- teste falhou de verdade -- e' prova.
     """
     estado, provado, motivo = f._classifica(0, exit_head)
     assert estado == "INCONCLUSIVO"
     assert provado is False
     assert motivo
+
+
+# ---------------------------------------------- docker devolve 1, igual a falha
+# Achado da auditoria adversarial de 08/08. Esta parametrizacao ia so ate 5 e
+# por isso carimbava falsa seguranca justamente no ponto mais afiado do modulo.
+
+def test_docker_caindo_no_head_nao_vira_prova_mesmo_com_exit_1():
+    """`docker compose` devolve 1 quando o daemon falha -- o MESMO codigo que o
+    pytest usa para 'teste falhou'. `docker run` puro usa 125; o compose nao.
+
+    Sem a guarda de 'o pytest chegou a rodar', um flap do healthcheck do db
+    entre as duas execucoes virava acusacao CRITICA falsa, e o exit code
+    medido -- a unica salvaguarda deterministica do produto -- era derrotado
+    pelo caso que ela dizia proteger.
+    """
+    estado, provado, motivo = f._classifica(0, 1, rodou_base=True, rodou_head=False)
+    assert estado == "INCONCLUSIVO"
+    assert provado is False
+    assert "nao chegou a rodar" in motivo
+
+
+def test_docker_caindo_no_base_nao_manda_enfraquecer_o_teste():
+    """A direcao inversa, que e' a mais provavel: docker ruim no inicio da
+    rodada da exit_base=1 em TODAS as acusacoes. O motivo antigo dizia
+    'reescreva o teste para passar no codigo de hoje' -- instrucao para o
+    advogado ENFRAQUECER um teste correto ate ele passar. Loop de auto-sabotagem
+    com o parecer esvaziando e parecendo rigor.
+    """
+    _, _, motivo = f._classifica(1, 1, rodou_base=False, rodou_head=False)
+    assert "reescreva" not in motivo.lower()
+    assert "nao chegou a rodar" in motivo
+
+
+def test_resumo_do_pytest_e_o_que_distingue_teste_de_infra():
+    """A deteccao nao pergunta ao exit code, pergunta ao pytest."""
+    assert f._RESUMO_PYTEST.search("5 passed in 2.43s")
+    assert f._RESUMO_PYTEST.search("1 failed, 4 passed in 70.90s")
+    assert f._RESUMO_PYTEST.search("no tests ran in 0.01s")
+    # saidas tipicas de docker quebrado: nenhuma tem linha de resumo
+    assert not f._RESUMO_PYTEST.search(
+        "failed to connect to the docker API, check if the daemon is running"
+    )
+    assert not f._RESUMO_PYTEST.search("no such service: api")
+    assert not f._RESUMO_PYTEST.search("Error response from daemon: no space left on device")
+    assert not f._RESUMO_PYTEST.search("invalid spec: :/code/app: empty section between colons")
 
 
 def test_teste_que_ja_falha_no_base_nao_isola_a_mudanca():

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -103,18 +104,39 @@ def commit_base() -> str:
 
 
 def _garante_worktree(commit: str, nome: str) -> Path:
-    """Worktree idempotente. O advogado chama isto em loop; recriar toda vez
-    seria minutos jogados fora ao longo da rodada."""
+    """Worktree idempotente, e CONFERIDO. O advogado chama isto em loop.
+
+    🚨 Nunca confiar no returncode do `worktree add` e seguir em frente. A
+    guarda antiga era `if r.returncode != 0 and not destino.exists(): raise` --
+    ou seja, se o diretorio existisse mas estivesse obsoleto, o add falhava, a
+    guarda passava batido e a prova rodava contra o COMMIT ERRADO, gravando no
+    artefato o commit que se pediu e nao o que se montou. Falso negativo mudo.
+
+    Acontece de verdade na outra maquina: os ponteiros de worktree do git sao
+    caminhos ABSOLUTOS, chumbados em quem criou. Clonar o repo e rodar la
+    encontra `.worktrees/head` apontando para um caminho que nao existe.
+
+    Entao: conferir o que ficou no disco, sempre.
+    """
     destino = cfg.WORKTREES / nome
     if destino.exists():
         atual = _git("rev-parse", "HEAD", cwd=destino)
         if atual.returncode == 0 and atual.stdout.strip() == commit:
             return destino
         _git("worktree", "remove", "--force", str(destino))
+        if destino.exists():  # ponteiro quebrado: o remove nao da conta
+            shutil.rmtree(destino, ignore_errors=True)
+    _git("worktree", "prune")  # limpa registro orfao de outra maquina
     cfg.WORKTREES.mkdir(parents=True, exist_ok=True)
     r = _git("worktree", "add", "--detach", str(destino), commit)
-    if r.returncode != 0 and not destino.exists():
-        raise RuntimeError(f"git worktree add falhou: {r.stderr.strip()}")
+
+    conferido = _git("rev-parse", "HEAD", cwd=destino)
+    if conferido.returncode != 0 or conferido.stdout.strip() != commit:
+        raise RuntimeError(
+            f"worktree '{nome}' nao ficou em {commit[:7]} "
+            f"(esta em {conferido.stdout.strip()[:7] or 'nada'}). "
+            f"add: {r.stderr.strip()[:200]} | conferencia: {conferido.stderr.strip()[:200]}"
+        )
     return destino
 
 
@@ -132,7 +154,29 @@ def _sanitiza_nome(nome: str) -> str:
 
 # ------------------------------------------------------------------- execucao
 
-def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str]:
+# 🚨 O exit code SOZINHO nao distingue "teste falhou" de "docker caiu".
+#
+# `docker run` puro usa 125 para falha de infraestrutura, mas `docker compose`
+# usa 1 -- o mesmo codigo que o pytest usa para "teste falhou". Medido: daemon
+# inalcancavel -> 1, servico inexistente -> 1, mount spec invalido -> 1,
+# arquivo de compose ausente -> 1.
+#
+# Ou seja, a guarda `exit_head == 1` protegia contra 2/3/4/5 e deixava passar
+# exatamente o caso que ela dizia proteger. Um flap do healthcheck do `db`
+# entre as duas execucoes virava acusacao CRITICA falsa; e docker ruim no
+# inicio virava INCONCLUSIVO dizendo ao advogado "reescreva o teste para passar
+# no codigo de hoje" -- instrucao para ENFRAQUECER um teste correto.
+#
+# Entao nao se pergunta ao exit code se o pytest rodou. Pergunta-se ao pytest.
+_RESUMO_PYTEST = re.compile(
+    r"\d+\s+(passed|failed|error|skipped|deselected|xfailed|xpassed)"
+    r"|no tests ran"
+    r"|={3,}\s*(ERRORS?|FAILURES?)\s*={3,}",
+    re.IGNORECASE,
+)
+
+
+def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str, bool]:
     """Roda a suite dentro do container, com o codigo do worktree por cima.
 
     Bind-mount e nao rebuild: o Dockerfile faz COPY do codigo e o compose nao
@@ -152,7 +196,10 @@ def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str]:
         cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=cfg.TIMEOUT_PYTEST_S,
     )
-    return r.returncode, (r.stdout or "") + (r.stderr or "")
+    saida = (r.stdout or "") + (r.stderr or "")
+    # O terceiro valor e' a unica prova de que o exit code veio do pytest e nao
+    # do docker: sem linha de resumo, nenhum teste foi executado.
+    return r.returncode, saida, bool(_RESUMO_PYTEST.search(saida))
 
 
 # Codigos do pytest: 0 passou | 1 falhou | 2 interrompido | 3 erro interno
@@ -165,7 +212,9 @@ _CAUSA = {
 }
 
 
-def _classifica(exit_base: int, exit_head: int) -> tuple[str, bool, str]:
+def _classifica(
+    exit_base: int, exit_head: int, rodou_base: bool = True, rodou_head: bool = True
+) -> tuple[str, bool, str]:
     """A regra central, em codigo. O LLM nao participa desta decisao.
 
     Devolve (estado, provado, motivo). `motivo` explica todo estado que nao e'
@@ -173,9 +222,21 @@ def _classifica(exit_base: int, exit_head: int) -> tuple[str, bool, str]:
     no parecer. NAO confundir com `erro`, que e' so falha de infraestrutura:
     refutacao com motivo e' um resultado valido, nao um erro.
 
-    Exigir exit_head == 1 (e nao != 0) e' deliberado: tratar erro de execucao
-    como prova transformaria docker fora do ar em condenacao critica.
+    `rodou_*` vem antes de tudo e nao e' redundante com o exit code: o
+    `docker compose` devolve 1 quando o daemon falha, que e' o MESMO codigo de
+    "teste falhou". Sem esta guarda, um flap do docker entre as duas execucoes
+    vira acusacao critica falsa -- ver o comentario em _RESUMO_PYTEST.
+
+    Exigir exit_head == 1 (e nao != 0) continua valendo para os codigos
+    proprios do pytest (2/3/4/5).
     """
+    if not rodou_base or not rodou_head:
+        lado = "base" if not rodou_base else "head"
+        return "INCONCLUSIVO", False, (
+            f"no {lado}: o pytest nao chegou a rodar -- a saida nao tem linha de "
+            "resumo. O exit code veio do docker, nao do teste, e docker compose "
+            "usa 1 igual a teste falhando. Nao da para provar nem refutar."
+        )
     if exit_base == 0 and exit_head == 1:
         return "PROVADO", True, "passa no commit base e falha no head do PR"
     if exit_base == 0 and exit_head == 0:
@@ -223,11 +284,22 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
             escritos.append(destino)
 
         alvo = f"tests/{nome}"
-        art["exit_base"], art["stdout_base"] = _roda_pytest(wt_base, alvo)
-        art["exit_head"], art["stdout_head"] = _roda_pytest(wt_head, alvo)
+        art["exit_base"], art["stdout_base"], rodou_base = _roda_pytest(wt_base, alvo)
+        art["exit_head"], art["stdout_head"], rodou_head = _roda_pytest(wt_head, alvo)
+        art["rodou_base"], art["rodou_head"] = rodou_base, rodou_head
         art["estado"], art["provado"], art["motivo"] = _classifica(
-            art["exit_base"], art["exit_head"]
+            art["exit_base"], art["exit_head"], rodou_base, rodou_head
         )
+        # O CONTRATO promete `erro` preenchido quando o docker cai. Sem isto so
+        # a excecao preenchia, e o docker devolvendo exit 1 nao levanta excecao
+        # nenhuma -- a promessa era falsa.
+        if not rodou_base or not rodou_head:
+            lado = "base" if not rodou_base else "head"
+            art["erro"] = (
+                f"pytest nao executou no {lado} (exit "
+                f"{art['exit_base'] if lado == 'base' else art['exit_head']} veio do docker). "
+                + _corta(art[f"stdout_{lado}"], 500)
+            )
     except subprocess.TimeoutExpired:
         art["erro"] = f"timeout: passou de {cfg.TIMEOUT_PYTEST_S}s"
     except Exception as e:  # nunca virar absolvicao por silencio
@@ -419,7 +491,12 @@ def run_tests(expressao: str = "") -> str:
     try:
         wt = _worktree_de("head")
         alvo = f"tests/{Path(expressao).name}" if expressao.strip() else "tests"
-        codigo, saida = _roda_pytest(wt, alvo)
+        codigo, saida, rodou = _roda_pytest(wt, alvo)
+        if not rodou:
+            return (
+                f"ERRO DE INFRAESTRUTURA: o pytest nao chegou a rodar. O exit {codigo} "
+                f"veio do docker, nao do teste. Nao conclua nada sobre o codigo.\n{_corta(saida)}"
+            )
         return f"exit {codigo}\n{_corta(saida)}"
     except Exception as e:
         return f"ERRO ao rodar os testes: {type(e).__name__}: {e}"
