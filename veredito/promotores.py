@@ -250,28 +250,7 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None) -> li
     if len(acusacoes) < antes:
         print(f"  dedup: {antes} -> {len(acusacoes)} "
               f"({antes - len(acusacoes)} fundidas em _duplicatas)")
-
-    # Empate de confianca desempata por ARBITRO citado, e isso nao e' estetica.
-    #
-    # Medido na rodada de validacao das 13h32: 41 das 54 acusacoes tinham
-    # arbitro e 28 tinham arbitro E confianca alta -- mas a ordenacao so olhava
-    # confianca, entao o desempate virou ordem de lista e duas das tres vagas
-    # foram para acusacoes sem arbitro. Os dois condenados do parecer sairam
-    # com "ARBITRO: nenhum citado".
-    #
-    # Custa nos dois lados: no palco, o arbitro e' a linha que separa "violacao
-    # do criterio de aceite no 2" de "opiniao com teste em anexo"; e
-    # mecanicamente a R1 rebaixa CRITICA sem arbitro para SUSPEITA, entao
-    # mandar acusacao sem arbitro trava o teto de severidade em ALTA por
-    # construcao.
-    #
-    # Nao prejudica performance: a cota reserva a vaga dela, e la' dentro
-    # nenhuma tem arbitro (o PRD nao fixa criterio de performance), entao o
-    # desempate e' neutro.
-    ordenadas = sorted(
-        acusacoes,
-        key=lambda a: (_PESO.get(a.get("confianca"), 3), 0 if a.get("arbitro") else 1),
-    )
+    ordenadas = sorted(acusacoes, key=lambda a: _PESO.get(a.get("confianca"), 3))
     escolhidas, sobra = [], []
     for a in ordenadas:
         b = _bucket(a.get("categoria", "?"))

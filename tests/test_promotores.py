@@ -137,38 +137,3 @@ def test_mesmo_promotor_repetindo_NAO_e_corroboracao():
 def test_corroborado_ausente_quando_nao_ha_duplicata():
     r = deduplica([acu("a", "prd", "a.py:1", "AC1")])
     assert "_corroborado" not in r[0]
-
-
-# ----------------------------------------- desempate por arbitro citado
-
-def test_arbitro_desempata_confianca_igual():
-    """Medido 13h32: 28 acusacoes tinham alta+arbitro e a selecao pegou None.
-
-    Sem arbitro a R1 rebaixa CRITICA para SUSPEITA, entao mandar acusacao sem
-    arbitro trava o teto de severidade em ALTA por construcao.
-    """
-    acusacoes = [
-        acu("sem_1", "correcao", "a.py:1", None, conf="alta"),
-        acu("sem_2", "correcao", "a.py:2", None, conf="alta"),
-        acu("com_1", "correcao", "a.py:3", "AC1", conf="alta"),
-    ]
-    r = seleciona(acusacoes, teto=1)
-    assert r[0]["id"] == "com_1", "escolheu sem arbitro tendo um com arbitro igual"
-
-
-def test_confianca_ainda_manda_mais_que_arbitro():
-    """Arbitro e' desempate, nao criterio primario."""
-    acusacoes = [
-        acu("baixa_com", "correcao", "a.py:1", "AC1", conf="baixa"),
-        acu("alta_sem", "correcao", "a.py:2", None, conf="alta"),
-    ]
-    assert seleciona(acusacoes, teto=1)[0]["id"] == "alta_sem"
-
-
-def test_performance_nao_e_penalizada_pelo_desempate():
-    """A cota reserva a vaga; dentro dela ninguem tem arbitro, desempate neutro."""
-    acusacoes = [
-        acu(f"cor_{i}", "correcao", f"a.py:{i}", f"AC{i}", conf="alta") for i in range(6)
-    ] + [acu("perf_1", "performance", "b.py:1", None, conf="alta")]
-    ids = [a["id"] for a in seleciona(acusacoes, teto=3, cotas=dict(COTAS))]
-    assert "perf_1" in ids
