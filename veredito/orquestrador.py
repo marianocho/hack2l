@@ -15,7 +15,7 @@ import json
 import sys
 import time
 
-from . import advogado, config as cfg, juiz, llm_alvo, promotores
+from . import advogado, config as cfg, juiz, llm_alvo, promotores, tracing
 
 # Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
 # ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
@@ -71,10 +71,28 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -
     print(f"\n{len(acusacoes)} de {len(brutas)} acusacoes vao ao advogado "
           f"({cfg.MODEL_ADVOGADO})\n")
 
+    # Trace da rodada. Os organizadores dizem, verbatim: "Submitting a trace
+    # link is the cleanest way to prove your multi-agent flow actually ran."
+    #
+    # tracing.rodada NUNCA derruba a rodada -- 4 dos 13 testes do modulo
+    # existem so para provar isso (cliente que explode na criacao, span que
+    # explode no end). Langfuse fora = no-op silencioso, o parecer sai igual.
+    rod_cm = tracing.rodada("veredito", top_n=teto, brutas=len(brutas),
+                            ao_advogado=len(acusacoes))
+    rod = rod_cm.__enter__()
+    if rod.url:
+        print(f"trace desta rodada: {rod.url}\n", flush=True)
+
     veredictos: list[dict] = []
     for i, a in enumerate(acusacoes, 1):
         print(f"[{i}/{len(acusacoes)}] {a.get('id')} -- {a.get('categoria')}", flush=True)
-        v = advogado.julga(a, diff)
+        with rod.etapa(f"advogado/{a.get('id')}",
+                       entrada={"categoria": a.get("categoria"),
+                                "arbitro": a.get("arbitro"),
+                                "local": a.get("local")}) as et:
+            v = advogado.julga(a, diff)
+            et.evento("veredito", veredito=v.get("veredito"), voltas=v.get("voltas"),
+                      severidade=v.get("severidade"), cache_read=v.get("cache_read"))
         veredictos.append(v)
 
         # Grava a cada acusacao, nao no fim: rodada que morre no meio nao perde
@@ -99,7 +117,13 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -
             print("    ⚠ cache_read zero na 1a acusacao -- algo varia no prefixo",
                   flush=True)
 
-    texto = juiz.sentencia()
+    with rod.etapa("juiz") as et:
+        texto = juiz.sentencia()
+        et.evento("parecer", caracteres=len(texto))
+    rod_cm.__exit__(None, None, None)   # fecha o trace e faz flush
+    if rod.url:
+        print(f"\ntrace: {rod.url}  (tambem em saidas/trace.txt)")
+
     total = {
         "acusacoes": len(veredictos),
         "segundos": round(time.time() - inicio, 1),
