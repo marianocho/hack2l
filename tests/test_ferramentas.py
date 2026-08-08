@@ -224,6 +224,48 @@ def test_url_do_app_nao_usa_localhost():
     assert "localhost" not in f.cfg.APP_API_URL, "use 127.0.0.1 -- ver comentario em config.py"
 
 
+# ------------------------------------------- o caminho que vai parar no slide
+
+def _raiz_falsa(tmp_path, monkeypatch, *arquivos):
+    """Worktree de mentira: normaliza_local so le disco, entao nao precisa git."""
+    raiz = tmp_path / "head"
+    for a in arquivos:
+        alvo = raiz / a
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_text("x", encoding="utf-8")
+    raiz.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(f.cfg, "WORKTREES", tmp_path)
+    f._CACHE_LOCAL.clear()
+    return raiz
+
+
+def test_normaliza_local_corrige_a_raiz_que_o_promotor_inventou(tmp_path, monkeypatch):
+    """24, 20 e 7 acusacoes da mesma rodada citaram este arquivo com tres raizes
+    diferentes. Sem isto o parecer exibe um caminho que nao abre no repo."""
+    _raiz_falsa(tmp_path, monkeypatch, "app/api/app/routers/shares.py")
+    assert f.normaliza_local("app/routers/shares.py:31") == "app/api/app/routers/shares.py:31"
+    assert f.normaliza_local("routers/shares.py") == "app/api/app/routers/shares.py"
+
+
+def test_normaliza_local_devolve_o_que_recebeu_quando_nao_da(tmp_path, monkeypatch):
+    """Cosmetica nao pode inventar caminho. Ambiguo, inexistente ou diretorio
+    saem intactos -- caminho errado no parecer e' pior que caminho feio."""
+    _raiz_falsa(tmp_path, monkeypatch,
+                "app/api/app/routers/shares.py", "app/web/app/routers/shares.py")
+    assert f.normaliza_local("routers/shares.py:9") == "routers/shares.py:9"   # ambiguo
+    assert f.normaliza_local("nao_existe_xyz.py:1") == "nao_existe_xyz.py:1"
+    assert f.normaliza_local("app/api/app/routers/") == "app/api/app/routers/"  # diretorio
+    assert f.normaliza_local("") == ""
+
+
+def test_normaliza_local_nao_cria_worktree(tmp_path, monkeypatch):
+    """Chamada pelo juiz, que roda em milissegundos e sem git de proposito."""
+    monkeypatch.setattr(f.cfg, "WORKTREES", tmp_path / "vazio")
+    f._CACHE_LOCAL.clear()
+    assert f.normaliza_local("app/routers/shares.py:31") == "app/routers/shares.py:31"
+    assert not (tmp_path / "vazio").exists(), "normaliza_local montou worktree"
+
+
 # ------------------------------------------------------------- git, sem docker
 
 def test_base_e_o_pai_do_pr_nao_a_ponta_da_main():

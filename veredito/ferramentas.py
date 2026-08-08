@@ -443,6 +443,40 @@ def _resolve_caminho(raiz: Path, caminho: str) -> Path | None:
     return casam[0] if len(casam) == 1 else None
 
 
+_CACHE_LOCAL: dict[str, str] = {}
+
+
+def normaliza_local(local: str) -> str:
+    """Reescreve `app/routers/shares.py:31` no caminho que existe de verdade.
+
+    O `local` vem do promotor e vai CRU para o parecer. Os promotores discordam
+    entre si sobre a raiz (ver _resolve_caminho: 24, 20 e 7 acusacoes desta
+    rodada citaram o mesmo arquivo com tres grafias), entao o slide pode exibir
+    um caminho que ninguem acha no repo -- e caminho que nao abre no palco custa
+    mais que estas linhas.
+
+    E' cosmetica, e se comporta como tal: NAO cria worktree e NUNCA levanta. Sem
+    worktree no disco, com caminho ambiguo ou com diretorio em vez de arquivo,
+    devolve o que recebeu.
+    """
+    if not local:
+        return local
+    if local in _CACHE_LOCAL:
+        return _CACHE_LOCAL[local]
+    resultado = local
+    try:
+        raiz = cfg.WORKTREES / "head"
+        if raiz.is_dir():
+            caminho, sep, sufixo = local.strip().partition(":")
+            alvo = _resolve_caminho(raiz, caminho)
+            if alvo is not None:
+                resultado = alvo.relative_to(raiz.resolve()).as_posix() + sep + sufixo
+    except (OSError, ValueError):
+        resultado = local
+    _CACHE_LOCAL[local] = resultado
+    return resultado
+
+
 def _read_file(caminho: str, lado: str = "head") -> str:
     raiz = _worktree_de(lado)
     alvo = _resolve_caminho(raiz, caminho)

@@ -141,16 +141,27 @@ def _parse_veredicto(texto: str) -> dict:
 
     Um veredicto nunca morre por erro de formato: sem isto, uma acusacao provada
     sumiria do parecer porque o modelo pos uma cerca de codigo em volta do JSON.
+
+    🚨 A versao ganancioso (`re.search(r"\\{.*\\}", DOTALL)`) casava do PRIMEIRO
+    `{` ate o ULTIMO, e o advogado escreve prosa antes do JSON. Na rodada das
+    12h15 a prosa citava `SELECT ... email = '{email}'` e a rota
+    `/documents/{id}/share`: o span comecou em `{email}`, o json.loads quebrou, e
+    um PROVADO **com artefato no disco** virou INCONCLUSIVO por formatacao. E'
+    exatamente a falha que este fallback existia para impedir.
+
+    Entao: `raw_decode` a partir de cada `{`, do fim para o comeco. O ultimo
+    objeto valido com `veredito` ganha -- que e' o veredito final, e nao uma
+    chave qualquer que apareceu no meio do texto.
     """
     bruto = texto.strip()
-    m = re.search(r"\{.*\}", bruto, re.DOTALL)
-    if m:
+    dec = json.JSONDecoder()
+    for i in reversed([m.start() for m in re.finditer(r"\{", bruto)]):
         try:
-            v = json.loads(m.group(0))
-            if isinstance(v, dict) and v.get("veredito"):
-                return v
+            v, _ = dec.raw_decode(bruto[i:])
         except json.JSONDecodeError:
-            pass
+            continue
+        if isinstance(v, dict) and v.get("veredito"):
+            return v
     return {
         "veredito": "INCONCLUSIVO",
         "motivo": "o advogado nao devolveu JSON valido; saida crua preservada",

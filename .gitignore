@@ -11,6 +11,10 @@ __pycache__/
 saidas/*
 !saidas/final/
 
+# Log bruto das rodadas de dev. O log da rodada que vai pro palco e' copiado
+# para saidas/final/, que nao e' ignorado -- a maquina que apresenta e' a outra.
+logs/
+
 # Artefatos dos testes da propria pericia. Os artefatos de prova de verdade
 # ficam versionados -- sao a evidencia.
 artefatos/*selftest*

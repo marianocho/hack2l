@@ -166,10 +166,25 @@ def organiza(
 
 # ------------------------------------------------------------------- o parecer
 
+def _local(acusacao: dict) -> str:
+    """O caminho como ele sai no parecer, com a raiz corrigida quando da.
+
+    Import tardio de proposito: o juiz continua rodando sem git e sem o resto do
+    pacote, que e' a propriedade que permite reajustar o parecer trinta vezes
+    lendo so o disco.
+    """
+    bruto = acusacao.get("local") or "?"
+    try:
+        from .ferramentas import normaliza_local
+    except ImportError:
+        return bruto
+    return normaliza_local(bruto)
+
+
 def _bloco(v: dict, acusacao: dict, artefato: dict | None) -> str:
     linhas = [
         f"[{v.get('severidade','?')}] [{acusacao.get('confianca','?')}] "
-        f"{acusacao.get('categoria','?')} - {acusacao.get('local','?')}",
+        f"{acusacao.get('categoria','?')} - {_local(acusacao)}",
         f"O QUE: {acusacao.get('hipotese','-')}",
         f"ARBITRO: {acusacao.get('arbitro') or 'nenhum citado'}",
     ]
@@ -212,14 +227,14 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict) -> str:
         p.append("_nenhum._")
     for v in d:
         a = acusacoes.get(v["id"], {})
-        p.append(f"- {a.get('categoria','?')} em {a.get('local','?')}: {v.get('motivo','-')}")
+        p.append(f"- {a.get('categoria','?')} em {_local(a)}: {v.get('motivo','-')}")
 
     p += ["", "## INCONCLUSIVOS, COM CAUSA", ""]
     if not i:
         p.append("_nenhum._")
     for v in i:
         a = acusacoes.get(v["id"], {})
-        p.append(f"- {a.get('categoria','?')} em {a.get('local','?')}: {v.get('motivo','-')}")
+        p.append(f"- {a.get('categoria','?')} em {_local(a)}: {v.get('motivo','-')}")
 
     return "\n".join(p) + "\n"
 
