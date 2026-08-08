@@ -1,0 +1,31 @@
+{
+  "id": "correcao_03",
+  "tipo": "http",
+  "chamadas": [
+    {
+      "metodo": "GET",
+      "caminho": "/documents",
+      "como": "demo",
+      "status": 200,
+      "erro": null,
+      "corpo": "[{\"id\":3,\"title\":\"Product onboarding guide\",\"created_at\":\"2026-08-08T12:45:53.686385Z\"},{\"id\":2,\"title\":\"Incident response runbook\",\"created_at\":\"2026-08-08T12:45:53.677792Z\"},{\"id\":1,\"title\":\"Company travel policy\",\"created_at\":\"2026-08-08T12:45:53.673843Z\"}]"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/documents/1/share?email=alice@hack2l.dev",
+      "como": "demo",
+      "status": 201,
+      "erro": null,
+      "corpo": "{\"document_id\":1,\"shared_with_user_id\":2}"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/documents/1/share?email=carol@hack2l.dev",
+      "como": "demo",
+      "status": 201,
+      "erro": null,
+      "corpo": "{\"document_id\":1,\"shared_with_user_id\":4}"
+    }
+  ],
+  "alcancou_a_api": true
+}
