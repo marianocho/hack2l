@@ -98,9 +98,17 @@ def http_request(metodo: str, caminho: str, corpo: str = "",
   "provado": true,
   "motivo": "passa no commit base e falha no head do PR",
   "erro": null,
-  "segundos": 13.8
+  "segundos": 21.4,
+
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
 }
 ```
+
+Os três últimos campos entraram depois da auditoria adversarial e explicam-se
+na seção do exit 1, abaixo. `exit_base_confirmacao` só aparece em candidato a
+PROVADO.
 
 **O juiz lê este JSON, nunca o resumo do modelo.** `provado` é calculado em
 Python e o LLM não tem como sobrescrever. É isto que faz o veredito ser um exit
@@ -145,27 +153,71 @@ tese é *"todo mundo afirma, nós provamos"*.
 Por isso o tool roda **`git merge-base main origin/pr/document-sharing`** em
 runtime. Corrige o artefato **e** sobrevive à régua: troca o PR, continua certo.
 
-### O `provado` é mais estrito que "falhou no head"
+### 🚨 O exit code sozinho NÃO distingue teste de infraestrutura
 
-```python
-provado = (exit_base == 0) and (exit_head == 1)
-```
+A versão anterior deste contrato dizia que `exit_head == 1` (e não `!= 0`)
+protegia contra "docker fora do ar virar condenação crítica". **Isso era falso**,
+e a auditoria adversarial derrubou a salvaguarda pelo caso que ela dizia
+proteger:
 
-`exit_head == 1` e não `!= 0`, de propósito. Códigos do pytest: `1` = teste
-falhou; `2` interrompido, `3` erro interno, `4` erro de uso, `5` nenhum teste
-coletado. Tratar `!= 0` como prova transformaria **erro de execução em
-condenação** — um alarme crítico errado, exatamente o que as regras
-determinísticas existem para impedir.
+> `docker run` puro usa **125** para falha de infraestrutura.
+> **`docker compose` usa 1** — o mesmo código do pytest para "teste falhou".
 
-| `exit_base` | `exit_head` | estado |
-|---|---|---|
-| 0 | 1 | **PROVADO** |
-| 0 | 0 | **REFUTADO** — passa nos dois, a mudança não quebrou isso |
-| qualquer outro par | | **INCONCLUSIVO**, com `erro` preenchido |
+Medido com `DOCKER_HOST` apontando para um pipe inexistente: daemon
+inalcançável, serviço inexistente, mount spec inválido e arquivo de compose
+ausente, **todos exit 1**.
 
-Nunca existe "absolvido por silêncio": se o teste não coletou, se deu timeout,
-se o docker caiu, o estado é INCONCLUSIVO **com a causa**. É o terceiro estado,
-mecanicamente.
+Nas duas direções:
+
+- Docker caindo **entre** as duas execuções, com o base já em 0 → `exit_head=1`
+  casava com PROVADO. **Acusação crítica falsa**, e o juiz lê o artefato, não o
+  resumo do modelo. Um flap do healthcheck do `db` bastava.
+- Docker ruim no início — mais provável — → `exit_base=1` em todas as acusações,
+  e o motivo mandava *"reescreva o teste para passar no código de hoje"*:
+  instrução para o advogado **enfraquecer um teste correto**.
+
+**A guarda não pergunta ao exit code se o pytest rodou. Pergunta ao pytest:**
+sem linha de resumo na saída (`N passed`, `N failed`, `no tests ran`), nada
+executou. É isso que `rodou_base` e `rodou_head` carregam, e eles entram na
+classificação **antes de qualquer outra cláusula**.
+
+### A tabela de estados
+
+| `rodou_*` | `exit_base` | `exit_head` | estado |
+|---|---|---|---|
+| algum `false` | — | — | **INCONCLUSIVO**, `erro` com a saída do docker |
+| ambos `true` | 0 | 1 | **PROVADO** *(sujeito à confirmação, abaixo)* |
+| ambos `true` | 0 | 0 | **REFUTADO** — passa nos dois, a mudança não quebrou isso |
+| ambos `true` | qualquer outro par | | **INCONCLUSIVO**, com `motivo` |
+
+Nunca existe "absolvido por silêncio": teste não coletado, timeout, docker
+caído — o estado é INCONCLUSIVO **com a causa**.
+
+### A confirmação no base, depois do head
+
+Candidato a PROVADO roda o base **uma segunda vez**. Custa ~7s e só nos
+candidatos a condenação.
+
+O banco `kb` da aplicação **nunca é limpo** entre execuções (o `clean_db` do
+conftest deles só zera `kb_test`), e a ordem base-antes-de-head é fixa. Sem a
+confirmação, **ordem virava prova**. Se o base não repete exit 0 depois do head,
+o teste não é determinístico ou depende de estado acumulado → INCONCLUSIVO.
+
+### Prova recusada antes de executar
+
+O código do teste vem do **modelo**, e o container da prova entra na rede do
+compose: de lá `api:8000` e `db:5432` resolvem, e as credenciais `kb:kb` estão
+no `docker-compose.yml`, que o modelo lê com `read_file`. Dois padrões são
+recusados **antes** de rodar, com `estado` INCONCLUSIVO e o motivo ensinando o
+caminho certo:
+
+| padrão | por quê |
+|---|---|
+| `api:8000`, `localhost:8000`, `127.0.0.1:8000` | o serviço no ar serve o código **assado na imagem**, idêntico nos dois lados. A diferença viria de estado acumulado → PROVADO falso. O certo é `TestClient` em processo, que carrega o código do worktree. |
+| URL postgres terminando em `/kb` | apagaria o seed de demo/alice/bob/carol, **que é o canário**. O conftest deles redireciona `DATABASE_URL` para `kb_test`, mas só quando a URL termina em `/kb` — um teste que monte a própria engine passa por cima. |
+
+O segundo é o único estrago do dia **sem desfazer**, por isso a guarda roda
+antes da execução e não depois.
 
 ## 3. Esquema da acusação — o que o promotor cospe
 
@@ -186,6 +238,32 @@ acusação não morre por erro de formato.
 
 `arbitro` é `null` se não houver — e o juiz rebaixa CRÍTICA sem árbitro para
 SUSPEITA. `hipotese` é **uma linha**: prosa longa ancora o advogado.
+
+## 3b. As regras do juiz, e o que cada uma consome
+
+Todas em `veredito/juiz.py`, todas com teste, todas rodando sem rede.
+
+| regra | o que faz | de onde vem o sinal |
+|---|---|---|
+| **R0** | o artefato ganha do advogado: se ele diz PROVADO e o exit code diz outra coisa, vale o exit code. Também é o artefato quem decide `prova_ponta_a_ponta`, não o advogado | `artefatos/prova_<id>.json` |
+| **R4** | REFUTADO em `injection` com o LLM alvo dublê vira INCONCLUSIVO | `llm_alvo.estado_registrado()` **ou** `artefatos/avisos.json` |
+| **R3** | execução falhou → INCONCLUSIVO, nunca absolvido | `erro` do artefato |
+| **R1** | CRÍTICA sem árbitro citado → SUSPEITA | `arbitro` da acusação |
+| **R2** | prova que não é ponta a ponta não passa de MÉDIA | `prova_ponta_a_ponta` |
+
+**R4 tem escopo estreito de propósito: só `injection`.** Vazamento de contexto
+fica de fora porque se prova por **citação**, e citação não depende do modelo
+responder — um REFUTADO ali continua legítimo com o modelo dublê. Ampliar
+incharia a lista de inconclusivos com descartes válidos, e inconclusivo inflado
+enfraquece o parecer tanto quanto inconclusivo vazio.
+
+R4 lê **dois sinais** porque cada um tem um buraco: `avisos.json` registra que
+*aquela acusação* viu resposta dublê (pega qualquer via que tenha sondado o
+chat); `llm_alvo` mede a rodada inteira (pega o caso de o advogado ter concluído
+sem deixar rastro na ferramenta).
+
+Todo rebaixamento sai registrado em `regras_aplicadas` e **impresso no parecer**:
+rebaixar sem dizer por que é tão opaco quanto não rebaixar.
 
 ## 4. Veredito — o que o advogado grava e o juiz lê
 
@@ -220,8 +298,28 @@ hack2l/
 ├── saidas/acusacoes.json    <- promotores -> advogado
 ├── saidas/veredictos.json   <- advogado -> juiz
 ├── artefatos/prova_*.json   <- a prova crua. O juiz le daqui.
+├── artefatos/avisos.json    <- degradacao por acusacao. Alimenta a R4.
 └── saidas/parecer.md        <- a saida final
 ```
+
+`saidas/` é gitignorado (ruído de dev), **menos `saidas/final/`** — a evidência
+da rodada que vai pro palco precisa viajar pro GitHub, porque a máquina que
+apresenta é a outra.
+
+## 6. Dono por arquivo
+
+As duas trilhas implementaram o mesmo guard ao mesmo tempo, duas vezes. Custou
+merge conflict e reimplementação. A separação motor/perícia não cobre achado que
+aparece no meio do voo.
+
+| arquivo | dono |
+|---|---|
+| `veredito/ferramentas.py`, `juiz.py`, `config.py` | Mariano |
+| `veredito/advogado.py`, `orquestrador.py`, `llm_alvo.py`, `promotores/` | Luis |
+| `tests/` | segue o dono do módulo testado |
+
+**Achado que cruza a fronteira vira um `ACHADO_*.md` dizendo quem pega** — não
+vira código dos dois lados.
 
 ---
 
