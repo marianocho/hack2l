@@ -98,6 +98,47 @@ def test_inconclusivo_sempre_carrega_motivo_mesmo_sem_artefato():
     assert v["motivo"]
 
 
+# ------------------------------------------------------------------ regra 3b
+
+def test_app_sem_modelo_impede_refutacao_de_injection():
+    """Achado do Luis as 10h40: sem OPENAI_API_KEY o app alvo devolve a mesma
+    string para qualquer pergunta, inclusive payload de injection.
+
+    'O modelo nao obedeceu' vira REFUTADO -- absolvicao falsa, que e' pior que
+    falso alarme porque engorda a lista de descartados e PARECE rigor.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "REFUTADO", "motivo": "o sentinela nao apareceu"},
+        {"categoria": "seguranca_ia"},
+        None,
+        avisos=[juiz.cfg.AVISO_SEM_MODELO],
+    )
+    assert v["veredito"] == "INCONCLUSIVO"
+    assert "sem OPENAI_API_KEY" in v["motivo"]
+    assert any("R3b" in r for r in v["regras_aplicadas"])
+
+
+def test_app_sem_modelo_nao_mexe_em_quem_foi_provado():
+    """O aviso e' por acusacao, nao por rodada: quem provou por outra via -- um
+    teste de isolamento, que nao depende de LLM -- continua provado."""
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": "criterio 3"},
+        _art(),
+        avisos=[juiz.cfg.AVISO_SEM_MODELO],
+    )
+    assert v["veredito"] == "PROVADO"
+    assert v["severidade"] == "CRITICA"
+
+
+def test_acusacao_sem_aviso_nao_e_afetada():
+    v = juiz.aplica_regras(
+        {"id": "a2", "veredito": "REFUTADO", "motivo": "passa nos dois lados"},
+        {}, None, avisos=[],
+    )
+    assert v["veredito"] == "REFUTADO"
+
+
 # -------------------------------------------------------------------- listas
 
 def test_as_tres_listas_e_nada_sumindo_em_silencio():

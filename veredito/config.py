@@ -73,6 +73,32 @@ TIMEOUT_HTTP_S = _i("TIMEOUT_HTTP_S", 30)
 # estado nao se recupera sozinho.
 TENTATIVAS_HTTP = _i("TENTATIVAS_HTTP", 3)
 
+# 🚨 O app alvo sem OPENAI_API_KEY devolve a MESMA resposta para qualquer
+# pergunta, inclusive um payload de injection. Sem guard, "o modelo nao
+# obedeceu" vira REFUTADO -- absolvicao falsa, pior que falso alarme, porque
+# engorda a lista de descartados e PARECE rigor.
+#
+# A deteccao NAO compara com a string enlatada: isso quebraria se o texto
+# mudasse. Ver llm_alvo.py -- duas sondas sem nada em comum, respostas iguais
+# provam que o modelo nao leu nenhuma das duas. Pega chave ausente, rate limit
+# que cai no fallback e stub trocado, sem precisar saber qual foi.
+AVISO_SEM_MODELO = "app_sem_modelo"
+
+
+def app_tem_modelo() -> bool:
+    """Le a OPENAI_API_KEY do .env do DESAFIO -- nao a nossa.
+
+    Deteccao na subida, complementar a comparacao de resposta: pega o caso de a
+    chave existir mas estar invalida so quando a resposta chega.
+    """
+    env = DESAFIO / ".env"
+    if not env.is_file():
+        return False
+    for linha in env.read_text(encoding="utf-8", errors="replace").splitlines():
+        if linha.strip().startswith("OPENAI_API_KEY="):
+            return bool(linha.split("=", 1)[1].strip())
+    return False
+
 # Quanto de saida crua volta para o modelo. O artefato em disco guarda tudo;
 # isto aqui e' so o que cabe no contexto sem afogar o raciocinio.
 CORTE_SAIDA = _i("CORTE_SAIDA", 4000)

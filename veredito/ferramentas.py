@@ -37,6 +37,27 @@ def define_acusacao(id_acusacao: str) -> None:
     _ACUSACAO_ATUAL = re.sub(r"[^A-Za-z0-9_.-]", "_", id_acusacao) or "sem_id"
 
 
+# Avisos por acusacao, nao por rodada. Global demais e o juiz nao consegue ligar
+# a causa ao veredito certo; por acusacao ele rebaixa exatamente quem foi
+# afetado e deixa o resto em paz.
+_AVISOS: dict[str, set[str]] = {}
+
+
+def _avisa(codigo: str) -> None:
+    _AVISOS.setdefault(_ACUSACAO_ATUAL, set()).add(codigo)
+    # Grava a cada aviso, nao no fim: se a rodada morrer no meio, o juiz ainda
+    # sabe o que estava degradado.
+    cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+    (cfg.ARTEFATOS / "avisos.json").write_text(
+        json.dumps({k: sorted(v) for k, v in _AVISOS.items()}, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def avisos_da_acusacao(id_acusacao: str) -> list[str]:
+    return sorted(_AVISOS.get(id_acusacao, set()))
+
+
 # ---------------------------------------------------------------- utilitarios
 
 def _corta(texto: str, limite: int = None) -> str:
@@ -450,9 +471,18 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
     if r["erro"]:
         return f"ERRO ({r['como']}): {r['erro']}"
     saida = f"HTTP {r['status']} (como {r['como']})\n{_corta(r['corpo'], 3000)}"
-    # Se a rota depende do LLM alvo e ele esta duble, avisa: sem isso, um
-    # payload de injection que "nao funcionou" vira absolvicao falsa.
-    return saida + llm_alvo.aviso_se_duble(caminho)
+
+    # Deteccao por SONDA (llm_alvo), nao por comparar com a string enlatada:
+    # duas perguntas sem nada em comum devolvendo a mesma resposta provam que o
+    # modelo nao leu nenhuma das duas. Isso pega chave ausente, rate limit que
+    # cai no fallback e stub trocado, sem precisar saber qual foi -- e sobrevive
+    # ao texto enlatado mudar.
+    aviso = llm_alvo.aviso_se_duble(caminho)
+    if aviso:
+        # Aviso em texto e' conselho, e o modelo pode ignorar. Registrar por
+        # acusacao e' o que deixa o juiz aplicar a R3b mecanicamente depois.
+        _avisa(cfg.AVISO_SEM_MODELO)
+    return saida + aviso
 
 
 TOOLS = [prova_diferencial, run_tests, read_file, grep, http_request]
