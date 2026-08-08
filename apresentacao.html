@@ -1,0 +1,572 @@
+<title>Veredito — pitch 3 min</title>
+
+<style>
+  :root {
+    --ground: #0b0e14;
+    --surface: #141922;
+    --surface-2: #1b212c;
+    --ink: #e8ecf3;
+    --muted: #9aa5b5;
+    --faint: #67717f;
+    --rule: #262e3b;
+    --accent: #8fb0e3;
+    --provado: #5cbb8e;
+    --critica: #e58472;
+    --amber: #dfa845;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, Menlo, monospace;
+    --sans: "Segoe UI", Inter, -apple-system, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(32px, 6vw, 104px);
+    gap: clamp(14px, 1.8vh, 26px);
+  }
+
+  .slide.ativo { display: flex; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.15vw, 16px);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(44px, 8.5vw, 132px);
+    font-weight: 700;
+    letter-spacing: -.045em;
+    line-height: .92;
+  }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: clamp(26px, 4.2vw, 62px);
+    font-weight: 600;
+    letter-spacing: -.03em;
+    line-height: 1.08;
+    max-width: 21ch;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--mono);
+    font-size: clamp(18px, 2.4vw, 34px);
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.15;
+  }
+
+  p {
+    font-size: clamp(15px, 1.55vw, 25px);
+    line-height: 1.5;
+    color: var(--muted);
+    max-width: 34ch;
+  }
+
+  p.largo { max-width: 46ch; }
+  p strong { color: var(--ink); font-weight: 600; }
+  .accent { color: var(--accent); }
+  .verde { color: var(--provado); }
+  .vermelho { color: var(--critica); }
+  .amarelo { color: var(--amber); }
+
+  /* ------------------------------------------------------------- numerao */
+
+  .numerao {
+    font-family: var(--mono);
+    font-size: clamp(58px, 12vw, 190px);
+    font-weight: 700;
+    letter-spacing: -.05em;
+    line-height: .85;
+    color: var(--critica);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .numerao small {
+    font-size: .34em;
+    color: var(--muted);
+    font-weight: 400;
+    letter-spacing: -.01em;
+  }
+
+  /* --------------------------------------------------------------- codigo */
+
+  pre {
+    font-family: var(--mono);
+    font-size: clamp(11px, 1.28vw, 21px);
+    line-height: 1.65;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 3px;
+    padding: clamp(14px, 1.9vw, 30px) clamp(16px, 2.2vw, 34px);
+    overflow-x: auto;
+    color: var(--ink);
+    white-space: pre;
+  }
+
+  pre .c { color: var(--faint); }
+
+  /* -------------------------------------------------------------- colunas */
+
+  .colunas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    gap: clamp(12px, 1.6vw, 26px);
+  }
+
+  .cartao {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: clamp(16px, 1.9vw, 30px);
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+
+  .cartao .rot {
+    font-family: var(--mono);
+    font-size: clamp(10px, 1vw, 14px);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .cartao h3 { font-size: clamp(16px, 1.9vw, 27px); }
+  .cartao p { font-size: clamp(13px, 1.28vw, 19px); max-width: none; }
+
+  /* ------------------------------------------------------------- pipeline */
+
+  .fluxo { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; }
+
+  .fluxo .cartao { flex: 1 1 220px; }
+
+  .fluxo .seta {
+    font-family: var(--mono);
+    color: var(--faint);
+    display: grid;
+    place-items: center;
+    padding: 0 clamp(8px, 1.1vw, 20px);
+    font-size: clamp(16px, 1.8vw, 28px);
+    flex: none;
+  }
+
+  /* -------------------------------------------------------------- metrica */
+
+  .metricas { display: flex; flex-wrap: wrap; gap: clamp(20px, 3.4vw, 64px); }
+
+  .metrica { display: grid; gap: 4px; }
+
+  .metrica b {
+    font-family: var(--mono);
+    font-size: clamp(30px, 4.6vw, 70px);
+    font-weight: 700;
+    letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .metrica span {
+    font-family: var(--mono);
+    font-size: clamp(10px, 1.05vw, 15px);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* --------------------------------------------------------------- listas */
+
+  ul.bullets { list-style: none; display: grid; gap: clamp(9px, 1.3vh, 18px); }
+
+  ul.bullets li {
+    font-size: clamp(14px, 1.5vw, 24px);
+    line-height: 1.45;
+    color: var(--muted);
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    max-width: 44ch;
+  }
+
+  ul.bullets li::before {
+    content: "▸";
+    color: var(--accent);
+    font-family: var(--mono);
+  }
+
+  ul.bullets li strong { color: var(--ink); font-weight: 600; }
+
+  .naofalar li::before { content: "✕"; color: var(--critica); }
+
+  /* --------------------------------------------------------------- chrome */
+
+  .chrome {
+    position: fixed;
+    bottom: clamp(14px, 2vh, 26px);
+    left: clamp(32px, 6vw, 104px);
+    right: clamp(32px, 6vw, 104px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: clamp(10px, .95vw, 14px);
+    color: var(--faint);
+    letter-spacing: .1em;
+    pointer-events: none;
+  }
+
+  .trilho {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--rule);
+  }
+
+  .trilho i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .25s ease; }
+
+  .tempo { color: var(--accent); }
+
+  .notas {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    background: var(--surface-2);
+    border-top: 1px solid var(--rule);
+    padding: clamp(14px, 2vw, 26px) clamp(32px, 6vw, 104px);
+    font-size: clamp(13px, 1.15vw, 18px);
+    line-height: 1.5;
+    color: var(--muted);
+    display: none;
+    max-height: 42vh;
+    overflow-y: auto;
+  }
+
+  .notas.visivel { display: block; }
+  .notas b { color: var(--accent); font-family: var(--mono); font-size: .82em; letter-spacing: .12em; text-transform: uppercase; display: block; margin-bottom: 8px; }
+
+  .backup { border-top: 2px solid var(--amber); }
+  .backup .eyebrow { color: var(--amber); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="trilho"><i id="barra"></i></div>
+
+<!-- 1 --------------------------------------------------------------------- -->
+<section class="slide ativo" data-tempo="0:00" data-notas="Respire. Deixe o título na tela por dois segundos antes de falar. A palavra 'Veredito' faz o trabalho sozinha.">
+  <p class="eyebrow">Hack2L · 08/08/2026</p>
+  <h1>Veredito</h1>
+  <p class="largo" style="font-size: clamp(17px,2vw,32px); color: var(--ink); max-width: 30ch;">
+    Revisor de código que trata cada suspeita como <strong class="accent">acusação</strong> —
+    e só condena com prova executável.
+  </p>
+</section>
+
+<!-- 2 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="0:00–0:25" data-notas="Não corra. O número é o pitch inteiro em uma frase: imprecisão de IA já fechou instituição. Pausa depois de 'falsos'.">
+  <p class="eyebrow">O problema</p>
+  <div class="numerao">&lt; 5%<small> taxa de confirmação</small></div>
+  <p class="largo">
+    Em janeiro deste ano o <strong>curl fechou o programa de bug bounty</strong>.
+    Não foi falta de dinheiro — pagaram <strong>US$ 100 mil por 87 vulnerabilidades</strong>.
+  </p>
+  <p class="largo">
+    Foi que a taxa de confirmação, acima de 15% por anos, despencou em 2025.
+    Enterrada numa enxurrada de relatórios gerados por IA. Confiantes, bem escritos,
+    <strong class="vermelho">e falsos</strong>.
+  </p>
+</section>
+
+<!-- 3 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="0:25–0:50" data-notas="Aqui está o why now. O ponto forte é 'a IA barateou a parte errada' — gerar suspeita ficou de graça, provar continuou caro. O gargalo migrou e ninguém foi atrás.">
+  <p class="eyebrow">Why now</p>
+  <h2>A IA barateou a parte errada</h2>
+  <div class="colunas">
+    <div class="cartao">
+      <span class="rot">o que ficou de graça</span>
+      <h3>Gerar suspeita</h3>
+      <p>Cada suspeita gerada vira triagem humana. O trabalho não diminuiu — multiplicou.</p>
+    </div>
+    <div class="cartao">
+      <span class="rot">o que continuou caro</span>
+      <h3>Provar</h3>
+      <p>Exige subir o app, semear dados, e rodar também o commit anterior. Infraestrutura por achado.</p>
+    </div>
+    <div class="cartao">
+      <span class="rot">e a categoria tem dinheiro</span>
+      <h3>Cursor × Graphite</h3>
+      <p>Dezembro de 2025, acima da avaliação de US$ 290 milhões.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 4 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="0:50–1:05" data-notas="A tese. Fale devagar a última linha: 'o veredito final é um exit code, não opinião de modelo'. É a frase que o júri vai lembrar.">
+  <p class="eyebrow">A tese</p>
+  <h2>Todo revisor de IA <span class="muted" style="color:var(--faint)">afirma</span>.<br>Nós <span class="accent">provamos</span>.</h2>
+  <p class="largo">
+    Promotores acusam. Um advogado <strong>testa</strong> — ele não argumenta, executa.
+    Um juiz sentencia com regras determinísticas.
+  </p>
+  <pre>pytest no commit <span class="c">base</span>  →  exit 0   <span class="c">(a invariante valia)</span>
+pytest no commit <span class="c">head</span>  →  exit 1   <span class="c">(o PR quebrou)</span>
+pytest no commit <span class="c">base</span>  →  exit 0   <span class="c">(não é teste intermitente)</span></pre>
+  <p class="largo"><strong>O veredito final é um exit code, não opinião de modelo.</strong></p>
+</section>
+
+<!-- 5 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="1:05" data-notas="Passe rápido. Este slide existe para o júri entender o pipeline; não é o argumento. Uma frase: 'modelo caro só onde a decisão acontece'.">
+  <p class="eyebrow">Como funciona</p>
+  <div class="fluxo">
+    <div class="cartao">
+      <span class="rot">Haiku 4.5 · paralelo</span>
+      <h3>Promotores</h3>
+      <p>Seis lentes acusam ao mesmo tempo. Buscam cobertura, não precisão.</p>
+      <p class="accent" style="font-family:var(--mono);font-size:clamp(11px,1.1vw,16px)">55 acusações · 20 s</p>
+    </div>
+    <div class="seta">→</div>
+    <div class="cartao">
+      <span class="rot">Opus 5 · loop</span>
+      <h3>Advogado</h3>
+      <p>Uma acusação por vez, isolada. Escreve o teste e executa nos dois commits.</p>
+      <p class="accent" style="font-family:var(--mono);font-size:clamp(11px,1.1vw,16px)">artefatos em disco</p>
+    </div>
+    <div class="seta">→</div>
+    <div class="cartao">
+      <span class="rot">Sonnet 5 · síntese</span>
+      <h3>Juiz</h3>
+      <p>Seis regras em Python — sem modelo, sem rede — decidem a nota. Depois o modelo redige.</p>
+      <p class="accent" style="font-family:var(--mono);font-size:clamp(11px,1.1vw,16px)">parecer final</p>
+    </div>
+  </div>
+  <p class="largo">Modelo caro só onde a decisão acontece.</p>
+</section>
+
+<!-- 6 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="1:05–1:30" data-notas="DEMO 1. Aponte para o exit 0 → 1. Frase: 'Isso não é o modelo dizendo que achou. É o teste falhando.'">
+  <p class="eyebrow">Demo · 1 de 3 — um achado provado</p>
+  <pre><span class="c">[CRITICA] [media] security — app/api/app/routers/shares.py:82</span>
+O QUE: read_shared_document não valida se o requisitante
+       é o destinatário do compartilhamento
+ARBITRO: INV-ISOLAMENTO
+EVIDENCIA: test_invariante_terceiro_nao_le_documento.py
+           passa em 32a5241  <span class="verde">→ exit 0</span>
+           falha em 1dd2e5c  <span class="vermelho">→ exit 1</span></pre>
+  <p class="largo">
+    Não é o modelo dizendo que achou. <strong>É o teste falhando.</strong>
+    O código-fonte do teste e o stdout dos dois lados ficam no disco.
+  </p>
+</section>
+
+<!-- 7 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="1:30–1:50" data-notas="ESTE É O SLIDE FORTE. Pausa antes. 'O payload passa. O e-mail normal não passa. Ninguém precisa acreditar em nós.' Deixe na tela.">
+  <p class="eyebrow">Demo · 2 de 3 — o ataque, executado</p>
+  <h3 style="color:var(--muted);font-weight:400">Não “este padrão é arriscado”. <span class="accent">Isto:</span></h3>
+  <pre>POST /documents/11/share?email=<span class="vermelho">nonexistent' OR '1'='1</span>
+     como alice  <span class="vermelho">→ HTTP 201</span>   <span class="c">o payload passou</span>
+
+POST /documents/11/share?email=nonexistent@nowhere.dev
+     como alice  <span class="verde">→ HTTP 404</span>   <span class="c">o controle não passou</span></pre>
+  <p class="largo">
+    O contraste <strong>é</strong> a prova. Duas linhas, e o revisor verifica sozinho —
+    <strong>sem precisar acreditar em nós.</strong>
+  </p>
+</section>
+
+<!-- 8 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="1:50–2:15" data-notas="A lista de inconclusivos é a mais importante. Conte a história do app sem chave: um revisor comum escreveria 'injection: refutado' seis vezes, com APARÊNCIA de rigor. Isso é vazamento passando com carimbo de aprovado.">
+  <p class="eyebrow">Demo · 3 de 3 — as duas listas que ninguém tem</p>
+  <div class="colunas">
+    <div class="cartao">
+      <span class="rot">descartados, com motivo</span>
+      <p>“O canal alegado não existe: <code style="font-family:var(--mono)">rag.py</code> continua
+        filtrando por <code style="font-family:var(--mono)">owner_id</code>, intocado pelo PR.
+        O teste passou nos dois lados.”</p>
+      <p><strong>Devolve a confiança que o alarme falso tirou.</strong></p>
+    </div>
+    <div class="cartao" style="border-color:var(--amber)">
+      <span class="rot" style="color:var(--amber)">inconclusivos, com a causa</span>
+      <p>Hoje de manhã o app alvo estava <strong>sem chave de modelo</strong>. Os payloads não
+        podiam funcionar — não havia modelo para desobedecer.</p>
+      <p>Um revisor comum escreveria <strong class="vermelho">“injection: refutado”</strong> seis vezes,
+        com aparência de rigor.</p>
+    </div>
+  </div>
+  <h3 class="amarelo">Ausência de observação não é prova de ausência.</h3>
+  <p class="largo">E essa regra é <strong>código</strong>, não intenção.</p>
+</section>
+
+<!-- 9 --------------------------------------------------------------------- -->
+<section class="slide" data-tempo="2:15–2:40" data-notas="Cuidado: NUNCA diga 'nenhuma ferramenta faz isso'. A Promptfoo faz, estático. A frase correta é estreita e sobrevive à checagem no celular do jurado.">
+  <p class="eyebrow">Diferenciação</p>
+  <div class="colunas">
+    <div class="cartao">
+      <span class="rot">o mercado</span>
+      <h3>Dá nota ao mundo</h3>
+      <p>“SQL injection é crítico.” A nota vem da categoria do bug — antes de qualquer verificação.</p>
+    </div>
+    <div class="cartao" style="border-color:var(--accent)">
+      <span class="rot">nós</span>
+      <h3>Damos nota à evidência</h3>
+      <p>“Provamos que é real e alcançável?” A nota vem do artefato. É daí que nascem as duas listas.</p>
+    </div>
+  </div>
+  <p class="largo">
+    Existe quem escaneie prompt injection em PR — a <strong>Promptfoo</strong> faz, com análise
+    estática. <strong class="accent">Ninguém executa o ataque para provar que é alcançável.</strong>
+  </p>
+</section>
+
+<!-- 10 -------------------------------------------------------------------- -->
+<section class="slide" data-tempo="2:40–2:55" data-notas="Custo: confirmar com a rodada final antes de falar. O número de referência da rodada das 12h15 é US$1,78. 'Menos ruído' entra como MECANISMO, nunca como promessa.">
+  <p class="eyebrow">Negócio</p>
+  <h2>Laudo tem comprador que “revisão melhor” não tem</h2>
+  <div class="metricas">
+    <div class="metrica"><b class="accent">&lt; US$ 2</b><span>por PR revisado<br>desassistido</span></div>
+    <div class="metrica"><b>14 min</b><span>rodada completa<br>medido</span></div>
+    <div class="metrica"><b class="verde">101</b><span>testes do<br>próprio revisor</span></div>
+  </div>
+  <ul class="bullets">
+    <li><strong>Segurança e compliance</strong> compram parecer com prova reproduzível e trilha do que foi descartado.</li>
+    <li><strong>Revisar código de agente</strong> é classe nova de defeito — nenhum incumbente tem oráculo para “este PR quebrou o isolamento de tenant no RAG”.</li>
+  </ul>
+</section>
+
+<!-- 11 -------------------------------------------------------------------- -->
+<section class="slide" data-tempo="2:55–3:00" data-notas="Pare de falar depois da última palavra. Deixe na tela.">
+  <p class="eyebrow">Veredito</p>
+  <h2 style="max-width:26ch">Todo revisor de IA afirma.<br>
+    Nós <span class="accent">provamos</span> — e quando não conseguimos provar,
+    <span class="amarelo">dizemos isso</span> em vez de absolver.</h2>
+</section>
+
+<!-- BACKUP ---------------------------------------------------------------- -->
+<section class="slide backup" data-tempo="backup" data-notas="Use se perguntarem por que um SQL injection saiu como MÉDIA ou SUSPEITA.">
+  <p class="eyebrow">Backup · a escada da severidade</p>
+  <h3>A nota mede a força da prova, não a gravidade da categoria</h3>
+  <pre>o que temos na mão                                    teto
+<span class="c">─────────────────────────────────────────────────────────────</span>
+teste passa no base e falha no head                   <span class="amarelo">MÉDIA</span>
+   <span class="c">(causalidade: foi esta mudança que quebrou)</span>
+
+\+ chamada HTTP contra o app rodando                   <span class="vermelho">ALTA / CRÍTICA</span>
+   <span class="c">(alcance: dá para fazer isso agora, de fora)</span>
+
+crítica sem árbitro citado                            <span class="amarelo">SUSPEITA</span>
+execução falhou, recusa, timeout                      <span class="amarelo">INCONCLUSIVO</span></pre>
+  <p class="largo">
+    Aceitamos <strong>subestimar um bug real</strong> para nunca
+    <strong>superestimar um que não existe</strong>. E nada some: severidade é ordem
+    de leitura, não decisão de incluir.
+  </p>
+</section>
+
+<section class="slide backup" data-tempo="backup" data-notas="Se perguntarem 'e se o agente errar?'. O ponto: nenhuma dessas passa pelo modelo.">
+  <p class="eyebrow">Backup · as seis regras do juiz</p>
+  <pre><span class="accent">R0 </span> o artefato ganha do advogado quando os dois discordam
+<span class="accent">R0b</span> quem decide "prova ponta a ponta" é o artefato HTTP, sempre
+<span class="accent">R4 </span> refutado em injection com app sem modelo → INCONCLUSIVO
+<span class="accent">R3 </span> execução falhou → INCONCLUSIVO, nunca absolvido
+<span class="accent">R1 </span> crítica sem árbitro citado → SUSPEITA
+<span class="accent">R2 </span> prova que não é ponta a ponta não passa de MÉDIA</pre>
+  <p class="largo">
+    Seis funções em Python. Rodam em milissegundos, <strong>sem rede e sem modelo</strong>,
+    cada uma com teste. É isso que faz “o LLM não sobrescreve o exit code” ser
+    garantia em vez de intenção.
+  </p>
+</section>
+
+<section class="slide backup" data-tempo="backup" data-notas="Números da rodada cronometrada das 12h15. Confirmar com a rodada final antes de citar no palco.">
+  <p class="eyebrow">Backup · rodada medida</p>
+  <div class="metricas">
+    <div class="metrica"><b>55</b><span>acusações brutas<br>em 20 s</span></div>
+    <div class="metrica"><b>856<small style="font-size:.4em"> s</small></b><span>rodada completa<br>≈ 14,3 min</span></div>
+    <div class="metrica"><b class="accent">560<small style="font-size:.4em"> k</small></b><span>tokens lidos<br>de cache</span></div>
+  </div>
+  <div class="metricas">
+    <div class="metrica"><b class="verde">5</b><span>condenados</span></div>
+    <div class="metrica"><b>1</b><span>descartado<br>com motivo</span></div>
+    <div class="metrica"><b class="amarelo">4</b><span>inconclusivos<br>com causa</span></div>
+  </div>
+  <p class="largo">
+    O cache paga porque o diff do PR é o <strong>mesmo prefixo</strong> em toda chamada —
+    consequência de dar uma acusação por vez ao advogado, decisão que foi tomada
+    por qualidade, não por custo.
+  </p>
+</section>
+
+<section class="slide backup" data-tempo="backup" data-notas="Ler antes de subir ao palco. Um número errado se autodestrói num pitch cuja tese é 'todo mundo afirma, nós provamos'.">
+  <p class="eyebrow">Backup · não falar</p>
+  <ul class="bullets naofalar">
+    <li><strong>“Nenhuma ferramenta do mercado faz isso.”</strong> Falso — a Promptfoo faz, estático.</li>
+    <li><strong>“Encontrou 4 dos 5 defeitos.”</strong> Não existe gabarito. Destrói a tese na mesma frase.</li>
+    <li><strong>“Zero falso positivo.”</strong> Tem uma lista de SUSPEITAS projetada atrás de você.</li>
+    <li><strong>“Substitui o revisor humano.”</strong> O produto assume o contrário.</li>
+    <li><strong>“Volante de dados.”</strong> A Greptile já revisou 1 bilhão+ de linhas.</li>
+  </ul>
+  <h3 class="verde">Falar assim:</h3>
+  <p class="largo">“Provou N achados com artefato reproduzível, descartou M com motivo,
+    e marcou K como inconclusivos com a causa.”</p>
+</section>
+
+<div class="chrome">
+  <span id="tempo" class="tempo"></span>
+  <span>← → navegar · <b style="font-weight:400">N</b> notas · <span id="contador"></span></span>
+</div>
+
+<div class="notas" id="notas"><b>Nota do apresentador</b><span id="notas-txt"></span></div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var atual = 0;
+    var notas = document.getElementById('notas');
+    var notasTxt = document.getElementById('notas-txt');
+    var contador = document.getElementById('contador');
+    var tempo = document.getElementById('tempo');
+    var barra = document.getElementById('barra');
+
+    function mostrar(i) {
+      atual = Math.max(0, Math.min(slides.length - 1, i));
+      slides.forEach(function (s, n) { s.classList.toggle('ativo', n === atual); });
+      var s = slides[atual];
+      contador.textContent = (atual + 1) + ' / ' + slides.length;
+      tempo.textContent = s.dataset.tempo || '';
+      notasTxt.textContent = ' ' + (s.dataset.notas || '—');
+      barra.style.width = ((atual + 1) / slides.length * 100) + '%';
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); mostrar(atual + 1); }
+      else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); mostrar(atual - 1); }
+      else if (e.key === 'Home') { mostrar(0); }
+      else if (e.key === 'End') { mostrar(slides.length - 1); }
+      else if (e.key === 'n' || e.key === 'N') { notas.classList.toggle('visivel'); }
+    });
+
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('a, pre')) return;
+      mostrar(atual + (e.clientX > window.innerWidth * 0.35 ? 1 : -1));
+    });
+
+    mostrar(0);
+  })();
+</script>
