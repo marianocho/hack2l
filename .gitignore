@@ -28,3 +28,4 @@ artefatos/*docker_quebrado*
 # maquina. Commitar isto faz o duble de uma sobrescrever o vivo da outra, e a R4
 # dispara falso-inconclusivo na maquina do palco.
 artefatos/ambiente.json
+saidas/trace.txt
