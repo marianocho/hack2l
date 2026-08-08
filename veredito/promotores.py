@@ -173,13 +173,83 @@ def _diagnostico(acusacoes: list[dict]) -> None:
 _PESO = {"alta": 0, "media": 1, "baixa": 2}
 
 
+def _chave_dedup(a: dict) -> tuple | None:
+    """Duas acusacoes sao a mesma quando apontam o mesmo LOCAL e o mesmo ARBITRO.
+
+    Conservador de proposito: sem arbitro ou sem local, nao deduplica. Fundir
+    dois achados distintos e' pior que gastar uma vaga a mais -- o desafio e'
+    explicito em que deixar passar defeito real custa mais que falso alarme.
+    """
+    local, arbitro = a.get("local"), a.get("arbitro")
+    if not local or not arbitro:
+        return None
+    return (str(local).strip(), str(arbitro).strip())
+
+
+def deduplica(acusacoes: list[dict]) -> list[dict]:
+    """Funde acusacoes identicas ANTES do advogado, nao depois.
+
+    Antes importa: cada acusacao custa ~130 s de Opus 5, e numa rodada de 10
+    vagas uma duplicata queima uma vaga provando duas vezes a mesma coisa.
+    Deduplicar so no parecer limpa o texto com o dinheiro ja gasto.
+
+    Medido em 08/08 nas 47 acusacoes do diff real: 37 caiam em local ja citado
+    por outra, e 8 estavam em pares com local E arbitro identicos.
+
+    A sobrevivente e' a de maior confianca. As outras viram `_duplicatas`.
+
+    ⚠️ `_corroborado` distingue os dois casos, e a distincao e' honestidade de
+    palco, nao detalhe:
+
+      _corroborado=True   promotores DIFERENTES chegaram ao mesmo ponto. E'
+                          sinal: "duas lentes independentes convergiram".
+      _corroborado=False  o MESMO promotor repetiu. Nao e' sinal nenhum, e'
+                          redundancia interna dele.
+
+    Medido em 08/08 nas 47 acusacoes do diff real: 4 fusoes, e as QUATRO eram
+    intra-promotor (correcao+correcao, injection+injection, prd+prd x2). Zero
+    corroboracao cruzada. Apresentar aquilo como "N promotores independentes
+    apontaram" teria sido falso -- por isso a flag existe antes de alguem
+    montar slide em cima do campo.
+    """
+    por_chave: dict[tuple, dict] = {}
+    saida: list[dict] = []
+    for a in sorted(acusacoes, key=lambda x: _PESO.get(x.get("confianca"), 3)):
+        k = _chave_dedup(a)
+        if k is None:
+            saida.append(a)
+            continue
+        primeira = por_chave.get(k)
+        if primeira is None:
+            por_chave[k] = a
+            saida.append(a)
+            continue
+        primeira.setdefault("_duplicatas", []).append(
+            {"id": a.get("id"), "categoria": a.get("categoria"),
+             "confianca": a.get("confianca"), "hipotese": a.get("hipotese")}
+        )
+        fontes = {primeira.get("_promotor") or primeira.get("categoria")} | {
+            d.get("categoria") for d in primeira["_duplicatas"]
+        }
+        primeira["_corroborado"] = len(fontes) > 1
+    return saida
+
+
 def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None) -> list[dict]:
     """Escolhe quem vai ao advogado, por COTA de categoria e nao por ordem.
 
     Sem isto, TOP_N pega as N primeiras e uma categoria barulhenta engole as
     vagas das outras. Dentro de cada bucket, confianca alta primeiro.
+
+    Deduplica antes de aplicar a cota: uma duplicata que ocupa vaga de cota
+    tira a vaga de uma categoria inteira, nao so de outra acusacao.
     """
     cotas = dict(cotas or COTAS)
+    antes = len(acusacoes)
+    acusacoes = deduplica(acusacoes)
+    if len(acusacoes) < antes:
+        print(f"  dedup: {antes} -> {len(acusacoes)} "
+              f"({antes - len(acusacoes)} fundidas em _duplicatas)")
     ordenadas = sorted(acusacoes, key=lambda a: _PESO.get(a.get("confianca"), 3))
     escolhidas, sobra = [], []
     for a in ordenadas:
