@@ -63,6 +63,31 @@ USUARIOS = {
     "carol": ("carol@hack2l.dev", "carol-password"),
 }
 
+# --- o nosso modelo ---------------------------------------------------------
+ANTHROPIC_API_KEY = _s("ANTHROPIC_API_KEY", "")
+
+# Haiku para gerar hipoteses, Opus para verificar, Sonnet para sintetizar:
+# modelo caro so onde a decisao acontece.
+MODEL_PROMOTOR = _s("MODEL_PROMOTOR", "claude-haiku-4-5-20251001")
+MODEL_ADVOGADO = _s("MODEL_ADVOGADO", "claude-opus-5")
+MODEL_JUIZ = _s("MODEL_JUIZ", "claude-sonnet-5")
+
+# --- parametros do advogado -------------------------------------------------
+TOP_N = _i("TOP_N", 2)
+EFFORT = _s("EFFORT", "high")
+
+# No Opus 5 max_tokens limita RACIOCINIO + RESPOSTA somados, e o raciocinio vem
+# ligado por padrao -- omitir `thinking` nao desliga. Apertar isto trunca o
+# veredito no meio.
+MAX_TOKENS_ADVOGADO = _i("MAX_TOKENS_ADVOGADO", 64000)
+
+# O modelo SABE que tem este orcamento e fecha o parecer em vez de ser cortado.
+# Minimo da API: 20.000.
+TASK_BUDGET_TOKENS = _i("TASK_BUDGET_TOKENS", 30000)
+
+MAX_VOLTAS_LOOP = _i("MAX_VOLTAS_LOOP", 10)
+TIMEOUT_ACUSACAO_S = _i("TIMEOUT_ACUSACAO_S", 180)
+
 # --- limites ----------------------------------------------------------------
 TIMEOUT_PYTEST_S = _i("TIMEOUT_PYTEST_S", 180)
 TIMEOUT_GIT_S = _i("TIMEOUT_GIT_S", 60)

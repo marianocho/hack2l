@@ -1,0 +1,124 @@
+"""hack2l / Veredito -- o orquestrador. Promotores -> advogado -> juiz.
+
+Cada etapa grava em disco antes da proxima comecar. Nao e' zelo: ajustar o juiz
+pela trigesima vez nao pode re-executar o advogado, e se a rodada morrer no meio
+o que ja foi provado continua provado.
+
+    python -m veredito.orquestrador --manual   # uma acusacao escrita a mao
+    python -m veredito.orquestrador            # le saidas/acusacoes.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+
+from . import advogado, config as cfg, ferramentas, juiz, llm_alvo
+
+# Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
+# ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
+# nada existe para testar isolamento), nao de um achado -- por isso sobrevive a
+# troca de PR, e por isso nao e' resposta chumbada.
+ACUSACAO_DE_BANCADA = {
+    "id": "bancada_isolamento",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/api/app/routers/",
+    "hipotese": "um usuario consegue alcancar documento que nao e' dele",
+    "arbitro": "INV-ISOLAMENTO",
+    "provado_se": "carol, que nao possui nada, alcanca dado de outro usuario",
+    "confianca": "media",
+}
+
+
+def _carrega_acusacoes(manual: bool) -> list[dict]:
+    if manual:
+        return [ACUSACAO_DE_BANCADA]
+    caminho = cfg.SAIDAS / "acusacoes.json"
+    try:
+        acusacoes = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"nao consegui ler {caminho}: {e}", file=sys.stderr)
+        print("rode com --manual para exercitar o pipeline sem os promotores.")
+        return []
+    return [a for a in acusacoes if isinstance(a, dict)]
+
+
+def roda(manual: bool = False, top_n: int | None = None) -> dict:
+    cfg.prepara_pastas()
+    if not cfg.ANTHROPIC_API_KEY:
+        raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
+
+    inicio = time.time()
+
+    # Mede o LLM alvo UMA vez e grava. O juiz roda depois, possivelmente em
+    # outro processo, e a decisao dele nao pode depender de sondar o app de novo.
+    estado, detalhe = llm_alvo.registra()
+    print(f"LLM do app alvo: {estado} -- {detalhe[:90]}")
+
+    acusacoes = _carrega_acusacoes(manual)
+    if not acusacoes:
+        return {}
+    teto = top_n if top_n is not None else cfg.TOP_N
+    acusacoes = acusacoes[:teto]
+    print(f"{len(acusacoes)} acusacao(oes) para o advogado, modelo {cfg.MODEL_ADVOGADO}\n")
+
+    diff = advogado.diff_do_pr()  # prefixo cacheado; NUNCA imprimir
+    print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)\n")
+
+    veredictos: list[dict] = []
+    for i, a in enumerate(acusacoes, 1):
+        print(f"[{i}/{len(acusacoes)}] {a.get('id')} -- {a.get('categoria')}", flush=True)
+        v = advogado.julga(a, diff)
+        veredictos.append(v)
+
+        # Grava a cada acusacao, nao no fim: rodada que morre no meio nao perde
+        # o que ja foi provado.
+        (cfg.SAIDAS / "veredictos.json").write_text(
+            json.dumps(veredictos, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        (cfg.SAIDAS / "acusacoes.json").write_text(
+            json.dumps(acusacoes, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+
+        print(
+            f"    -> {v['veredito']} em {v['segundos']}s, {v['voltas']} voltas | "
+            f"entrada {v['tokens_entrada']} saida {v['tokens_saida']} "
+            f"cache_read {v['cache_read']}"
+        )
+        if v.get("motivo"):
+            print(f"       {v['motivo'][:150]}")
+        # Disciplina no 4: conferir o cache na 1a rodada. Zero aqui e' sinal de
+        # timestamp, UUID ou ordem de dicionario variando no prefixo.
+        if i == 1 and v["cache_read"] == 0:
+            print("    ⚠ cache_read zero na 1a acusacao -- algo varia no prefixo",
+                  flush=True)
+
+    texto = juiz.sentencia()
+    total = {
+        "acusacoes": len(veredictos),
+        "segundos": round(time.time() - inicio, 1),
+        "tokens_entrada": sum(v["tokens_entrada"] for v in veredictos),
+        "tokens_saida": sum(v["tokens_saida"] for v in veredictos),
+        "cache_read": sum(v["cache_read"] for v in veredictos),
+    }
+    print(f"\n{'=' * 70}\n{texto}\n{'=' * 70}")
+    print(
+        f"custo da rodada: {total['tokens_entrada']} entrada / "
+        f"{total['tokens_saida']} saida / {total['cache_read']} de cache, "
+        f"em {total['segundos']}s"
+    )
+    (cfg.SAIDAS / "custo.json").write_text(
+        json.dumps(total, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    return total
+
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    p.add_argument("--manual", action="store_true",
+                   help="usa a acusacao de bancada em vez de saidas/acusacoes.json")
+    p.add_argument("--top-n", type=int, default=None)
+    args = p.parse_args()
+    roda(manual=args.manual, top_n=args.top_n)

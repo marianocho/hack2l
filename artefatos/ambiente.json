@@ -1,0 +1,5 @@
+{
+  "llm_alvo": "duble",
+  "detalhe": "duas perguntas diferentes devolveram a MESMA resposta: 'Based on the retrieved context, here is the answer. [source: chunk 0]'",
+  "medido_em": "2026-08-08T11:32:54"
+}
