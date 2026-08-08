@@ -1,4 +1,4 @@
-"""Testes da pericia.
+﻿"""Testes da pericia.
 
 Nenhum depende do conteudo do PR: exercitam os tres estados com testes
 sinteticos. Isso e' de proposito -- a regua do desafio e' que trocar o PR nao
@@ -9,6 +9,8 @@ pode quebrar o agente, e uma suite que so passa neste PR falharia a regua.
 """
 
 import subprocess
+
+import requests
 
 import pytest
 
@@ -82,6 +84,60 @@ def test_sanitiza_nome_do_arquivo(entrada, esperado):
     assert f._sanitiza_nome(entrada) == esperado
 
 
+# --------------------------------------------------------- retry de rede, unit
+
+def test_retry_repete_falha_de_conexao():
+    """Conexao que nunca subiu nao aplicou nada: repetir e' seguro e necessario,
+    porque a api leva ~30s para aceitar conexao depois de um compose up."""
+    tentativas = []
+
+    def instavel():
+        tentativas.append(1)
+        if len(tentativas) < 3:
+            raise requests.exceptions.ConnectionError("recusou")
+        return "ok"
+
+    assert f._com_retry("POST", instavel) == "ok"
+    assert len(tentativas) == 3
+
+
+def test_retry_nao_repete_post_que_deu_timeout():
+    """Num ReadTimeout o pedido pode ter sido aplicado. Repetir um POST criaria
+    o recurso duas vezes e sujaria o raciocinio do advogado."""
+    tentativas = []
+
+    def pendura():
+        tentativas.append(1)
+        raise requests.exceptions.ReadTimeout("pendurou")
+
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        f._com_retry("POST", pendura)
+    assert len(tentativas) == 1, "POST com timeout nao pode ser repetido"
+
+
+def test_retry_repete_get_que_deu_timeout():
+    tentativas = []
+
+    def pendura():
+        tentativas.append(1)
+        raise requests.exceptions.ReadTimeout("pendurou")
+
+    with pytest.raises(requests.exceptions.ReadTimeout):
+        f._com_retry("GET", pendura)
+    assert len(tentativas) == f.cfg.TENTATIVAS_HTTP
+
+
+def test_url_do_app_nao_usa_localhost():
+    """08/08: localhost resolve ::1 primeiro e o caminho IPv6 do Docker pendura.
+    0/8 em localhost, 8/8 em 127.0.0.1, nas tres portas. E' ReadTimeout, entao
+    cada chamada gasta o timeout inteiro antes de virar INCONCLUSIVO.
+
+    Se na outra maquina localhost funcionar, 127.0.0.1 funciona tambem -- entao
+    a escolha estrita nao custa nada la e salva a demo aqui.
+    """
+    assert "localhost" not in f.cfg.APP_API_URL, "use 127.0.0.1 -- ver comentario em config.py"
+
+
 # ------------------------------------------------------------- git, sem docker
 
 def test_base_e_o_pai_do_pr_nao_a_ponta_da_main():
@@ -151,3 +207,4 @@ def test_worktree_do_teste_fica_limpo_depois():
     for lado in ("base", "head"):
         sujeira = f.cfg.WORKTREES / lado / "app" / "api" / "tests" / "test_selftest_limpa.py"
         assert not sujeira.exists(), f"sobrou {sujeira}"
+

@@ -299,6 +299,30 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
 
 _TOKENS: dict[str, str] = {}
 
+# Metodos seguros de repetir quando a RESPOSTA se perde. Num ReadTimeout o
+# pedido pode ter sido aplicado; repetir um POST criaria o recurso duas vezes e
+# sujaria o raciocinio do advogado. ConnectionError e' diferente -- a conexao
+# nunca subiu, nada foi aplicado -- e por isso se repete para qualquer metodo.
+_IDEMPOTENTES = {"GET", "HEAD", "OPTIONS"}
+
+
+def _com_retry(metodo: str, chamada):
+    """Repete falha de conexao. Sem isto, o warm-up de ~30s da api e qualquer
+    soluco de rede viram INCONCLUSIVO -- e inconclusivo nao se recupera."""
+    ultimo = None
+    for tentativa in range(cfg.TENTATIVAS_HTTP):
+        try:
+            return chamada()
+        except requests.exceptions.ConnectionError as e:
+            ultimo = e
+        except requests.exceptions.Timeout as e:
+            ultimo = e
+            if metodo.upper() not in _IDEMPOTENTES:
+                break  # pode ter sido aplicado; repetir seria pior
+        if tentativa < cfg.TENTATIVAS_HTTP - 1:
+            time.sleep(2 * (tentativa + 1))
+    raise ultimo
+
 
 def _token(usuario: str) -> str:
     if usuario in _TOKENS:
@@ -306,11 +330,12 @@ def _token(usuario: str) -> str:
     if usuario not in cfg.USUARIOS:
         raise RuntimeError(f"usuario desconhecido: {usuario}. Use: {', '.join(cfg.USUARIOS)}")
     email, senha = cfg.USUARIOS[usuario]
-    r = requests.post(
+    # login e' idempotente na pratica: nao cria recurso, so devolve token.
+    r = _com_retry("GET", lambda: requests.post(
         f"{cfg.APP_API_URL}/auth/login",
         json={"email": email, "password": senha},
         timeout=cfg.TIMEOUT_HTTP_S,
-    )
+    ))
     r.raise_for_status()
     tok = r.json()["access_token"]
     _TOKENS[usuario] = tok
@@ -319,16 +344,17 @@ def _token(usuario: str) -> str:
 
 def _http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str = "") -> dict:
     saida = {"status": None, "corpo": "", "erro": None, "como": como_usuario or "anonimo"}
+    metodo = metodo.upper().strip() or "GET"
     try:
         cabecalhos = {}
         if como_usuario:
             cabecalhos["Authorization"] = f"Bearer {_token(como_usuario)}"
         payload = json.loads(corpo) if corpo.strip() else None
-        r = requests.request(
-            metodo.upper().strip(),
+        r = _com_retry(metodo, lambda: requests.request(
+            metodo,
             f"{cfg.APP_API_URL}/{caminho.strip().lstrip('/')}",
             json=payload, headers=cabecalhos, timeout=cfg.TIMEOUT_HTTP_S,
-        )
+        ))
         saida["status"] = r.status_code
         saida["corpo"] = r.text
     except Exception as e:

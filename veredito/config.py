@@ -44,8 +44,16 @@ SAIDAS = RAIZ / "saidas"
 ARTEFATOS = RAIZ / "artefatos"
 
 # --- app alvo ---------------------------------------------------------------
-APP_API_URL = _s("APP_API_URL", "http://localhost:8000").rstrip("/")
-APP_WEB_URL = _s("APP_WEB_URL", "http://localhost:3000").rstrip("/")
+# 🚨 127.0.0.1 e' deliberado, NAO troque por localhost.
+#
+# Medido em 08/08 nesta maquina: 'localhost' resolve ::1 antes de 127.0.0.1, o
+# Docker publica nos dois, e o caminho IPv6 aceita a conexao e nunca responde.
+# Resultado: 0/8 sucesso em localhost, 8/8 em 127.0.0.1, nas tres portas.
+# Isso nao da ConnectionRefused, da ReadTimeout -- entao cada chamada pendura o
+# timeout inteiro antes de falhar, e a acusacao vira INCONCLUSIVO por
+# infraestrutura. Em massa, a categoria de seguranca esvaziaria parecendo rigor.
+APP_API_URL = _s("APP_API_URL", "http://127.0.0.1:8000").rstrip("/")
+APP_WEB_URL = _s("APP_WEB_URL", "http://127.0.0.1:3000").rstrip("/")
 
 # Os quatro usuarios do seed. carol nao possui nada -- e' o controle negativo.
 USUARIOS = {
@@ -59,6 +67,11 @@ USUARIOS = {
 TIMEOUT_PYTEST_S = _i("TIMEOUT_PYTEST_S", 180)
 TIMEOUT_GIT_S = _i("TIMEOUT_GIT_S", 60)
 TIMEOUT_HTTP_S = _i("TIMEOUT_HTTP_S", 30)
+
+# A api leva ~30s para aceitar conexao depois de um `compose up`. Sem isto, a
+# primeira acusacao da rodada vira INCONCLUSIVO por warm-up, e o terceiro
+# estado nao se recupera sozinho.
+TENTATIVAS_HTTP = _i("TENTATIVAS_HTTP", 3)
 
 # Quanto de saida crua volta para o modelo. O artefato em disco guarda tudo;
 # isto aqui e' so o que cabe no contexto sem afogar o raciocinio.
