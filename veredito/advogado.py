@@ -169,6 +169,49 @@ def _parse_veredicto(texto: str) -> dict:
     }
 
 
+def _diagnostico_da_recusa(msg) -> str:
+    """A causa da recusa, com o que o SDK sabe e a gente estava descartando.
+
+    Verificado no anthropic 0.120.2 instalado, nao de memoria: `fallbacks` E'
+    aceito pelo tool_runner (esta na assinatura em
+    resources/beta/messages/messages.py, nas duas sobrecargas), o escalar
+    "default" E' valido (BetaFallbacksParam = Union[Iterable[...], "default"])
+    e `cyber` E' categoria coberta -- a docstring do proprio SDK diz que
+    "benign cybersecurity work can also trigger this category".
+
+    Ou seja: o pareamento esta certo, e uma recusa que chega aqui significa uma
+    de DUAS coisas, que pedem acoes diferentes:
+
+      fallback nao rodou  -- rate limit ou sobrecarga no modelo de fallback. O
+                             servidor preenche `recommended_model`, e um retry
+                             direto nele tem chance de passar.
+      cadeia toda recusou -- o fallback rodou e tambem recusou. Sinal: um item
+                             `fallback_message` em usage.iterations.
+
+    Sem distinguir, o parecer diz so "recusa do classificador": verdade, e
+    inutil. A regra do desafio e' INCONCLUSIVO **com a causa**.
+    """
+    partes = ["recusa do classificador"]
+    det = getattr(msg, "stop_details", None)
+    if det is not None and getattr(det, "category", None):
+        partes.append(f"categoria {det.category}")
+
+    recomendado = getattr(det, "recommended_model", None) if det is not None else None
+    iteracoes = getattr(getattr(msg, "usage", None), "iterations", None) or []
+    rodou = any(getattr(i, "type", None) == "fallback_message" for i in iteracoes)
+
+    if recomendado:
+        partes.append(
+            f"o fallback NAO foi tentado (rate limit ou sobrecarga); "
+            f"o servidor sugere retry direto em {recomendado}"
+        )
+    elif rodou:
+        partes.append("o fallback rodou e tambem recusou -- a cadeia inteira negou")
+    else:
+        partes.append("sem sinal de fallback no usage -- causa nao determinada")
+    return " | ".join(partes)
+
+
 def _soma(uso: dict, u) -> None:
     if not u:
         return
@@ -249,11 +292,7 @@ def julga(acusacao: dict, diff: str) -> dict:
             # com content vazio, e ler content[0] vira IndexError no meio da
             # rodada.
             if getattr(msg, "stop_reason", None) == "refusal":
-                det = getattr(msg, "stop_details", None)
-                v["erro"] = (
-                    "recusa do classificador"
-                    + (f" ({det.category})" if det and getattr(det, "category", None) else "")
-                )
+                v["erro"] = _diagnostico_da_recusa(msg)
                 break
 
             if v["voltas"] >= cfg.MAX_VOLTAS_LOOP:

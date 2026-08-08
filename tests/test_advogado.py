@@ -5,6 +5,8 @@ o dado que o juiz le -- e' o ponto onde uma acusacao provada pode sumir do
 parecer sem ninguem perceber, porque some parecendo rigor.
 """
 
+from types import SimpleNamespace
+
 from veredito import advogado as adv
 
 
@@ -84,3 +86,45 @@ def test_json_valido_sem_veredito_nao_conta_como_veredicto():
 def test_json_quebrado_nao_levanta():
     v = adv._parse_veredicto('{"veredito": "PROVADO", "motivo": ')
     assert v["veredito"] == "INCONCLUSIVO"
+
+
+# ------------------------------------------------- a causa de uma recusa cyber
+# 2 das 10 acusacoes da rodada das 12h15 morreram em recusa do classificador --
+# a categoria carro-chefe entre elas. "recusa do classificador" e' verdade e nao
+# diz o que fazer; estes testes travam a distincao que diz.
+
+def _msg(categoria=None, recomendado=None, fallback_rodou=False):
+    det = SimpleNamespace(category=categoria, recommended_model=recomendado)
+    iteracoes = [SimpleNamespace(type="message")]
+    if fallback_rodou:
+        iteracoes.append(SimpleNamespace(type="fallback_message"))
+    return SimpleNamespace(
+        stop_reason="refusal", stop_details=det,
+        usage=SimpleNamespace(iterations=iteracoes),
+    )
+
+
+def test_recusa_sem_fallback_tentado_aponta_o_modelo_sugerido():
+    """`recommended_model` preenchido = o fallback nem rodou (rate limit ou
+    sobrecarga). E' o caso acionavel: da' pra tentar de novo direto nele."""
+    causa = adv._diagnostico_da_recusa(_msg("cyber", recomendado="claude-opus-4-8"))
+    assert "cyber" in causa
+    assert "NAO foi tentado" in causa and "claude-opus-4-8" in causa
+
+
+def test_recusa_com_fallback_rodado_diz_que_a_cadeia_toda_negou():
+    causa = adv._diagnostico_da_recusa(_msg("cyber", fallback_rodou=True))
+    assert "cadeia inteira negou" in causa
+    assert "NAO foi tentado" not in causa
+
+
+def test_recusa_sem_sinal_nenhum_admite_que_nao_sabe():
+    """Nao inventar causa. Inconclusivo sobre o proprio inconclusivo e' honesto;
+    chutar 'a cadeia recusou' seria afirmar o que nao foi observado."""
+    causa = adv._diagnostico_da_recusa(_msg("bio"))
+    assert "nao determinada" in causa
+
+
+def test_recusa_sem_stop_details_nao_levanta():
+    msg = SimpleNamespace(stop_reason="refusal", stop_details=None, usage=None)
+    assert adv._diagnostico_da_recusa(msg).startswith("recusa do classificador")
