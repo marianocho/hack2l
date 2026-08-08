@@ -22,6 +22,9 @@ proprio http_request ja mostra. Aqui vira "indeterminado".
 """
 from __future__ import annotations
 
+import json
+from datetime import datetime
+
 import requests
 
 from . import config as cfg
@@ -72,6 +75,44 @@ def estado(token_de: str = "demo", forcar: bool = False) -> tuple[str, str]:
     else:
         _cache = (VIVO, f"as sondas divergem, o modelo le a pergunta: {a[:60]!r} vs {b[:60]!r}")
     return _cache
+
+
+def registra() -> tuple[str, str]:
+    """Grava o estado do LLM alvo em artefatos/ambiente.json e devolve.
+
+    Vira artefato porque o juiz roda depois -- e possivelmente em outro
+    processo -- e a decisao dele nao pode depender de sondar o app de novo.
+    Tambem e' registro auditavel: o parecer diz por que a categoria ficou
+    inconclusiva, e o arquivo prova.
+    """
+    est, detalhe = estado()
+    cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+    (cfg.ARTEFATOS / "ambiente.json").write_text(
+        json.dumps({"llm_alvo": est, "detalhe": detalhe,
+                    "medido_em": datetime.now().isoformat(timespec="seconds")},
+                   ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return est, detalhe
+
+
+def estado_registrado() -> tuple[str, str]:
+    """Le o estado do disco. Se nao houver registro, sonda ao vivo.
+
+    Nunca levanta: se nao der para saber, devolve INDETERMINADO -- e o juiz
+    nao rebaixa nada com base em INDETERMINADO.
+    """
+    caminho = cfg.ARTEFATOS / "ambiente.json"
+    if caminho.exists():
+        try:
+            d = json.loads(caminho.read_text(encoding="utf-8"))
+            return d["llm_alvo"], d.get("detalhe", "")
+        except Exception as e:
+            return INDETERMINADO, f"ambiente.json ilegivel: {type(e).__name__}: {e}"
+    try:
+        return estado()
+    except Exception as e:
+        return INDETERMINADO, f"sonda falhou: {type(e).__name__}: {e}"
 
 
 AVISO = (
