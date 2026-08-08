@@ -1,0 +1,15 @@
+# hack2l / Veredito
+# Versoes fixadas nas que estao verificadas na maquina do Luis (07/08), porque a
+# apresentacao roda la. Nao afrouxar sem testar nas duas maquinas.
+
+anthropic==0.120.2
+
+# O servidor Langfuse do desafio e' a imagem langfuse/langfuse:2.
+# A v4 do SDK nao conversa com ele. Nao subir esta versao.
+langfuse==2.57.0
+
+httpx
+requests
+python-dotenv
+psycopg2-binary
+pytest
