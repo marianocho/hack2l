@@ -1,4 +1,4 @@
-﻿# hack2l
+# hack2l
 .venv/
 __pycache__/
 *.py[cod]
@@ -14,4 +14,13 @@ saidas/*
 # Artefatos dos testes da propria pericia. Os artefatos de prova de verdade
 # ficam versionados -- sao a evidencia.
 artefatos/*selftest*
+# estado de execucao por maquina, nao evidencia de acusacao. A rodada final
+# commita o seu explicitamente com git add -f se o parecer citar.
+artefatos/ambiente.json
 artefatos/*docker_quebrado*
+
+# Medicao POR MAQUINA e POR RODADA -- nunca compartilhada. A maquina do Mariano
+# mediu "duble" e a do Luis "vivo" no mesmo dia, porque a chave da OpenAI e' por
+# maquina. Commitar isto faz o duble de uma sobrescrever o vivo da outra, e a R4
+# dispara falso-inconclusivo na maquina do palco.
+artefatos/ambiente.json

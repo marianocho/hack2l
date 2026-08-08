@@ -70,17 +70,74 @@ def test_indeterminado_nao_rebaixa(monkeypatch):
 
 
 def test_estado_registrado_le_do_disco(tmp_path, monkeypatch):
+    from datetime import datetime
     from veredito import config as cfg
     monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
     (tmp_path / "ambiente.json").write_text(
-        json.dumps({"llm_alvo": "duble", "detalhe": "gravado antes"}), encoding="utf-8")
+        json.dumps({"llm_alvo": "duble", "detalhe": "gravado antes",
+                    "medido_em": datetime.now().isoformat()}), encoding="utf-8")
     est, det = llm_alvo.estado_registrado()
     assert est == llm_alvo.DUBLE and det == "gravado antes"
 
 
-def test_ambiente_json_ilegivel_vira_indeterminado(tmp_path, monkeypatch):
+def test_registro_sem_timestamp_nao_e_confiado(tmp_path, monkeypatch):
+    """Sem medido_em nao da' para saber a idade -- sonda em vez de confiar."""
+    from veredito import config as cfg
+    monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
+    (tmp_path / "ambiente.json").write_text(
+        json.dumps({"llm_alvo": "duble", "detalhe": "sem data"}), encoding="utf-8")
+    monkeypatch.setattr(llm_alvo, "estado", lambda forcar=True: (llm_alvo.VIVO, "sondado"))
+    est, det = llm_alvo.estado_registrado()
+    assert est == llm_alvo.VIVO and det == "sondado"
+
+
+def test_ambiente_json_ilegivel_cai_na_sonda(tmp_path, monkeypatch):
+    """Arquivo lixo nao vira INDETERMINADO: sondar e' melhor que desistir."""
     from veredito import config as cfg
     monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
     (tmp_path / "ambiente.json").write_text("{lixo", encoding="utf-8")
+    monkeypatch.setattr(llm_alvo, "estado", lambda forcar=True: (llm_alvo.DUBLE, "sondado"))
     est, _ = llm_alvo.estado_registrado()
-    assert est == llm_alvo.INDETERMINADO
+    assert est == llm_alvo.DUBLE
+
+
+def test_sonda_quebrada_vira_indeterminado(tmp_path, monkeypatch):
+    from veredito import config as cfg
+    monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
+
+    def explode(forcar=True):
+        raise RuntimeError("app fora do ar")
+
+    monkeypatch.setattr(llm_alvo, "estado", explode)
+    est, det = llm_alvo.estado_registrado()
+    assert est == llm_alvo.INDETERMINADO and "app fora do ar" in det
+
+
+def test_registro_velho_e_ignorado(tmp_path, monkeypatch):
+    """Registro de outra rodada -- ou de outra maquina -- nao vale.
+
+    Em 08/08 a maquina do Mariano gravou "duble" e commitou; a do palco, com
+    o modelo VIVO, teria lido o duble alheio e disparado R4 em tudo.
+    """
+    from datetime import datetime, timedelta
+    from veredito import config as cfg
+    monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
+    velho = (datetime.now() - timedelta(seconds=llm_alvo.TTL_REGISTRO_S + 60)).isoformat()
+    (tmp_path / "ambiente.json").write_text(
+        json.dumps({"llm_alvo": "duble", "detalhe": "de outra maquina",
+                    "medido_em": velho}), encoding="utf-8")
+    monkeypatch.setattr(llm_alvo, "estado", lambda forcar=True: (llm_alvo.VIVO, "sondado agora"))
+    est, det = llm_alvo.estado_registrado()
+    assert est == llm_alvo.VIVO, "confiou num registro vencido"
+    assert det == "sondado agora"
+
+
+def test_registro_recente_e_usado(tmp_path, monkeypatch):
+    from datetime import datetime
+    from veredito import config as cfg
+    monkeypatch.setattr(cfg, "ARTEFATOS", tmp_path)
+    (tmp_path / "ambiente.json").write_text(
+        json.dumps({"llm_alvo": "duble", "detalhe": "desta rodada",
+                    "medido_em": datetime.now().isoformat()}), encoding="utf-8")
+    est, det = llm_alvo.estado_registrado()
+    assert est == llm_alvo.DUBLE and det == "desta rodada"

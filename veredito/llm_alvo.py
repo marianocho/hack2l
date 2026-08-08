@@ -96,21 +96,35 @@ def registra() -> tuple[str, str]:
     return est, detalhe
 
 
+# Registro mais velho que isto nao vale: sonda de novo.
+#
+# Custou um quase-acidente em 08/08. A maquina do Mariano gravou "duble" (sem
+# OPENAI_API_KEY no .env dela) e commitou o arquivo; a maquina do palco, com a
+# chave e o modelo VIVO, teria lido o "duble" alheio e disparado R4 em todas as
+# acusacoes de injection -- falso-inconclusivo, o espelho exato do bug que a R4
+# existe para impedir. O .gitignore resolve o caso commitado; isto resolve o
+# caso generico de registro velho, de outra rodada ou de outra maquina.
+TTL_REGISTRO_S = 3600
+
+
 def estado_registrado() -> tuple[str, str]:
-    """Le o estado do disco. Se nao houver registro, sonda ao vivo.
+    """Le o estado do disco, se for recente. Senao sonda ao vivo.
 
     Nunca levanta: se nao der para saber, devolve INDETERMINADO -- e o juiz
     nao rebaixa nada com base em INDETERMINADO.
     """
-    caminho = cfg.ARTEFATOS / "ambiente.json"
-    if caminho.exists():
-        try:
-            d = json.loads(caminho.read_text(encoding="utf-8"))
-            return d["llm_alvo"], d.get("detalhe", "")
-        except Exception as e:
-            return INDETERMINADO, f"ambiente.json ilegivel: {type(e).__name__}: {e}"
     try:
-        return estado()
+        d = json.loads((cfg.ARTEFATOS / "ambiente.json").read_text(encoding="utf-8"))
+        idade = (datetime.now() - datetime.fromisoformat(d["medido_em"])).total_seconds()
+        if idade <= TTL_REGISTRO_S:
+            return d["llm_alvo"], d.get("detalhe", "")
+    except Exception:
+        pass  # sem arquivo, ilegivel, sem timestamp ou vencido -> sonda ao vivo
+
+    # Sondar e' sempre melhor que desistir: INDETERMINADO nao rebaixa nada, entao
+    # devolve-lo por preguica deixaria passar um duble de verdade.
+    try:
+        return estado(forcar=True)
     except Exception as e:
         return INDETERMINADO, f"sonda falhou: {type(e).__name__}: {e}"
 
