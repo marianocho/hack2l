@@ -17,6 +17,16 @@ def _art(estado="PROVADO", erro=None):
     }
 
 
+def _http(alcancou_a_api=True, status=200):
+    """Artefato de prova contra o app rodando. Desde 08/08 e' ele, e nao a
+    palavra do advogado, que decide se a prova foi ponta a ponta."""
+    return {
+        "id": "a1", "tipo": "http", "alcancou_a_api": alcancou_a_api,
+        "chamadas": [{"metodo": "GET", "caminho": "/shared/2", "como": "carol",
+                      "status": status, "erro": None, "corpo": "{...}"}],
+    }
+
+
 # ------------------------------------------------------------------- regra 0
 
 def test_artefato_ganha_do_advogado_que_afirma_ter_provado():
@@ -39,6 +49,73 @@ def test_advogado_nao_declara_sozinho_que_a_prova_foi_ponta_a_ponta():
     assert v["prova_ponta_a_ponta"] is False
 
 
+def test_sem_artefato_nenhum_a_autodeclaracao_nao_sustenta_critica():
+    """🚨 O furo corrigido em 08/08, e o mais caro do juiz.
+
+    O aterramento de `prova_ponta_a_ponta` morava DENTRO do `if artefato is not
+    None`. Prova por http_request nao gera artefato de teste diferencial, entao
+    o bloco inteiro era pulado e a palavra do advogado passava sem conferencia
+    -- justo na unica via que, pelo CONTRATO, sustenta severidade alta.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": "criterio 3"},
+        None,          # nenhum teste diferencial
+        artefato_http=None,   # e nenhuma chamada registrada
+    )
+    assert v["prova_ponta_a_ponta"] is False
+    assert v["severidade"] == "MEDIA", "a palavra do modelo sustentou severidade alta"
+
+
+def test_prova_so_por_http_sustenta_critica_e_vira_evidencia():
+    """O caso que o PR de hoje exige: os 3 endpoints sao NOVOS, entao prova
+    diferencial nao fecha neles (404 no base) e o achado chega so' por API."""
+    acusacao = {"id": "a1", "categoria": "injection", "arbitro": "INV-ISOLAMENTO",
+                "local": "app/api/app/routers/shares.py:82", "hipotese": "carol le doc de alice"}
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        acusacao, None, artefato_http=_http(),
+    )
+    assert v["prova_ponta_a_ponta"] is True
+    assert v["severidade"] == "CRITICA"
+
+    bloco = juiz._bloco(v, acusacao, None, _http())
+    assert "nao fechou" not in bloco, "prova por API imprimindo 'nao fechou'"
+    assert "GET /shared/2 como carol -> HTTP 200" in bloco
+    assert "artefatos/http_a1.json" in bloco
+
+
+def test_404_conta_como_ter_alcancado_a_api_e_isso_e_deliberado():
+    """Medido em 08/08: carol -> GET /shared/2 devolve 404, e o artefato marca
+    alcancou_a_api. Nao e' bug -- o campo significa "a chamada completou contra
+    o app rodando", nao "o defeito foi alcancado". Quem garante que o defeito
+    apareceu e' o AND com a declaracao do advogado mais o corpo no artefato, que
+    um humano le. Se alguem apertar isto para exigir 2xx, prova de negacao
+    indevida (403/404 onde deveria haver dado) deixa de ser demonstravel.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": "INV-ISOLAMENTO"}, None, artefato_http=_http(status=404),
+    )
+    assert v["prova_ponta_a_ponta"] is True
+
+
+def test_chamada_que_nao_completou_nao_e_prova():
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": "x"}, None, artefato_http=_http(alcancou_a_api=False),
+    )
+    assert v["prova_ponta_a_ponta"] is False
+
+
+def test_categoria_sai_no_vocabulario_do_desafio():
+    """O desafio nomeia cinco categorias; nos usamos seis, mais granulares.
+    Jurado lendo rotulo que nao e' o dele e' atrito de graca."""
+    acusacao = {"id": "a1", "categoria": "injection", "arbitro": "x", "local": "a.py:1"}
+    bloco = juiz._bloco({"severidade": "MEDIA"}, acusacao, _art())
+    assert "security" in bloco and "injection" not in bloco
+
+
 # ------------------------------------------------------------------- regra 1
 
 def test_critica_sem_arbitro_vira_suspeita():
@@ -55,6 +132,7 @@ def test_critica_com_arbitro_sobrevive():
         {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
         {"arbitro": "criterio de aceite no 3"},
         _art(),
+        artefato_http=_http(),
     )
     assert v["severidade"] == "CRITICA"
 
@@ -126,6 +204,7 @@ def test_llm_duble_nao_mexe_em_quem_foi_provado():
         {"categoria": "injection", "arbitro": "criterio 3"},
         _art(),
         avisos=[juiz.cfg.AVISO_SEM_MODELO],
+        artefato_http=_http(),
     )
     assert v["veredito"] == "PROVADO"
     assert v["severidade"] == "CRITICA"
@@ -175,7 +254,8 @@ def test_condenados_saem_ordenados_por_severidade():
         {"id": "a", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
     ]
     acusacoes = {k: {"id": k, "arbitro": "criterio"} for k in ("a", "b")}
-    org = juiz.organiza(veredictos, acusacoes, {"a": _art(), "b": _art()})
+    org = juiz.organiza(veredictos, acusacoes, {"a": _art(), "b": _art()},
+                        http={"a": _http(), "b": _http()})
     assert [v["id"] for v in org["condenados"]] == ["a", "b"]
 
 

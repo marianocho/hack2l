@@ -212,13 +212,25 @@ advogado depois disso.
 
 ### Causalidade e alcance são provas diferentes
 
-| prova | responde | severidade que sustenta |
-|---|---|---|
-| teste diferencial | *foi esta mudança que quebrou* | até MÉDIA (R2 rebaixa) |
-| `http_request` | *dá para fazer isso de fora, agora* | ALTA/CRÍTICA |
+| prova | responde | artefato | severidade que sustenta |
+|---|---|---|---|
+| teste diferencial | *foi esta mudança que quebrou* | `artefatos/prova_<id>.json` | até MÉDIA (R2 rebaixa) |
+| `http_request` | *dá para fazer isso de fora, agora* | `artefatos/http_<id>.json` | ALTA/CRÍTICA |
 
 Por isso o advogado é instruído a fazer as duas quando o app está no ar: custa
-uma volta do loop e muda a severidade final.
+uma volta do loop e muda a severidade final. Quando as duas fecham, o parecer
+imprime a segunda como `E TAMBÉM:`.
+
+**As duas gravam artefato — e isso não era verdade até 08/08.** `http_request`
+era a única das cinco ferramentas sem rastro, justo a única que sustenta
+severidade alta. Ver a landmine correspondente adiante.
+
+⚠️ **O que `alcancou_a_api` garante, literalmente:** a acusação produziu ao menos
+uma chamada que **completou** contra o app rodando — **inclusive um 404**. Não
+significa "o defeito foi alcançado". Um 404 conta de propósito: prova de negação
+indevida (403/404 onde deveria haver dado) é achado legítimo, e exigir 2xx
+tornaria essa classe indemonstrável. O que o AND com a declaração do advogado
+fecha é o buraco mudo — alegar prova por API sem nunca ter chamado nada.
 
 ---
 
@@ -228,7 +240,8 @@ Determinísticas, em ordem, todas com teste, todas rodando sem rede.
 
 | regra | o que faz | de onde vem o sinal |
 |---|---|---|
-| **R0** | o artefato ganha do advogado. Também é o artefato quem decide `prova_ponta_a_ponta` | `artefatos/prova_<id>.json` |
+| **R0** | o artefato ganha do advogado quando os dois discordam | `artefatos/prova_<id>.json` |
+| **R0b** | quem decide `prova_ponta_a_ponta` é o artefato HTTP, **sempre** — inclusive quando não houve teste diferencial | `artefatos/http_<id>.json` |
 | **R4** | REFUTADO em `injection` com LLM alvo dublê → INCONCLUSIVO | `ambiente.json` **ou** `avisos.json` |
 | **R3** | execução falhou → INCONCLUSIVO, nunca absolvido | `erro` do artefato |
 | **R1** | CRÍTICA sem árbitro citado → SUSPEITA | `arbitro` da acusação |
@@ -256,6 +269,7 @@ Cada uma custaria a demo. Todas viraram guarda com teste.
 | **App alvo sem `OPENAI_API_KEY`** responde a mesma string para qualquer pergunta | payload de injection "não funcionou" → REFUTADO. **Absolvição falsa**, pior que falso alarme | sonda de duas perguntas + R4 |
 | **Worktree obsoleto** quando `worktree add` falha | prova roda no commit **errado** e o artefato registra o commit pedido, não o montado | confere `rev-parse HEAD` depois do add |
 | **Teste gerado escapa do bind-mount** — o container vê a rede do compose | teste que escreve em `kb` **apaga o seed** (o canário) no meio da rodada | recusa antes de executar |
+| **A R0 ficava muda exatamente onde mais importava.** O aterramento de `prova_ponta_a_ponta` morava dentro de `if artefato is not None`, e `http_request` não gravava artefato nenhum | prova só por API pulava a conferência inteira: a **auto-declaração do advogado sustentava CRÍTICA sozinha** — o oposto do que a R0 existe para fazer. E na outra ponta o parecer imprimia `EVIDENCIA: nao fechou` para defeito que ele tinha visto acontecer. Morde neste PR em especial: os 3 endpoints são **novos**, então prova diferencial não fecha neles (404 no base é o inverso do padrão) e os achados específicos chegam só por API | `http_request` grava `artefatos/http_<id>.json` a cada chamada; a R0b saiu de dentro do `if` e virou AND — o modelo alega, o artefato corrobora |
 | **Chave em prosa engole o veredito.** `re.search(r"\{.*\}", DOTALL)` é ganancioso: casa do **primeiro** `{` ao **último**, e o advogado escreve prosa antes do JSON — na rodada das 12h15 ela citava `email = '{email}'` e a rota `/documents/{id}/share` | 2 de 10 acusações: **PROVADO com artefato no disco virou INCONCLUSIVO**. O fallback que existe para a acusação não sumir por formato era quem sumia com ela — o LLM sobrescrevendo o exit code pela via mais boba | `raw_decode` a partir de cada `{`, do fim para o começo; ganha o último objeto válido com `veredito`. Saída crua preservada, então dá para reparsar sem re-rodar o advogado (~130 s/acusação) |
 | **"Recusa do classificador" não aciona nada.** Verificado no `anthropic` 0.120.2: `tool_runner` **aceita** `fallbacks`, `"default"` é válido e `cyber` **é** categoria coberta — logo o pareamento está certo e a recusa significa outra coisa | 2 de 10 acusações, uma na categoria carro-chefe, com causa que não diz o que fazer. Fere a regra do desafio: INCONCLUSIVO **com a causa** | grava os dois sinais que distinguem — `recommended_model` preenchido = o fallback nem foi tentado (rate limit/sobrecarga, retry direto é acionável); `fallback_message` em `usage.iterations` = rodou e também recusou. Sem sinal, admite que não sabe |
 

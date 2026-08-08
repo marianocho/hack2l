@@ -59,6 +59,11 @@ def avisos_da_acusacao(id_acusacao: str) -> list[str]:
     return sorted(_AVISOS.get(id_acusacao, set()))
 
 
+# Chamadas HTTP por acusacao. Mesma chaveagem dos avisos, e pelo mesmo motivo:
+# o juiz precisa ligar a evidencia ao veredito certo, nao a' rodada.
+_HTTP: dict[str, list[dict]] = {}
+
+
 # ---------------------------------------------------------------- utilitarios
 
 def _corta(texto: str, limite: int = None) -> str:
@@ -563,9 +568,48 @@ def _token(usuario: str) -> str:
     return tok
 
 
+def _grava_chamada_http(chamada: dict) -> None:
+    """Registra a chamada no artefato da acusacao. Grava a CADA chamada.
+
+    🚨 Sem isto, `http_request` era a unica das cinco ferramentas que nao deixava
+    rastro -- e o CONTRATO diz que ela e' a unica que sustenta severidade alta. O
+    resultado combinado era incoerente nas duas pontas: o parecer imprimia
+    "EVIDENCIA: nao fechou" para um defeito que o advogado tinha visto acontecer,
+    e a Regra 0 pulava a conferencia inteira (o bloco mora sob
+    `if artefato is not None`), deixando a auto-declaracao do modelo valer
+    sozinha -- o oposto exato do que a R0 existe para fazer.
+
+    ⚠️ `alcancou_a_api` diz uma coisa so', e o nome e' literal de proposito: esta
+    acusacao produziu ao menos uma chamada que COMPLETOU contra o app rodando --
+    inclusive um 404. NAO significa "o defeito foi alcancado", e o parecer nao
+    pode prometer mais do que da' para apurar mecanicamente aqui.
+
+    Combinado com a declaracao do advogado (AND, no juiz), o que fica garantido
+    e': quem alega prova ponta a ponta tocou mesmo a API nesta acusacao. Se o
+    modelo mentir sobre o CONTEUDO da resposta isso nao pega -- mas o status e o
+    corpo ficam no disco, e quem le e' humano. O buraco que fecha e' o outro, o
+    mudo: declarar prova por API sem nunca ter chamado nada.
+
+    O advogado nao escreve este campo e nao pode contradize-lo.
+    """
+    _HTTP.setdefault(_ACUSACAO_ATUAL, []).append(chamada)
+    chamadas = _HTTP[_ACUSACAO_ATUAL]
+    art = {
+        "id": _ACUSACAO_ATUAL,
+        "tipo": "http",
+        "chamadas": chamadas,
+        "alcancou_a_api": any(c["status"] is not None and not c["erro"] for c in chamadas),
+    }
+    cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+    (cfg.ARTEFATOS / f"http_{_ACUSACAO_ATUAL}.json").write_text(
+        json.dumps(art, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
 def _http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str = "") -> dict:
     saida = {"status": None, "corpo": "", "erro": None, "como": como_usuario or "anonimo"}
     metodo = metodo.upper().strip() or "GET"
+    alvo = "/" + caminho.strip().lstrip("/")
     try:
         cabecalhos = {}
         if como_usuario:
@@ -573,13 +617,20 @@ def _http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str 
         payload = json.loads(corpo) if corpo.strip() else None
         r = _com_retry(metodo, lambda: requests.request(
             metodo,
-            f"{cfg.APP_API_URL}/{caminho.strip().lstrip('/')}",
+            f"{cfg.APP_API_URL}{alvo}",
             json=payload, headers=cabecalhos, timeout=cfg.TIMEOUT_HTTP_S,
         ))
         saida["status"] = r.status_code
         saida["corpo"] = r.text
     except Exception as e:
         saida["erro"] = f"{type(e).__name__}: {e}"
+
+    _grava_chamada_http({
+        "metodo": metodo, "caminho": alvo, "como": saida["como"],
+        "status": saida["status"], "erro": saida["erro"],
+        # truncado: o artefato e' evidencia para humano ler, nao dump de resposta
+        "corpo": _corta(saida["corpo"], 1500),
+    })
     return saida
 
 

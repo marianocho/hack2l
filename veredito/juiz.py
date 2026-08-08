@@ -41,6 +41,7 @@ def aplica_regras(
     acusacao: dict,
     artefato: dict | None,
     avisos: list[str] | tuple[str, ...] = (),
+    artefato_http: dict | None = None,
 ) -> dict:
     """As regras determinísticas, em ordem. Devolve um veredicto novo.
 
@@ -63,10 +64,25 @@ def aplica_regras(
                 f"R0: o advogado disse PROVADO, o artefato disse {artefato.get('estado')}. "
                 "Vale o artefato."
             )
-        # prova ponta a ponta nao e' o advogado quem declara: e' fato do artefato
-        v["prova_ponta_a_ponta"] = bool(veredicto.get("prova_ponta_a_ponta")) and (
-            artefato.get("estado") == "PROVADO"
-        )
+    # REGRA 0b -- prova ponta a ponta e' FATO DO ARTEFATO, sempre.
+    #
+    # 🚨 Isto morava DENTRO do `if artefato is not None` acima, e era o furo mais
+    # caro do juiz. Prova por `http_request` nao gera artefato de teste
+    # diferencial, entao numa acusacao provada pela API o bloco inteiro era
+    # pulado e a auto-declaracao do advogado passava sem conferencia -- justo na
+    # unica via que, pelo CONTRATO, sustenta severidade alta. Ou seja: a regra
+    # que existe para o LLM nao sobrescrever o exit code so' rodava quando havia
+    # exit code, e ficava muda exatamente onde nao havia.
+    #
+    # Morde neste PR em especial: ele adiciona tres endpoints NOVOS, onde prova
+    # diferencial nao fecha (404 no base e' o inverso do padrao), entao os
+    # achados especificos do PR chegam aqui so' com prova por API.
+    #
+    # AND deliberado: o modelo alega, o artefato corrobora. Sem artefato http com
+    # chamada completada, e' falso -- independente do que ele declarou.
+    v["prova_ponta_a_ponta"] = bool(veredicto.get("prova_ponta_a_ponta")) and bool(
+        (artefato_http or {}).get("alcancou_a_api")
+    )
 
     # REGRA 4 -- absolvicao falsa por LLM alvo duble.
     #
@@ -138,15 +154,18 @@ def aplica_regras(
 
 
 def organiza(
-    veredictos: list[dict], acusacoes: dict, artefatos: dict, avisos: dict | None = None
+    veredictos: list[dict], acusacoes: dict, artefatos: dict, avisos: dict | None = None,
+    http: dict | None = None,
 ) -> dict:
     """Separa nas tres listas do parecer. Nada e' descartado em silencio."""
     avisos = avisos or {}
+    http = http or {}
     condenados, descartados, inconclusivos = [], [], []
     for v in veredictos:
         id_ = v.get("id", "sem_id")
         final = aplica_regras(
-            v, acusacoes.get(id_, {}), artefatos.get(id_), avisos.get(id_, ())
+            v, acusacoes.get(id_, {}), artefatos.get(id_), avisos.get(id_, ()),
+            http.get(id_),
         )
         final["id"] = id_
         destino = {
@@ -181,19 +200,62 @@ def _local(acusacao: dict) -> str:
     return normaliza_local(bruto)
 
 
-def _bloco(v: dict, acusacao: dict, artefato: dict | None) -> str:
+def _evidencia_http(art: dict | None) -> str | None:
+    """A linha de evidencia de uma prova contra o app rodando.
+
+    O `REVIEW_TASK.md` aceita TRES vias -- teste que falha, **reproducao contra o
+    app rodando**, e trace/log/estado do banco. So' a primeira virava linha de
+    evidencia aqui; a segunda existia como ferramenta e sumia do parecer.
+
+    Cita a ULTIMA chamada que completou: e' determinista, e e' aquela de onde o
+    advogado concluiu.
+    """
+    if not (art or {}).get("alcancou_a_api"):
+        return None
+    completas = [c for c in art["chamadas"] if c["status"] is not None and not c["erro"]]
+    c = completas[-1]
+    return (
+        f"EVIDENCIA: {c['metodo']} {c['caminho']} como {c['como']} -> HTTP {c['status']}, "
+        f"contra o app rodando. Artefato: artefatos/http_{art['id']}.json"
+    )
+
+
+# O desafio nomeia cinco categorias; nos usamos seis, mais granulares. Traduzir
+# na saida mantem a granularidade interna e entrega ao jurado o rotulo dele --
+# ler um nome que nao e' o seu e' atrito de graca no minuto do parecer.
+_CATEGORIA_DO_DESAFIO = {
+    "injection": "security",
+    "vazamento_de_contexto": "security",
+    "correcao": "correctness",
+    "performance": "performance",
+    "padroes": "convention or pattern",
+    "prd": "PRD divergence",
+}
+
+
+def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = None) -> str:
+    interna = acusacao.get("categoria", "?")
+    rotulo = _CATEGORIA_DO_DESAFIO.get(interna, interna)
     linhas = [
         f"[{v.get('severidade','?')}] [{acusacao.get('confianca','?')}] "
-        f"{acusacao.get('categoria','?')} - {_local(acusacao)}",
+        f"{rotulo} - {_local(acusacao)}",
         f"O QUE: {acusacao.get('hipotese','-')}",
         f"ARBITRO: {acusacao.get('arbitro') or 'nenhum citado'}",
     ]
+    linha_http = _evidencia_http(http)
     if artefato and artefato.get("estado") == "PROVADO":
         linhas.append(
             f"EVIDENCIA: {artefato['arquivo_do_teste']} passa em {artefato['commit_base']} "
             f"e falha em {artefato['commit_head']} (exit {artefato['exit_base']} -> "
             f"{artefato['exit_head']}). Artefato: artefatos/prova_{artefato['id']}.json"
         )
+        # Causalidade e alcance sao provas diferentes, e as duas juntas valem
+        # mais: o teste diz que foi esta mudanca, o HTTP diz que da' para fazer
+        # agora, de fora.
+        if linha_http:
+            linhas.append(linha_http.replace("EVIDENCIA:", "E TAMBEM:", 1))
+    elif linha_http:
+        linhas.append(linha_http)
     else:
         linhas.append(f"EVIDENCIA: nao fechou. {v.get('motivo') or 'sem motivo registrado'}")
     if v.get("conserto"):
@@ -203,12 +265,14 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None) -> str:
     return "\n".join(linhas)
 
 
-def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict) -> str:
+def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
+                    http: dict | None = None) -> str:
     """As duas ultimas listas sao a peca que nenhum outro time vai ter.
 
     Elas precisam ser enquadradas em voz alta no pitch, senao soam como
     confissao de erro em vez de interpretabilidade.
     """
+    http = http or {}
     p: list[str] = ["# PARECER", ""]
     c, d, i = organizado["condenados"], organizado["descartados"], organizado["inconclusivos"]
 
@@ -220,21 +284,24 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict) -> str:
     if not c:
         p.append("_nenhum achado sobreviveu a pericia._")
     for v in c:
-        p += [_bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"])), ""]
+        p += [_bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
+                     http.get(v["id"])), ""]
 
     p += ["## DESCARTADOS, COM MOTIVO", ""]
     if not d:
         p.append("_nenhum._")
     for v in d:
         a = acusacoes.get(v["id"], {})
-        p.append(f"- {a.get('categoria','?')} em {_local(a)}: {v.get('motivo','-')}")
+        rotulo = _CATEGORIA_DO_DESAFIO.get(a.get("categoria"), a.get("categoria", "?"))
+        p.append(f"- {rotulo} em {_local(a)}: {v.get('motivo','-')}")
 
     p += ["", "## INCONCLUSIVOS, COM CAUSA", ""]
     if not i:
         p.append("_nenhum._")
     for v in i:
         a = acusacoes.get(v["id"], {})
-        p.append(f"- {a.get('categoria','?')} em {_local(a)}: {v.get('motivo','-')}")
+        rotulo = _CATEGORIA_DO_DESAFIO.get(a.get("categoria"), a.get("categoria", "?"))
+        p.append(f"- {rotulo} em {_local(a)}: {v.get('motivo','-')}")
 
     return "\n".join(p) + "\n"
 
@@ -248,7 +315,17 @@ def _carrega_json(caminho: Path, padrao):
         return padrao
 
 
-def carrega_do_disco() -> tuple[list[dict], dict, dict, dict]:
+def _por_id(padrao: str) -> dict:
+    artefatos = {}
+    if cfg.ARTEFATOS.is_dir():
+        for f in cfg.ARTEFATOS.glob(padrao):
+            art = _carrega_json(f, None)
+            if art and "id" in art:
+                artefatos[art["id"]] = art
+    return artefatos
+
+
+def carrega_do_disco() -> tuple[list[dict], dict, dict, dict, dict]:
     """Le o que as outras etapas gravaram.
 
     Ajustar o juiz pela trigesima vez nao pode re-executar o advogado -- meia
@@ -256,20 +333,15 @@ def carrega_do_disco() -> tuple[list[dict], dict, dict, dict]:
     """
     veredictos = _carrega_json(cfg.SAIDAS / "veredictos.json", [])
     acusacoes = {a["id"]: a for a in _carrega_json(cfg.SAIDAS / "acusacoes.json", []) if "id" in a}
-    artefatos = {}
-    if cfg.ARTEFATOS.is_dir():
-        for f in cfg.ARTEFATOS.glob("prova_*.json"):
-            art = _carrega_json(f, None)
-            if art and "id" in art:
-                artefatos[art["id"]] = art
     avisos = _carrega_json(cfg.ARTEFATOS / "avisos.json", {})
-    return veredictos, acusacoes, artefatos, avisos
+    # prova_* = teste diferencial (causalidade). http_* = app rodando (alcance).
+    return veredictos, acusacoes, _por_id("prova_*.json"), avisos, _por_id("http_*.json")
 
 
 def sentencia() -> str:
-    veredictos, acusacoes, artefatos, avisos = carrega_do_disco()
-    organizado = organiza(veredictos, acusacoes, artefatos, avisos)
-    texto = formata_parecer(organizado, acusacoes, artefatos)
+    veredictos, acusacoes, artefatos, avisos, http = carrega_do_disco()
+    organizado = organiza(veredictos, acusacoes, artefatos, avisos, http)
+    texto = formata_parecer(organizado, acusacoes, artefatos, http)
     cfg.prepara_pastas()
     (cfg.SAIDAS / "parecer.md").write_text(texto, encoding="utf-8")
     return texto
