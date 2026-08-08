@@ -1,0 +1,18 @@
+{
+  "id": "correcao_03",
+  "arquivo_do_teste": "test_dead_config_var.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 0.18s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-6c5ef38cb2c2 Creating \n Container desafio-api-run-6c5ef38cb2c2 Created \n",
+  "stdout_head": "F                                                                        [100%]\n=================================== FAILURES ===================================\n_____________ test_no_router_reads_config_into_an_unused_variable ______________\n\n    def test_no_router_reads_config_into_an_unused_variable():\n        offenders = []\n        for path in sorted(ROUTERS.glob(\"*.py\")):\n            tree = ast.parse(path.read_text())\n            assigned = _getenv_assignments(tree)\n            if not assigned:\n                continue\n            loads = [\n                n.id\n                for n in ast.walk(tree)\n                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)\n            ]\n            for name, lineno in assigned:\n                if loads.count(name) == 0:\n                    offenders.append(f\"{path.name}:{lineno}: {name} lido de env e nunca usado\")\n    \n>       assert not offenders, \"config lida e ignorada (limite nao aplicado): \" + \"; \".join(offenders)\nE       AssertionError: config lida e ignorada (limite nao aplicado): shares.py:43: max_shares lido de env e nunca usado\nE       assert not ['shares.py:43: max_shares lido de env e nunca usado']\n\ntests/test_dead_config_var.py:52: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_dead_config_var.py::test_no_router_reads_config_into_an_unused_variable\n1 failed, 1 warning in 0.29s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-3c35e992ed4d Creating \n Container desafio-api-run-3c35e992ed4d Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 12.4,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

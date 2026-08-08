@@ -1,0 +1,23 @@
+{
+  "id": "padroes_01",
+  "tipo": "http",
+  "chamadas": [
+    {
+      "metodo": "GET",
+      "caminho": "/documents",
+      "como": "alice",
+      "status": 200,
+      "erro": null,
+      "corpo": "[{\"id\":4,\"title\":\"Q3 board pre-read\",\"created_at\":\"2026-08-08T12:45:53.704418Z\"}]"
+    },
+    {
+      "metodo": "POST",
+      "caminho": "/documents/4/share?email=nobody%40nowhere.xyz%27%20OR%20%271%27%3D%271",
+      "como": "alice",
+      "status": 201,
+      "erro": null,
+      "corpo": "{\"document_id\":4,\"shared_with_user_id\":1}"
+    }
+  ],
+  "alcancou_a_api": true
+}

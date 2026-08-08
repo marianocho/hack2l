@@ -1,0 +1,18 @@
+{
+  "id": "correcao_01",
+  "arquivo_do_teste": "test_share_sql_injection.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 4.64s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-9f2b04d1148b Creating \n Container desafio-api-run-9f2b04d1148b Created \n",
+  "stdout_head": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________ test_bogus_email_never_resolves_to_a_recipient ________________\n\n    def test_bogus_email_never_resolves_to_a_recipient():\n        owner_email = f\"owner-{uuid.uuid4().hex[:8]}@hack2l.dev\"\n        token = _register(owner_email)\n        h = {\"Authorization\": f\"Bearer {token}\"}\n    \n        r = client.post(\"/documents\", json={\"title\": \"T\", \"content\": \"secret body\"}, headers=h)\n        assert r.status_code in (200, 201), r.text\n        doc_id = r.json()[\"id\"]\n    \n        payload = \"nobody-here' OR '1'='1\"\n        r = client.post(f\"/documents/{doc_id}/share\", params={\"email\": payload}, headers=h)\n    \n>       assert r.status_code != 201, (\n            f\"share succeeded for an email that does not exist: {r.status_code} {r.text}\"\n        )\nE       AssertionError: share succeeded for an email that does not exist: 201 {\"document_id\":1,\"shared_with_user_id\":1}\nE       assert 201 != 201\nE        +  where 201 = <Response [201 Created]>.status_code\n\ntests/test_share_sql_injection.py:35: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_share_sql_injection.py::test_bogus_email_never_resolves_to_a_recipient\n1 failed, 1 warning in 4.25s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-467b633361a6 Creating \n Container desafio-api-run-467b633361a6 Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 29.2,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

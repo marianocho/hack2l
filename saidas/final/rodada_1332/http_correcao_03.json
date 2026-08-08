@@ -1,0 +1,15 @@
+{
+  "id": "correcao_03",
+  "tipo": "http",
+  "chamadas": [
+    {
+      "metodo": "POST",
+      "caminho": "/documents/1/share?email=carol@hack2l.dev",
+      "como": "demo",
+      "status": 201,
+      "erro": null,
+      "corpo": "{\"document_id\":1,\"shared_with_user_id\":4}"
+    }
+  ],
+  "alcancou_a_api": true
+}
