@@ -5,3 +5,12 @@ __pycache__/
 .env
 *.egg-info/
 .pytest_cache/
+
+# Ruido das rodadas de dev. saidas/final/ NAO e' ignorado de proposito: e' a
+# evidencia da rodada que vai pro palco, e a maquina que apresenta e' a outra.
+saidas/*
+!saidas/final/
+
+# Artefatos dos testes da propria pericia. Os artefatos de prova de verdade
+# ficam versionados -- sao a evidencia.
+artefatos/*selftest*

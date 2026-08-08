@@ -88,24 +88,84 @@ def http_request(metodo: str, caminho: str, corpo: str = "",
 {
   "id": "acusacao_03",
   "arquivo_do_teste": "test_vazamento_tenant.py",
-  "commit_base": "f491ae1",
+  "commit_base": "32a5241",
   "commit_head": "1dd2e5c",
   "exit_base": 0,
   "exit_head": 1,
   "stdout_base": "...",
   "stdout_head": "...",
+  "estado": "PROVADO",
   "provado": true,
-  "erro": null
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 13.8
 }
 ```
 
 **O juiz lê este JSON, nunca o resumo do modelo.** `provado` é calculado em
-Python — `exit_base == 0 and exit_head != 0` — e o LLM não tem como
-sobrescrever. É isto que faz o veredito ser um exit code em vez de opinião.
+Python e o LLM não tem como sobrescrever. É isto que faz o veredito ser um exit
+code em vez de opinião.
 
-Se a execução falhou (timeout, docker fora, teste não compilou): `provado`
-fica `false` **e `erro` é preenchido**. O juiz trata `erro != null` como
-**INCONCLUSIVO**, nunca como absolvido. É o terceiro estado, mecanicamente.
+### ⚠️ `motivo` e `erro` são coisas diferentes — não juntar
+
+Custou um bug real em 08/08, pego pelo próprio teste da perícia:
+
+| campo | o que é | quando vem preenchido |
+|---|---|---|
+| `estado` | **autoritativo.** PROVADO / REFUTADO / INCONCLUSIVO | sempre |
+| `motivo` | explicação legível | **sempre**, inclusive no PROVADO |
+| `erro` | **só falha de infraestrutura** — timeout, docker fora, git quebrado | quase nunca |
+
+O erro era mandar o motivo da refutação no campo `erro`. Como o juiz trata
+`erro != null` como INCONCLUSIVO, **toda refutação viraria inconclusivo** e a
+lista de descartados-com-motivo — que é peça de demo — esvaziaria sozinha,
+parecendo rigor.
+
+**Regra para o juiz: leia `estado`.** Não deduza o estado a partir de `erro`.
+Quando `erro` vem preenchido, o próprio tool já força `estado` para
+INCONCLUSIVO, no `finally` — a última palavra, aconteça o que acontecer.
+
+### ⚠️ `commit_base` é calculado, nunca chumbado
+
+O pai do PR é **`32a5241`**. O `f491ae1` que está na ponta da `main` é **irmão**,
+não ancestral — ele só adiciona LICENSE/README/SECURITY:
+
+```
+* f491ae1  Add the license, security policy...   <- irmao, NAO e' ancestral
+| * 1dd2e5c  Add document sharing                 <- head do PR
+|/
+* 32a5241  Stop the test suite from wiping...     <- merge-base REAL
+```
+
+O código de `app/` é idêntico nos dois, então o resultado do teste não muda —
+mas **o artefato é o que o juiz lê e o que vai pro slide**. Alguém rodar
+`git log` no palco e ver que a base não é o pai do PR custa caro num pitch cuja
+tese é *"todo mundo afirma, nós provamos"*.
+
+Por isso o tool roda **`git merge-base main origin/pr/document-sharing`** em
+runtime. Corrige o artefato **e** sobrevive à régua: troca o PR, continua certo.
+
+### O `provado` é mais estrito que "falhou no head"
+
+```python
+provado = (exit_base == 0) and (exit_head == 1)
+```
+
+`exit_head == 1` e não `!= 0`, de propósito. Códigos do pytest: `1` = teste
+falhou; `2` interrompido, `3` erro interno, `4` erro de uso, `5` nenhum teste
+coletado. Tratar `!= 0` como prova transformaria **erro de execução em
+condenação** — um alarme crítico errado, exatamente o que as regras
+determinísticas existem para impedir.
+
+| `exit_base` | `exit_head` | estado |
+|---|---|---|
+| 0 | 1 | **PROVADO** |
+| 0 | 0 | **REFUTADO** — passa nos dois, a mudança não quebrou isso |
+| qualquer outro par | | **INCONCLUSIVO**, com `erro` preenchido |
+
+Nunca existe "absolvido por silêncio": se o teste não coletou, se deu timeout,
+se o docker caiu, o estado é INCONCLUSIVO **com a causa**. É o terceiro estado,
+mecanicamente.
 
 ## 3. Esquema da acusação — o que o promotor cospe
 
@@ -194,14 +254,32 @@ Melhor que `git stash` por três motivos: os dois lados existem ao mesmo tempo,
 o app que está no ar não quebra no meio da revisão, e não há conflito de stash
 quando um agente chama isso em loop.
 
-**Estado da verificação, honesto:** o comando acima **roda** (`5 passed` a
-partir de um worktree em `main~1`). **Não está provado que o mount sobrepõe o
-código assado** — os dois lados dão 5 passed, então o resultado é ambíguo.
+## ✅ PROVADO — os dois mounts sobrepõem o código assado
 
-**Primeira tarefa da trilha B, 2 minutos:** escrever um teste que falha de
-propósito dentro de `<dir-base>\app\api\tests\`, rodar, e confirmar que o exit
-code é != 0. Se der 5 passed, o mount **não** está valendo e a prova diferencial
-inteira produz falso negativo em silêncio.
+Canário rodado às ~10h50. Ele testa **os dois mounts separadamente**, porque
+`/code/tests` valer e `/code/app` não valer produziria falso negativo em toda
+prova diferencial — o que difere entre base e head é o código do app.
+
+Arquivos que existem **só no worktree**, nunca na imagem:
+
+- `app/api/app/_canario_hack2l.py` → `VALOR = "veio-do-worktree"`
+- `app/api/tests/test_canario_hack2l.py` → importa esse módulo e afirma o valor
+
+```
+1 failed, 2 passed, 5 deselected     EXIT CODE: 1
+```
+
+- `test_mount_de_app_vale` **passou** — o import de um módulo que só existe no
+  worktree funcionou. **`/code/app` sobrepõe.**
+- `test_mount_de_tests_vale` passou e um `assert False` separado falhou —
+  **`/code/tests` sobrepõe.**
+- **O exit code propagou como `1`.** O "veredito é um exit code" tem base
+  física, não é figura de linguagem.
+
+**Plano B, medido, caso o Docker da outra máquina se comporte diferente:**
+`docker compose build api` leva **41 s** com as camadas de `pip install` em
+cache — só as duas camadas de `COPY` refazem. Dá para trocar mount por rebuild
+sem mudar a arquitetura, ao custo de ~82 s por acusação em vez de ~5 s.
 
 ## 🚫 Não rodar a suíte de commits anteriores a `32a5241`
 
