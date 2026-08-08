@@ -24,6 +24,7 @@ import requests
 from anthropic import beta_tool
 
 from . import config as cfg
+from . import llm_alvo
 
 # O orquestrador carimba isto antes de soltar o advogado em cada acusacao, para
 # que o nome do artefato case com a acusacao sem mudar a assinatura da tool --
@@ -448,7 +449,10 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
     r = _http_request(metodo, caminho, corpo, como_usuario)
     if r["erro"]:
         return f"ERRO ({r['como']}): {r['erro']}"
-    return f"HTTP {r['status']} (como {r['como']})\n{_corta(r['corpo'], 3000)}"
+    saida = f"HTTP {r['status']} (como {r['como']})\n{_corta(r['corpo'], 3000)}"
+    # Se a rota depende do LLM alvo e ele esta duble, avisa: sem isso, um
+    # payload de injection que "nao funcionou" vira absolvicao falsa.
+    return saida + llm_alvo.aviso_se_duble(caminho)
 
 
 TOOLS = [prova_diferencial, run_tests, read_file, grep, http_request]
