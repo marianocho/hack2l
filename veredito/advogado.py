@@ -197,8 +197,24 @@ def _diagnostico_da_recusa(msg) -> str:
         partes.append(f"categoria {det.category}")
 
     recomendado = getattr(det, "recommended_model", None) if det is not None else None
+
+    # TRES sinais, porque cada um sozinho tem um buraco -- e o nosso caminho e'
+    # streaming, onde o primeiro nao aparece.
+    #
+    #   usage.iterations  -- o "served-by" canonico. Medido em 08/08 13h25: NAO
+    #                        veio na recusa pelo tool_runner com stream=True.
+    #   bloco `fallback`  -- em streaming a troca chega como content_block comum,
+    #                        marcando o ponto de virada. E' o sinal do stream.
+    #   msg.model         -- se quem respondeu nao e' quem pedimos, alguem mais
+    #                        rodou. Pega o caso sticky, que nao emite bloco.
     iteracoes = getattr(getattr(msg, "usage", None), "iterations", None) or []
-    rodou = any(getattr(i, "type", None) == "fallback_message" for i in iteracoes)
+    conteudo = getattr(msg, "content", None) or []
+    servido_por = getattr(msg, "model", None)
+    rodou = (
+        any(getattr(i, "type", None) == "fallback_message" for i in iteracoes)
+        or any(getattr(b, "type", None) == "fallback" for b in conteudo)
+        or bool(servido_por and servido_por != cfg.MODEL_ADVOGADO)
+    )
 
     if recomendado:
         partes.append(
@@ -206,9 +222,15 @@ def _diagnostico_da_recusa(msg) -> str:
             f"o servidor sugere retry direto em {recomendado}"
         )
     elif rodou:
-        partes.append("o fallback rodou e tambem recusou -- a cadeia inteira negou")
+        quem = f" ({servido_por})" if servido_por else ""
+        partes.append(f"o fallback rodou{quem} e tambem recusou -- a cadeia inteira negou")
     else:
-        partes.append("sem sinal de fallback no usage -- causa nao determinada")
+        # Terceiro estado aplicado ao proprio diagnostico: nao inventar causa.
+        partes.append(
+            f"nenhum dos tres sinais de fallback apareceu (servido por "
+            f"{servido_por or 'modelo nao informado'}) -- nao da' para afirmar se "
+            "a cadeia recusou ou se o fallback nao chegou a ser tentado"
+        )
     return " | ".join(partes)
 
 

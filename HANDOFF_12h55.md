@@ -102,7 +102,32 @@ Não cria worktree e nunca levanta. 3 testes.
 
 ---
 
-## 5. 🚨 PENDENTE E É O ITEM DE MAIOR VALOR: o furo da Regra 0
+## 5. ✅ FEITO às 13h20 (commit `b66c66f`) — era o furo da Regra 0
+
+**Os 3 pontos foram implementados, mais o dicionário de categorias.** 90 testes
+rápidos passando; validado ponta a ponta contra o app do PR (carol →
+`GET /shared/2` gravou artefato e virou linha de evidência).
+
+O que mudou, em uma linha cada:
+
+1. `_http_request` grava `artefatos/http_<id>.json` a cada chamada.
+2. `juiz` carrega `http_*.json` por id; `_bloco` ganhou o ramo de evidência por
+   API e imprime `E TAMBÉM:` quando as duas provas fecham.
+3. **R0b saiu de dentro do `if artefato is not None`** e virou AND: o modelo
+   alega, o artefato corrobora. Sem chamada registrada é falso.
+4. Categorias saem no vocabulário do desafio (`security`, `correctness`,
+   `performance`, `convention or pattern`, `PRD divergence`).
+
+⚠️ **Decisão de honestidade que vale conhecer antes de mexer:**
+`alcancou_a_api` significa *"a chamada completou"*, **inclusive um 404** — não
+"o defeito foi alcançado". O 404 conta de propósito: prova de negação indevida
+(403/404 onde deveria haver dado) é achado legítimo, e exigir 2xx tornaria essa
+classe indemonstrável. **Há teste travando isso**
+(`test_404_conta_como_ter_alcancado_a_api_e_isso_e_deliberado`) para ninguém
+"consertar" achando que é bug.
+
+<details>
+<summary>Especificação original (mantida para referência)</summary>
 
 **Não comecei a codar. Está tudo especificado em
 `ACHADO_PROVA_POR_API_NAO_VIRA_EVIDENCIA.md` (achado do Luis, 11h35, arquivos
@@ -161,7 +186,9 @@ diferencial não funciona neles (404 no base = o inverso do padrão). Os
 ⚠️ Testes: `tests/test_juiz.py` tem 4 lugares que chamam `juiz.organiza(...)` /
 `formata_parecer(...)` com a assinatura antiga — atualizar junto.
 
-### Segundo item do mesmo achado, barato e vale ponto
+</details>
+
+### Segundo item do mesmo achado — FEITO junto
 
 **Vocabulário de categoria.** O desafio nomeia `security`, `correctness`,
 `performance`, `convention or pattern`, `PRD divergence`. Nós emitimos
@@ -240,16 +267,28 @@ nada é promovido sem prova.
 
 ---
 
-## 8. Ordem sugerida para a próxima sessão
+## 8. Ordem sugerida — atualizada 13h20
 
-1. Conferir o rebuild da stack (seção 6) — 2 min.
-2. **Conserto da R0 em 3 pontos** (seção 5) — é o que transforma MEDIA em
-   CRÍTICA legitimamente e fecha o furo onde a palavra do modelo passa sem
-   conferência. É o diferencial do pitch tendo um buraco.
-3. Dicionário de categorias no `_bloco` — 10 min, vale ponto com jurado.
-4. Reparse das 2 acusações (seção 7) — 2 min, recupera 2 achados sem custo de API.
-5. Rodada final **14h15**, na máquina do Luis, `--top-n 10`, Opus 5. Copiar o log
+~~1. Conferir o rebuild da stack~~ ✅ seção 6
+~~2. Conserto da R0 em 3 pontos~~ ✅ seção 5, commit `b66c66f`
+~~3. Dicionário de categorias~~ ✅ junto
+
+**O que resta:**
+
+1. **Reparse das 2 acusações** (seção 7) — 2 min, recupera 2 achados sem custo
+   de API.
+2. **Ver uma CRÍTICA acontecer.** Nunca foi observado: até 13h20 nenhum achado
+   passou de MÉDIA porque `prova_ponta_a_ponta` era estruturalmente impossível.
+   Agora é possível — falta confirmar numa rodada real que o advogado
+   efetivamente faz as duas provas. Rodada `--top-n 3 --reusar` disparada 13h22;
+   **conferir `logs/validacao_r0.log`**.
+3. **Rodada final 14h15**, na máquina do Luis, `--top-n 10`, Opus 5. Copiar o log
    para `saidas/final/`.
+
+⚠️ **A máquina do Luis precisa do mesmo rebuild no PR** (seção 6), senão a R0b
+nunca dispara lá e o parecer do palco volta a travar em MÉDIA — o oposto do
+efeito pretendido. É o item de sincronização mais importante entre as duas
+máquinas agora.
 
 **Não fazer:** trocar de modelo, `docker system prune -a`, chumbar achado,
 afirmar número sem gabarito no pitch.

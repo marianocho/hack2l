@@ -85,6 +85,34 @@ def test_prova_so_por_http_sustenta_critica_e_vira_evidencia():
     assert "artefatos/http_a1.json" in bloco
 
 
+def test_evidencia_http_mostra_o_contraste_nao_so_a_ultima_chamada():
+    """🚨 Medido em 13h30: com "cita a ultima" o parecer imprimia o 404 do email
+    de CONTROLE enquanto a prova era o 201 do payload, duas chamadas antes. O
+    contraste e' a prova; uma linha so' escolhia a metade sem graca."""
+    art = {
+        "id": "a1", "tipo": "http", "alcancou_a_api": True,
+        "chamadas": [
+            {"metodo": "POST", "caminho": "/documents/1/share", "como": "alice",
+             "status": 201, "erro": None, "corpo": "{}"},
+            {"metodo": "POST", "caminho": "/documents/1/share", "como": "alice",
+             "status": 404, "erro": None, "corpo": "{}"},
+        ],
+    }
+    linha = juiz._evidencia_http(art)
+    assert "HTTP 201" in linha and "HTTP 404" in linha
+
+
+def test_evidencia_http_nao_vira_dump():
+    art = {
+        "id": "a1", "tipo": "http", "alcancou_a_api": True,
+        "chamadas": [{"metodo": "GET", "caminho": f"/x/{i}", "como": "carol",
+                      "status": 200, "erro": None, "corpo": ""} for i in range(9)],
+    }
+    linha = juiz._evidencia_http(art)
+    assert linha.count("HTTP 200") == 4
+    assert "+5 chamada(s) antes" in linha
+
+
 def test_404_conta_como_ter_alcancado_a_api_e_isso_e_deliberado():
     """Medido em 08/08: carol -> GET /shared/2 devolve 404, e o artefato marca
     alcancou_a_api. Nao e' bug -- o campo significa "a chamada completou contra

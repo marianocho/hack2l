@@ -207,16 +207,31 @@ def _evidencia_http(art: dict | None) -> str | None:
     app rodando**, e trace/log/estado do banco. So' a primeira virava linha de
     evidencia aqui; a segunda existia como ferramenta e sumia do parecer.
 
-    Cita a ULTIMA chamada que completou: e' determinista, e e' aquela de onde o
-    advogado concluiu.
+    Lista as chamadas que completaram, em ordem, nao so' a ultima.
+
+    🚨 Medido na validacao das 13h30: com "cita a ultima" o parecer imprimia o
+    404 do email de CONTROLE, enquanto a prova era o 201 do payload de injecao
+    duas chamadas antes. O contraste E' a prova -- "com o payload deu 201, sem o
+    payload deu 404" e' o que um humano precisa ver, e uma linha so' escolhia
+    justamente a metade sem graca.
+
+    Teto de 4 para o bloco nao virar dump; o artefato em disco tem tudo.
     """
     if not (art or {}).get("alcancou_a_api"):
         return None
     completas = [c for c in art["chamadas"] if c["status"] is not None and not c["erro"]]
-    c = completas[-1]
+    mostradas = completas[-4:]
+    linhas = [
+        f"  {c['metodo']} {c['caminho']} como {c['como']} -> HTTP {c['status']}"
+        for c in mostradas
+    ]
+    omitidas = len(completas) - len(mostradas)
+    if omitidas:
+        linhas.insert(0, f"  (+{omitidas} chamada(s) antes, no artefato)")
     return (
-        f"EVIDENCIA: {c['metodo']} {c['caminho']} como {c['como']} -> HTTP {c['status']}, "
-        f"contra o app rodando. Artefato: artefatos/http_{art['id']}.json"
+        "EVIDENCIA: contra o app rodando --\n"
+        + "\n".join(linhas)
+        + f"\n  Artefato: artefatos/http_{art['id']}.json"
     )
 
 

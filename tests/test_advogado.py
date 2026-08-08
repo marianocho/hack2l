@@ -7,6 +7,8 @@ parecer sem ninguem perceber, porque some parecendo rigor.
 
 from types import SimpleNamespace
 
+import pytest
+
 from veredito import advogado as adv
 
 
@@ -93,13 +95,23 @@ def test_json_quebrado_nao_levanta():
 # a categoria carro-chefe entre elas. "recusa do classificador" e' verdade e nao
 # diz o que fazer; estes testes travam a distincao que diz.
 
-def _msg(categoria=None, recomendado=None, fallback_rodou=False):
+def _msg(categoria=None, recomendado=None, fallback_rodou=False, sinal="usage",
+         modelo=None):
+    """`sinal` escolhe POR ONDE o fallback se anuncia. Sao tres vias, e o nosso
+    caminho e' streaming, onde a canonica (usage.iterations) nao aparece."""
     det = SimpleNamespace(category=categoria, recommended_model=recomendado)
     iteracoes = [SimpleNamespace(type="message")]
+    conteudo = [SimpleNamespace(type="text")]
+    modelo = modelo or "claude-opus-5"
     if fallback_rodou:
-        iteracoes.append(SimpleNamespace(type="fallback_message"))
+        if sinal == "usage":
+            iteracoes.append(SimpleNamespace(type="fallback_message"))
+        elif sinal == "bloco":
+            conteudo.append(SimpleNamespace(type="fallback"))
+        elif sinal == "modelo":
+            modelo = "claude-opus-4-8"
     return SimpleNamespace(
-        stop_reason="refusal", stop_details=det,
+        stop_reason="refusal", stop_details=det, model=modelo, content=conteudo,
         usage=SimpleNamespace(iterations=iteracoes),
     )
 
@@ -112,8 +124,12 @@ def test_recusa_sem_fallback_tentado_aponta_o_modelo_sugerido():
     assert "NAO foi tentado" in causa and "claude-opus-4-8" in causa
 
 
-def test_recusa_com_fallback_rodado_diz_que_a_cadeia_toda_negou():
-    causa = adv._diagnostico_da_recusa(_msg("cyber", fallback_rodou=True))
+@pytest.mark.parametrize("sinal", ["usage", "bloco", "modelo"])
+def test_recusa_com_fallback_rodado_diz_que_a_cadeia_toda_negou(sinal):
+    """As tres vias contam. Medido em 08/08 13h25: pelo tool_runner com
+    stream=True a recusa NAO trouxe usage.iterations, entao depender so' da via
+    canonica fazia todo fallback parecer "nao aconteceu"."""
+    causa = adv._diagnostico_da_recusa(_msg("cyber", fallback_rodou=True, sinal=sinal))
     assert "cadeia inteira negou" in causa
     assert "NAO foi tentado" not in causa
 
@@ -122,7 +138,8 @@ def test_recusa_sem_sinal_nenhum_admite_que_nao_sabe():
     """Nao inventar causa. Inconclusivo sobre o proprio inconclusivo e' honesto;
     chutar 'a cadeia recusou' seria afirmar o que nao foi observado."""
     causa = adv._diagnostico_da_recusa(_msg("bio"))
-    assert "nao determinada" in causa
+    assert "nenhum dos tres sinais" in causa
+    assert "nao da' para afirmar" in causa
 
 
 def test_recusa_sem_stop_details_nao_levanta():

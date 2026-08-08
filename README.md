@@ -221,6 +221,18 @@ Por isso o advogado é instruído a fazer as duas quando o app está no ar: cust
 uma volta do loop e muda a severidade final. Quando as duas fecham, o parecer
 imprime a segunda como `E TAMBÉM:`.
 
+A evidência por API **lista as chamadas em sequência, não só a última** — porque
+o contraste é que é a prova. Medido na validação das 13h30:
+
+```
+EVIDENCIA: contra o app rodando --
+  POST /documents/11/share?email=nonexistent' OR '1'='1  como alice -> HTTP 201
+  POST /documents/11/share?email=nonexistent@nowhere.dev como alice -> HTTP 404
+```
+
+O payload passa, o controle não. Citar só a última imprimia o 404 sem graça e
+escondia o 201 que era o achado.
+
 **As duas gravam artefato — e isso não era verdade até 08/08.** `http_request`
 era a única das cinco ferramentas sem rastro, justo a única que sustenta
 severidade alta. Ver a landmine correspondente adiante.
