@@ -256,6 +256,8 @@ Cada uma custaria a demo. Todas viraram guarda com teste.
 | **App alvo sem `OPENAI_API_KEY`** responde a mesma string para qualquer pergunta | payload de injection "não funcionou" → REFUTADO. **Absolvição falsa**, pior que falso alarme | sonda de duas perguntas + R4 |
 | **Worktree obsoleto** quando `worktree add` falha | prova roda no commit **errado** e o artefato registra o commit pedido, não o montado | confere `rev-parse HEAD` depois do add |
 | **Teste gerado escapa do bind-mount** — o container vê a rede do compose | teste que escreve em `kb` **apaga o seed** (o canário) no meio da rodada | recusa antes de executar |
+| **Chave em prosa engole o veredito.** `re.search(r"\{.*\}", DOTALL)` é ganancioso: casa do **primeiro** `{` ao **último**, e o advogado escreve prosa antes do JSON — na rodada das 12h15 ela citava `email = '{email}'` e a rota `/documents/{id}/share` | 2 de 10 acusações: **PROVADO com artefato no disco virou INCONCLUSIVO**. O fallback que existe para a acusação não sumir por formato era quem sumia com ela — o LLM sobrescrevendo o exit code pela via mais boba | `raw_decode` a partir de cada `{`, do fim para o começo; ganha o último objeto válido com `veredito`. Saída crua preservada, então dá para reparsar sem re-rodar o advogado (~130 s/acusação) |
+| **"Recusa do classificador" não aciona nada.** Verificado no `anthropic` 0.120.2: `tool_runner` **aceita** `fallbacks`, `"default"` é válido e `cyber` **é** categoria coberta — logo o pareamento está certo e a recusa significa outra coisa | 2 de 10 acusações, uma na categoria carro-chefe, com causa que não diz o que fazer. Fere a regra do desafio: INCONCLUSIVO **com a causa** | grava os dois sinais que distinguem — `recommended_model` preenchido = o fallback nem foi tentado (rate limit/sobrecarga, retry direto é acionável); `fallback_message` em `usage.iterations` = rodou e também recusou. Sem sinal, admite que não sabe |
 
 A suíte do alvo antes de `32a5241` **apaga o banco da aplicação** — a mensagem
 do commit é literalmente *"Stop the test suite from wiping the app database"*.
@@ -284,9 +286,13 @@ docker compose -f ../hack2l-challenge/docker-compose.yml \
 ### Testes
 
 ```bash
-pytest tests -q -m "not lento"   # ~16 s, sem docker, sem rede
-pytest tests -q                  # ~90 s, sobe container de verdade
+pytest tests -q -m "not lento"   # 72 rápidas, ~31 s, sem docker, sem rede
+pytest tests -q                  # + 5 lentas, sobe container de verdade
 ```
+
+`tests/test_advogado.py` cobre a fronteira entre o texto do modelo e o dado que
+o juiz lê — é onde uma acusação provada pode sumir do parecer **parecendo
+rigor**, e as duas últimas linhas da tabela de landmines nasceram ali.
 
 As unitárias da regra central são as mais importantes do repo: é ali que mora a
 decisão que o LLM não pode tomar. As lentas provam que o mecanismo funciona
