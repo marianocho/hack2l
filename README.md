@@ -286,7 +286,7 @@ docker compose -f ../hack2l-challenge/docker-compose.yml \
 ### Testes
 
 ```bash
-pytest tests -q -m "not lento"   # 72 rápidas, ~31 s, sem docker, sem rede
+pytest tests -q -m "not lento"   # 85 rápidas, ~30 s, sem docker, sem rede
 pytest tests -q                  # + 5 lentas, sobe container de verdade
 ```
 
