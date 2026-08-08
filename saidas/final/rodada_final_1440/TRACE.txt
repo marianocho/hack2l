@@ -1,1 +1,10 @@
-http://127.0.0.1:3001/trace/b158f387-c50a-464f-8c04-d89ffae03a8d
+Trace da rodada final -- Langfuse auto-hospedado (docker compose do desafio).
+
+  http://127.0.0.1:3001/trace/b158f387-c50a-464f-8c04-d89ffae03a8d
+
+O link so abre em quem esta rodando a stack localmente. Por isso o trace
+inteiro esta exportado ao lado, em trace_langfuse.json -- 6 spans do
+advogado + o do juiz, com veredito, voltas, severidade e cache_read.
+
+Para reproduzir: docker compose up -d no repo do desafio, login no
+Langfuse em 127.0.0.1:3001 com demo@hack2l.dev / hack2l-password.
