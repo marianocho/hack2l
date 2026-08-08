@@ -140,6 +140,45 @@ def _garante_worktree(commit: str, nome: str) -> Path:
     return destino
 
 
+# 🚨 O codigo do teste vem do MODELO, e o container da prova esta na rede do
+# compose. De la, `api:8000` e `db:5432` resolvem, e as credenciais kb:kb estao
+# no docker-compose.yml que o modelo le com read_file. Dois estragos possiveis:
+#
+#   falar com o app no ar -- ele serve o codigo ASSADO NA IMAGEM, o mesmo nos
+#   dois lados. A diferenca entre base e head viria de estado acumulado (e o
+#   head sempre roda depois), nao da mudanca do PR. PROVADO falso.
+#
+#   escrever no banco `kb` -- apaga o seed de demo/alice/bob/carol, que e' o
+#   canario de isolamento. O conftest deles redireciona DATABASE_URL para
+#   kb_test, mas so quando a URL termina em /kb; um teste que monte a propria
+#   engine passa por cima e destroi o ambiente da demo no meio da rodada.
+_TESTE_PERIGOSO = [
+    (
+        re.compile(r"api:8000|localhost:8000|127\.0\.0\.1:8000"),
+        "o teste fala com o servico 'api' que esta NO AR. Ele serve o codigo assado na "
+        "imagem, identico nos dois lados, entao a diferenca viria de estado acumulado e "
+        "nao da mudanca do PR. Use o app em processo: "
+        "'from fastapi.testclient import TestClient; from app.main import app'.",
+    ),
+    (
+        # Ancorado no @host:porta antes do nome do banco. Sem o @, o proprio
+        # 'postgresql://kb:kb@...' casaria pelo USUARIO kb depois do '//'.
+        re.compile(r"postgresql[^\s'\"]*@[^\s'\"/]+/kb(?![_\w])"),
+        "o teste conecta no banco da APLICACAO (kb) em vez de kb_test. Isso apagaria o "
+        "seed de demo/alice/bob/carol, que e' o canario de isolamento. Use as fixtures do "
+        "conftest, que ja apontam para kb_test.",
+    ),
+]
+
+
+def _valida_codigo_do_teste(codigo: str) -> str | None:
+    """Devolve o motivo da recusa, ou None se o teste pode rodar."""
+    for rx, motivo in _TESTE_PERIGOSO:
+        if rx.search(codigo):
+            return f"prova recusada antes de executar: {motivo}"
+    return None
+
+
 def _sanitiza_nome(nome: str) -> str:
     """O nome vem do modelo. Sem isto, um nome fora do padrao faz o pytest nao
     coletar nada (exit 5) e a prova morre parecendo refutacao."""
@@ -271,6 +310,18 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         "segundos": 0.0,
     }
     escritos: list[Path] = []
+
+    # Recusa ANTES de executar: um teste que escreve no banco da aplicacao
+    # destroi o seed, e nao ha como desfazer depois de rodar.
+    recusa = _valida_codigo_do_teste(codigo_do_teste)
+    if recusa:
+        art["motivo"] = recusa
+        cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+        (cfg.ARTEFATOS / f"prova_{art['id']}.json").write_text(
+            json.dumps(art, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return art
+
     try:
         base, head = commit_base(), commit_head()
         art["commit_base"], art["commit_head"] = base[:7], head[:7]
@@ -290,6 +341,30 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         art["estado"], art["provado"], art["motivo"] = _classifica(
             art["exit_base"], art["exit_head"], rodou_base, rodou_head
         )
+
+        # CONFIRMACAO: so para quem seria PROVADO, roda o base DE NOVO, depois
+        # do head. Custa ~7s e so nos candidatos a condenacao.
+        #
+        # Mata dois falsos positivos de uma vez: teste nao-deterministico, e
+        # poluicao de estado -- o banco `kb` da aplicacao nunca e' limpo entre
+        # execucoes, e o head sempre roda depois do base, entao "passou antes,
+        # falhou depois" pode ser a ordem e nao o codigo. Se o base nao repete
+        # o exit 0 depois do head, a diferenca nao era a mudanca do PR.
+        if art["estado"] == "PROVADO":
+            e2, s2, rodou2 = _roda_pytest(wt_base, alvo)
+            art["exit_base_confirmacao"] = e2
+            if not rodou2:
+                art["estado"], art["provado"] = "INCONCLUSIVO", False
+                art["motivo"] = "confirmacao no base nao rodou -- infraestrutura instavel"
+                art["erro"] = _corta(s2, 500)
+            elif e2 != 0:
+                art["estado"], art["provado"] = "INCONCLUSIVO", False
+                art["motivo"] = (
+                    f"o teste passou no base, falhou no head, mas ao repetir no base "
+                    f"deu exit {e2}. Entao ele nao e' deterministico ou depende de "
+                    "estado acumulado, e a diferenca nao pode ser atribuida ao PR."
+                )
+
         # O CONTRATO promete `erro` preenchido quando o docker cai. Sem isto so
         # a excecao preenchia, e o docker devolvendo exit 1 nao levanta excecao
         # nenhuma -- a promessa era falsa.

@@ -77,6 +77,49 @@ def test_docker_caindo_no_base_nao_manda_enfraquecer_o_teste():
     assert "nao chegou a rodar" in motivo
 
 
+# -------------------------------- o codigo do teste vem do modelo, e ele erra
+
+def test_recusa_teste_que_fala_com_o_app_no_ar():
+    """O servico 'api' no ar serve o codigo ASSADO NA IMAGEM, identico nos dois
+    lados. Um teste que bate nele mede estado acumulado, nao a mudanca do PR --
+    e como o head sempre roda depois, a diferenca aparece e vira PROVADO falso.
+    """
+    for url in ("http://api:8000/documents", "http://localhost:8000/chat",
+                "http://127.0.0.1:8000/documents"):
+        motivo = f._valida_codigo_do_teste(f"import requests\nr = requests.get('{url}')\n")
+        assert motivo and "NO AR" in motivo
+
+
+def test_recusa_teste_que_escreve_no_banco_da_aplicacao():
+    """O pior estrago possivel: apagar demo/alice/bob/carol no meio da rodada.
+
+    O conftest deles redireciona DATABASE_URL para kb_test, mas so quando a URL
+    termina em /kb -- um teste que monte a propria engine passa por cima.
+    """
+    codigo = (
+        "from sqlalchemy import create_engine\n"
+        "e = create_engine('postgresql+psycopg://kb:kb@db:5432/kb')\n"
+    )
+    motivo = f._valida_codigo_do_teste(codigo)
+    assert motivo and "kb_test" in motivo
+
+
+def test_nao_recusa_teste_legitimo_contra_kb_test():
+    """A guarda nao pode bloquear o caminho certo, senao empurra o advogado
+    para o errado."""
+    codigo = (
+        "from fastapi.testclient import TestClient\n"
+        "from app.main import app\n"
+        "def test_x():\n"
+        "    with TestClient(app) as c:\n"
+        "        assert c.get('/health').status_code == 200\n"
+    )
+    assert f._valida_codigo_do_teste(codigo) is None
+    assert f._valida_codigo_do_teste(
+        "e = create_engine('postgresql+psycopg://kb:kb@db:5432/kb_test')\n"
+    ) is None
+
+
 def test_resumo_do_pytest_e_o_que_distingue_teste_de_infra():
     """A deteccao nao pergunta ao exit code, pergunta ao pytest."""
     assert f._RESUMO_PYTEST.search("5 passed in 2.43s")
