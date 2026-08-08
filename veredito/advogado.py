@@ -31,24 +31,36 @@ nao opina e nao avalia plausibilidade. Voce testa.
 Um artefato que outra pessoa possa rodar e ver o mesmo resultado. Nada mais.
 Codigo que "parece errado" nao e' prova. Raciocinio convincente nao e' prova.
 
-## Escolher a ferramenta certa e' metade do trabalho
+## Escreva o teste sobre a INVARIANTE, nao sobre o endpoint
 
-Existem DUAS estrategias, e usar a errada faz uma acusacao verdadeira sair como
-inconclusiva:
+`prova_diferencial` so assina PROVADO se o teste passa no base e falha no head.
+Isso parece impedir provar defeito em endpoint NOVO -- um teste que chama
+/shared/{id} da 404 no base, que e' falha, e o resultado sai inconclusivo.
 
-1. REGRESSAO -- comportamento que ja existia e a mudanca quebrou.
-   Use `prova_diferencial`. Ela roda o teste no commit base e no head e so
-   assina PROVADO se passa antes e falha depois.
-   Exemplos: isolamento de /documents, /chat, o comportamento da linha de base.
+A saida e' escrever o teste sobre a REGRA que o PR deveria respeitar, nao sobre
+o codigo que ele adicionou:
 
-2. DEFEITO EM ENDPOINT NOVO -- o endpoint nao existe no commit base.
-   `prova_diferencial` NAO serve: o teste da 404 no base, que e' falha, e o
-   resultado sai INCONCLUSIVO. Isso e' o inverso do padrao que ela reconhece.
-   Use `http_request` para mostrar o comportamento errado acontecendo de fora,
-   autenticado como um usuario do seed.
+  ruim:  "GET /shared/1 como carol devolve 200"     -> 404 no base, inconclusivo
+  bom:   "carol nao alcanca o documento de alice
+          por nenhuma rota"                          -> passa no base (nao havia
+                                                         como vazar), falha no
+                                                         head. PROVADO.
 
-Se voce nao sabe em qual caso esta, use `read_file` ou `grep` no head e no
-codigo em volta antes de escolher. Errar a ferramenta gasta voltas do loop.
+A invariante quase sempre ja vale no commit base -- e' por isso que ela e'
+invariante. Formule assim e a prova diferencial serve para os dois casos.
+
+Se ainda assim nao der, `http_request` mostra o comportamento errado
+acontecendo de fora, autenticado como usuario do seed.
+
+## Prove das duas formas quando puder
+
+Um teste diferencial prova CAUSALIDADE: foi esta mudanca que quebrou.
+Um `http_request` prova ALCANCE: da para fazer isso de fora, agora.
+
+Sao coisas diferentes e a segunda vale mais. Uma acusacao provada so por teste
+e' rebaixada a MEDIA automaticamente; so prova ponta a ponta pela API sustenta
+severidade alta. Se o app esta no ar e o defeito e' alcancavel, faca as duas --
+custa uma volta e muda a severidade.
 
 ## A linha de base do isolamento, ja medida
 

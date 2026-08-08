@@ -186,26 +186,39 @@ Calculada em `_classifica`, sem LLM:
 
 ---
 
-## ⚠️ Duas estratégias de prova, e por que isso importa
+## O teste é sobre a invariante, não sobre o endpoint
 
-`prova_diferencial` prova **regressão**: comportamento que existia e quebrou.
-Ela **não serve** para defeito em endpoint **novo**.
+Parece haver um limite aqui: `prova_diferencial` só assina PROVADO se o teste
+passa no base e falha no head, então um defeito em endpoint **novo** deveria
+ser improvável — o endpoint não existe no base, o teste dá 404 lá, e o
+resultado sai INCONCLUSIVO.
 
-Os endpoints de share (`/documents/{id}/share`, `/shared-with-me`,
-`/shared/{id}`) não existem no commit base. Um teste que os chama dá **404 no
-base** — falha — e funciona no head. Isso é o **inverso** do padrão que a
-ferramenta reconhece, e sai como INCONCLUSIVO.
+**Não é um limite; é uma questão de como o teste é escrito.**
 
-| o defeito é… | ferramenta certa |
-|---|---|
-| regressão em comportamento existente (`/documents`, `/chat`, isolamento) | `prova_diferencial` |
-| bug em endpoint **novo** | teste que **falha no head** expressando o critério, ou `http_request` mostrando o errado |
+| escrito sobre… | no base | resultado |
+|---|---|---|
+| o endpoint — *"GET /shared/1 como carol devolve 200"* | 404, falha | INCONCLUSIVO |
+| a **invariante** — *"carol não alcança o documento de alice por rota nenhuma"* | passa (não havia como vazar) | **PROVADO** |
 
-**Buraco conhecido:** hoje não existe tool que rode um teste só no head e grave
-artefato. `run_tests` roda a suíte existente e devolve texto — o juiz não tem o
-que ler. Como o PR sob revisão *é* sobre endpoints novos, isto está no caminho
-crítico. O conserto é uma tool `prova_no_head` gravando artefato com estado
-próprio, mantido abaixo de CRÍTICA pela R2, já que não é diferencial.
+A invariante quase sempre já vale no commit base — é por isso que ela é
+invariante. Formulada assim, a prova diferencial cobre regressão **e** endpoint
+novo, e a evidência fica mais forte: não é *"esta função mudou"*, é *"esta regra
+valia e a sua mudança quebrou"*.
+
+Isso saiu de uma rodada real, não de projeto: a ferramenta foi documentada com
+o limite acima, e o agente contornou sozinho ao escrever o teste sobre o
+isolamento em vez de sobre a rota. A regra virou instrução no prompt do
+advogado depois disso.
+
+### Causalidade e alcance são provas diferentes
+
+| prova | responde | severidade que sustenta |
+|---|---|---|
+| teste diferencial | *foi esta mudança que quebrou* | até MÉDIA (R2 rebaixa) |
+| `http_request` | *dá para fazer isso de fora, agora* | ALTA/CRÍTICA |
+
+Por isso o advogado é instruído a fazer as duas quando o app está no ar: custa
+uma volta do loop e muda a severidade final.
 
 ---
 
