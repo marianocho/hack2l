@@ -224,6 +224,45 @@ def test_url_do_app_nao_usa_localhost():
     assert "localhost" not in f.cfg.APP_API_URL, "use 127.0.0.1 -- ver comentario em config.py"
 
 
+# ----------------------------------------------- o artefato de prova por API
+
+def test_chamada_fora_de_acusacao_nao_vira_evidencia(tmp_path, monkeypatch):
+    """A sonda do llm_alvo bate em /chat antes de existir acusacao. Gravar isso
+    poe medicao de ambiente no diretorio que o parecer cita como prova."""
+    monkeypatch.setattr(f.cfg, "ARTEFATOS", tmp_path)
+    f.define_acusacao("")            # vira "sem_id"
+    f._grava_chamada_http({"metodo": "POST", "caminho": "/chat", "como": "demo",
+                           "status": 200, "erro": None, "corpo": "{}"})
+    assert not list(tmp_path.glob("http_*.json")), "sonda virou artefato de prova"
+
+
+def test_artefato_http_acumula_as_chamadas_da_acusacao(tmp_path, monkeypatch):
+    import json
+    monkeypatch.setattr(f.cfg, "ARTEFATOS", tmp_path)
+    f._HTTP.pop("a_teste", None)
+    f.define_acusacao("a_teste")
+    f._grava_chamada_http({"metodo": "POST", "caminho": "/x", "como": "alice",
+                           "status": 201, "erro": None, "corpo": ""})
+    f._grava_chamada_http({"metodo": "POST", "caminho": "/x", "como": "alice",
+                           "status": 404, "erro": None, "corpo": ""})
+    art = json.loads((tmp_path / "http_a_teste.json").read_text(encoding="utf-8"))
+    assert art["alcancou_a_api"] is True
+    assert [c["status"] for c in art["chamadas"]] == [201, 404]
+
+
+def test_so_erro_de_conexao_nao_alcancou_a_api(tmp_path, monkeypatch):
+    """Docker fora do ar nao pode virar prova ponta a ponta."""
+    import json
+    monkeypatch.setattr(f.cfg, "ARTEFATOS", tmp_path)
+    f._HTTP.pop("a_caiu", None)
+    f.define_acusacao("a_caiu")
+    f._grava_chamada_http({"metodo": "GET", "caminho": "/x", "como": "carol",
+                           "status": None, "erro": "ConnectionError: recusada",
+                           "corpo": ""})
+    art = json.loads((tmp_path / "http_a_caiu.json").read_text(encoding="utf-8"))
+    assert art["alcancou_a_api"] is False
+
+
 # ------------------------------------------- o caminho que vai parar no slide
 
 def _raiz_falsa(tmp_path, monkeypatch, *arquivos):

@@ -592,6 +592,13 @@ def _grava_chamada_http(chamada: dict) -> None:
 
     O advogado nao escreve este campo e nao pode contradize-lo.
     """
+    # Fora de acusacao nao e' evidencia. A sonda do llm_alvo na subida da rodada
+    # bate em /chat como demo antes de existir acusacao, e gravava
+    # `http_sem_id.json` no meio dos artefatos -- medicao de ambiente parecendo
+    # prova, justo no diretorio que o parecer cita como evidencia.
+    if _ACUSACAO_ATUAL == "sem_id":
+        return
+
     _HTTP.setdefault(_ACUSACAO_ATUAL, []).append(chamada)
     chamadas = _HTTP[_ACUSACAO_ATUAL]
     art = {

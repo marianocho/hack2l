@@ -297,10 +297,19 @@ o ambiente.
 ```bash
 cp .env.example .env          # ANTHROPIC_API_KEY é o único bloqueio
 python -m pip install -r requirements.txt
-python checar_paridade.py     # a máquina consegue rodar?
+python checar_paridade.py     # a máquina consegue rodar? (8 checagens)
 
 python -m veredito.juiz       # gera saidas/parecer.md do que está em disco
 ```
+
+⚠️ **A checagem `app serve o PR` é a que evita o falso negativo mais caro entre
+as duas máquinas.** O app no ar serve o código **assado na imagem**, não o
+checkout do repo — então uma máquina com a imagem construída a partir da `main`
+roda o Veredito inteiro sem erro nenhum e devolve **tudo em MÉDIA**:
+`http_request` nunca alcança o código do PR, `prova_ponta_a_ponta` fica falsa, a
+R2 rebaixa. O sintoma não parece problema de ambiente, parece o produto não
+funcionando. Ela compara os routers do worktree do head com os de dentro do
+container e diz o comando do conserto.
 
 O benchmark precisa estar no ar para `http_request`:
 
