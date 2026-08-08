@@ -15,3 +15,9 @@ saidas/*
 # ficam versionados -- sao a evidencia.
 artefatos/*selftest*
 artefatos/*docker_quebrado*
+
+# Medicao POR MAQUINA e POR RODADA -- nunca compartilhada. A maquina do Mariano
+# mediu "duble" e a do Luis "vivo" no mesmo dia, porque a chave da OpenAI e' por
+# maquina. Commitar isto faz o duble de uma sobrescrever o vivo da outra, e a R4
+# dispara falso-inconclusivo na maquina do palco.
+artefatos/ambiente.json
