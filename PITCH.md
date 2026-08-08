@@ -10,6 +10,30 @@ bloco de demo é o maior de propósito: o que vende é a tela, não a fala.
 
 ---
 
+## Os números — de onde cada um sai
+
+Preencher às **14h45**, com a rodada final na mão. Nenhum estimado.
+
+| Placeholder no roteiro | Fonte |
+|---|---|
+| `[X dólares]` | soma do `usage` **por modelo** (Haiku $1/$5, Opus 5 $5/$25, Sonnet 5 $3/$15; cache 1,25× escrita, 0,1× leitura) |
+| N provados / M descartados / K inconclusivos | primeira linha de `saidas/parecer.md` |
+| Tela 1 (achado provado) | um `artefatos/prova_*.json` com `exit_base=0, exit_head=1` |
+| Tela 2 (suspeita rotulada) | um veredicto `SUSPEITA` no parecer |
+
+**Referência da rodada cronometrada das 12h15** (`--top-n 10`), para saber o que
+esperar — **não são os números do slide**:
+
+- 856 s = **14,3 min** a rodada inteira (o doc previa 36)
+- 5 condenados · 1 descartado · 4 inconclusivos
+- Os 4 inconclusivos eram **bug de encanamento, não falta de prova** — os dois
+  bugs foram corrigidos, então a rodada final deve sair mais forte
+
+⚠️ Se a Tela 2 não existir na rodada final (só provados e descartados), emenda
+direto na Tela 3. O momento forte não depende dela.
+
+---
+
 ## Roteiro
 
 ### 0:00–0:25 — O problema, com número verificado
