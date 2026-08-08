@@ -1,5 +1,5 @@
 {
-  "llm_alvo": "duble",
-  "detalhe": "duas perguntas diferentes devolveram a MESMA resposta: 'Based on the retrieved context, here is the answer. [source: chunk 0]'",
-  "medido_em": "2026-08-08T11:32:54"
+  "llm_alvo": "vivo",
+  "detalhe": "as sondas divergem, o modelo le a pergunta: 'PONG' vs 'Não tenho informações suficientes.'",
+  "medido_em": "2026-08-08T11:59:35"
 }

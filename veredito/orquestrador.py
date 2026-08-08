@@ -15,7 +15,7 @@ import json
 import sys
 import time
 
-from . import advogado, config as cfg, ferramentas, juiz, llm_alvo
+from . import advogado, config as cfg, juiz, llm_alvo, promotores
 
 # Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
 # ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
@@ -32,20 +32,22 @@ ACUSACAO_DE_BANCADA = {
 }
 
 
-def _carrega_acusacoes(manual: bool) -> list[dict]:
+def _carrega_acusacoes(manual: bool, reusar: bool, diff: str) -> list[dict]:
     if manual:
         return [ACUSACAO_DE_BANCADA]
-    caminho = cfg.SAIDAS / "acusacoes.json"
-    try:
-        acusacoes = json.loads(caminho.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"nao consegui ler {caminho}: {e}", file=sys.stderr)
-        print("rode com --manual para exercitar o pipeline sem os promotores.")
-        return []
-    return [a for a in acusacoes if isinstance(a, dict)]
+    caminho = cfg.SAIDAS / "acusacoes_brutas.json"
+    if reusar and caminho.is_file():
+        # Afinar o advogado nao pode custar outra rodada de promotores.
+        print(f"reusando {caminho.name} (--reusar)")
+        try:
+            return [a for a in json.loads(caminho.read_text(encoding="utf-8"))
+                    if isinstance(a, dict)]
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"  ilegivel ({e}), rodando os promotores", file=sys.stderr)
+    return promotores.acusa(diff)
 
 
-def roda(manual: bool = False, top_n: int | None = None) -> dict:
+def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -> dict:
     cfg.prepara_pastas()
     if not cfg.ANTHROPIC_API_KEY:
         raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
@@ -57,15 +59,17 @@ def roda(manual: bool = False, top_n: int | None = None) -> dict:
     estado, detalhe = llm_alvo.registra()
     print(f"LLM do app alvo: {estado} -- {detalhe[:90]}")
 
-    acusacoes = _carrega_acusacoes(manual)
-    if not acusacoes:
-        return {}
-    teto = top_n if top_n is not None else cfg.TOP_N
-    acusacoes = acusacoes[:teto]
-    print(f"{len(acusacoes)} acusacao(oes) para o advogado, modelo {cfg.MODEL_ADVOGADO}\n")
-
     diff = advogado.diff_do_pr()  # prefixo cacheado; NUNCA imprimir
     print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)\n")
+
+    brutas = _carrega_acusacoes(manual, reusar, diff)
+    if not brutas:
+        return {}
+    teto = top_n if top_n is not None else cfg.TOP_N
+    # Por COTA de categoria, nao pelas N primeiras -- ver promotores.seleciona.
+    acusacoes = brutas if manual else promotores.seleciona(brutas, teto)
+    print(f"\n{len(acusacoes)} de {len(brutas)} acusacoes vao ao advogado "
+          f"({cfg.MODEL_ADVOGADO})\n")
 
     veredictos: list[dict] = []
     for i, a in enumerate(acusacoes, 1):
@@ -120,5 +124,7 @@ if __name__ == "__main__":
     p.add_argument("--manual", action="store_true",
                    help="usa a acusacao de bancada em vez de saidas/acusacoes.json")
     p.add_argument("--top-n", type=int, default=None)
+    p.add_argument("--reusar", action="store_true",
+                   help="reusa saidas/acusacoes_brutas.json em vez de rodar os promotores")
     args = p.parse_args()
-    roda(manual=args.manual, top_n=args.top_n)
+    roda(manual=args.manual, top_n=args.top_n, reusar=args.reusar)

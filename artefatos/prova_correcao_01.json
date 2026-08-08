@@ -1,0 +1,18 @@
+{
+  "id": "correcao_01",
+  "arquivo_do_teste": "test_share_sql_injection.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 7.57s\n Container hack2l-challenge-db-1 Running \n Container hack2l-challenge-db-1 Waiting \n Container hack2l-challenge-db-1 Healthy \n Container hack2l-challenge-api-run-bf93464d2046 Creating \n Container hack2l-challenge-api-run-bf93464d2046 Created \n",
+  "stdout_head": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________ test_injection_email_never_resolves_to_a_user _________________\n\nclient = <starlette.testclient.TestClient object at 0x73d709580620>\n\n    def test_injection_email_never_resolves_to_a_user(client):\n        # Varios usuarios existem no banco, para que um \"OR '1'='1\" tenha alvo.\n        alice = register_and_login(client, \"alice-inj@example.com\")\n        register_and_login(client, \"bob-inj@example.com\")\n        register_and_login(client, \"carol-inj@example.com\")\n    \n        doc_id = _create_doc(client, alice, \"Alice secret\", \"top secret content\")\n    \n        payload = \"' OR '1'='1\"\n        resp = client.post(\n            f\"/documents/{doc_id}/share\",\n            params={\"email\": payload},\n            headers={\"Authorization\": f\"Bearer {alice}\"},\n        )\n    \n        assert resp.status_code != 500, f\"erro interno: {resp.text}\"\n>       assert resp.status_code != 201, (\n            \"compartilhamento criado com e-mail inexistente (SQL injection): \"\n            f\"{resp.status_code} {resp.text}\"\n        )\nE       AssertionError: compartilhamento criado com e-mail inexistente (SQL injection): 201 {\"document_id\":1,\"shared_with_user_id\":1}\nE       assert 201 != 201\nE        +  where 201 = <Response [201 Created]>.status_code\n\ntests/test_share_sql_injection.py:39: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_share_sql_injection.py::test_injection_email_never_resolves_to_a_user\n1 failed, 1 warning in 5.30s\n Container hack2l-challenge-db-1 Running \n Container hack2l-challenge-db-1 Waiting \n Container hack2l-challenge-db-1 Healthy \n Container hack2l-challenge-api-run-5cd8c4fadf2d Creating \n Container hack2l-challenge-api-run-5cd8c4fadf2d Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 40.5,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

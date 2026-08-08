@@ -425,13 +425,31 @@ def _worktree_de(lado: str) -> Path:
     return _garante_worktree(commit, lado)
 
 
+def _resolve_caminho(raiz: Path, caminho: str) -> Path | None:
+    """Acha o arquivo mesmo quando a raiz do caminho vem errada.
+
+    Os promotores discordam entre si sobre a raiz: 29 acusacoes disseram
+    `app/routers/shares.py` e 20 disseram `app/api/app/routers/shares.py` para o
+    MESMO arquivo. Sem isto o advogado gasta voltas do loop descobrindo que o
+    caminho nao existe -- e volta gasta e' acusacao que morre inconclusiva.
+    """
+    rel = caminho.strip().lstrip("/\\").replace("\\", "/")
+    alvo = (raiz / rel).resolve()
+    if alvo.is_file():
+        return alvo
+    # sufixo: 'app/routers/shares.py' casa com '.../app/api/app/routers/shares.py'
+    casam = [p for p in raiz.rglob(Path(rel).name)
+             if p.is_file() and p.as_posix().endswith(rel)]
+    return casam[0] if len(casam) == 1 else None
+
+
 def _read_file(caminho: str, lado: str = "head") -> str:
     raiz = _worktree_de(lado)
-    alvo = (raiz / caminho.strip().lstrip("/\\")).resolve()
-    if raiz.resolve() not in alvo.parents and alvo != raiz.resolve():
+    alvo = _resolve_caminho(raiz, caminho)
+    if alvo is None:
+        return f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho)."
+    if raiz.resolve() not in alvo.parents:
         return f"ERRO: {caminho} sai da raiz do repo."
-    if not alvo.is_file():
-        return f"ERRO: {caminho} nao existe em {lado}."
     texto = alvo.read_text(encoding="utf-8", errors="replace")
     # numerado, porque a acusacao pede 'arquivo:linha' e chute de linha nao cola
     numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(texto.splitlines(), 1))
