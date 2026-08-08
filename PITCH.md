@@ -83,14 +83,35 @@ Três telas, nesta ordem. Cada uma tem uma frase.
 
 > "Custo por PR revisado: **[X dólares]**, medido, no log.
 >
-> O comprador não é o dev que quer menos ruído — é **segurança e auditoria**. Um
-> parecer com prova reproduzível é artefato de compliance. 'Merge com laudo' tem
-> comprador; 'menos ruído no PR' não tem.
+> Reduzir alarme falso não basta — toda ferramenta promete isso. O que faz o dev
+> voltar a ler é ver **o que foi descartado e por quê**. É isso que transforma
+> revisão em **laudo**.
+>
+> E laudo tem comprador que 'revisão melhor' não tem: **segurança e auditoria**.
+> Um parecer com prova reproduzível e trilha do que foi descartado é artefato de
+> compliance.
 >
 > E revisar **código de agente** é classe nova de defeito: nenhum incumbente tem
 > oráculo para 'este PR quebrou o isolamento de tenant no RAG'.
 >
 > Todo mundo afirma. Nós provamos."
+
+### ⚠️ Por que o fecho é assim, e não "zero ruído"
+
+A versão anterior usava a frase do `CLAUDE.md` — *"'menos ruído no PR' não tem
+comprador"* — noventa segundos depois de vender a lista de descartados na Tela 3.
+Logicamente compatível (uma fala é sobre auditabilidade, a outra sobre quem
+assina o cheque), mas num pitch **falado** a mesma palavra com duas valências
+tropeça. Corrigido.
+
+**Não trocar por "provamos com zero ruído".** É a alegação mais falsificável do
+pitch: morre apontando para a lista de SUSPEITAS que está projetada na tela
+atrás de você. Pior que "achou 4 dos 5 defeitos", porque não precisa nem de
+gabarito para ser derrubada.
+
+A cadeia correta é: lista de descartados → o dev volta a confiar → confiança
+vira laudo → laudo tem comprador em compliance. Ruído entra como **mecanismo**,
+nunca como promessa.
 
 ---
 
