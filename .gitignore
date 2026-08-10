@@ -29,3 +29,4 @@ artefatos/*docker_quebrado*
 # dispara falso-inconclusivo na maquina do palco.
 artefatos/ambiente.json
 saidas/trace.txt
+.repos/
