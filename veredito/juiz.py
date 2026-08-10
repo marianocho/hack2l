@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import arbitro
 from . import config as cfg
 from . import llm_alvo
 
@@ -137,10 +138,47 @@ def aplica_regras(
         v["regras_aplicadas"] = aplicadas
         return v
 
-    # REGRA 1 -- critica sem arbitro citado e' opiniao com teste em anexo
-    if v["severidade"] == "CRITICA" and not acusacao.get("arbitro"):
-        v["severidade"] = "SUSPEITA"
-        aplicadas.append("R1: CRITICA sem arbitro citado -> SUSPEITA")
+    # REGRA 1 -- CRITICA exige uma autoridade que NAO seja o modelo.
+    #
+    # Duas vias, e qualquer uma basta:
+    #
+    #   arbitro com procedencia  uma regra escrita NESTE repositorio foi
+    #                            violada, e um humano pode ir conferir onde.
+    #   prova ponta a ponta      a coisa ruim aconteceu de fora, contra o app
+    #                            rodando, com artefato -- ja aterrado na R0b,
+    #                            entao aqui e' fato do artefato, nao alegacao.
+    #
+    # A segunda via entrou em 10/08, junto com o desacoplamento do arbitro, e
+    # nao e' afrouxamento: e' o conserto de um furo que a rodada premiada
+    # exibiu em cima do palco. No parecer final do Hack2L, o MESMO SQL injection
+    # apareceu duas vezes --
+    #
+    #   padroes_01   arbitro "C2"   -> CRITICA
+    #   correcao_01  arbitro null   -> SUSPEITA
+    #
+    # -- e o correcao_01 tinha prova diferencial (passa no base, falha no head)
+    # E artefato http. A severidade nao seguiu a forca da prova, seguiu o acaso
+    # de uma lente ter recitado um rotulo chumbado que a outra nao recitou.
+    # Depois de 09/08 sabemos que aquele rotulo nem existia no repositorio do
+    # desafio: nos o inventamos. Sem a segunda via, o conserto do arbitro
+    # tornaria SUSPEITA todo achado provado em todo repositorio que nao
+    # documenta os proprios criterios -- ou seja, quase todos.
+    #
+    # O que continua barrado: opiniao de modelo sem nenhuma das duas. Que e' o
+    # que a R1 sempre quis dizer.
+    if v["severidade"] == "CRITICA":
+        tem_regra = arbitro.tem_procedencia(acusacao.get("arbitro"))
+        tem_prova = bool(v.get("prova_ponta_a_ponta"))
+        if not tem_regra and not tem_prova:
+            v["severidade"] = "SUSPEITA"
+            motivo_r1 = (
+                "sem arbitro com procedencia"
+                if arbitro.citado(acusacao.get("arbitro"))
+                else "sem arbitro citado"
+            )
+            aplicadas.append(
+                f"R1: CRITICA {motivo_r1} e sem prova ponta a ponta -> SUSPEITA"
+            )
 
     # REGRA 2 -- so prova ponta a ponta sustenta severidade alta
     if not v.get("prova_ponta_a_ponta"):
@@ -255,7 +293,9 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = N
         f"[{v.get('severidade','?')}] [{acusacao.get('confianca','?')}] "
         f"{rotulo} - {_local(acusacao)}",
         f"O QUE: {acusacao.get('hipotese','-')}",
-        f"ARBITRO: {acusacao.get('arbitro') or 'nenhum citado'}",
+        # Com procedencia a linha vira "a regra (arquivo:linha)", e o leitor do
+        # parecer pode ir conferir. Era isso que "ARBITRO: AC2" nunca permitiu.
+        f"ARBITRO: {arbitro.formata(acusacao.get('arbitro'))}",
     ]
     linha_http = _evidencia_http(http)
     if artefato and artefato.get("estado") == "PROVADO":

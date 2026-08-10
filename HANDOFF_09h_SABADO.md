@@ -81,9 +81,24 @@ Hack2L aplicado ao `psf/requests`.
 
 ---
 
-## 2. A tarefa de hoje: desacoplar o árbitro
+## 2. ✅ FEITO em 10/08 — o árbitro foi desacoplado
 
-Está especificada em `ACHADO_ARBITRO_CHUMBADO.md` §"O conserto". Resumo:
+**Os três itens abaixo foram implementados e medidos.** O resultado está em
+`ACHADO_ARBITRO_CHUMBADO.md` §"O conserto, aplicado e medido em 10/08".
+
+Em uma linha: **contaminação 93 → 0** nos mesmos 10 PRs, e a taxa de árbitro
+deixou de medir o prompt e passou a medir o repositório — **2%** em repo de
+terceiro (`null` honesto), **64%** no PR do desafio, que documenta as próprias
+regras, com as citações caindo exatamente na linha que alegam.
+
+Ganhou uma segunda via para CRÍTICA (prova ponta a ponta com artefato), sem a
+qual nada seria crítico fora de um repo documentado. Ela conserta um furo do
+parecer premiado: o mesmo SQL injection era CRÍTICA por uma lente e SUSPEITA por
+outra, decidido por qual delas recitou um rótulo chumbado.
+
+Testes: **178 passando** (eram 116), mesmas 4 falhas de Docker.
+
+O que segue é a especificação original, mantida para leitura:
 
 1. **Tirar `AC1`–`AC5`, `R1`–`R4`, `C1`–`C8` dos seis prompts** em
    `promotores/*.md`. Eles passam a entrar como *contexto do PR sob revisão*,
@@ -107,6 +122,11 @@ Está especificada em `ACHADO_ARBITRO_CHUMBADO.md` §"O conserto". Resumo:
 taxa de árbitro deve **cair** (é o esperado e é o certo), e as acusações não
 podem mais citar `AC*`/`R*`/`C*` em repo de terceiro.
 
+> ✅ Validado. Caiu de 45% para 2%, e a contaminação foi de 93 para **zero em
+> 144 acusações**. O detector agora é uma asserção (`tests/test_prompts_limpos.py`
+> e o bloco "contaminacao" do `--resumo`), não leitura de 209 acusações na
+> madrugada.
+
 ---
 
 ## 3. Estado do repositório
@@ -128,6 +148,33 @@ docker compose up -d
 Se o Docker Desktop não subir, a receita está em `ESTADO.md` — **esta máquina não
 consegue apagar sockets mortos** e precisa de rename manual da pasta.
 
+### 🚨 10/08: a receita do rename NÃO resolve mais
+
+O Docker Desktop está caindo na subida, sempre no mesmo ponto:
+
+```
+initializing Inference manager: listening on
+unix://C:/Users/luisf/AppData/Local/Docker/run/dockerInference:
+remove ...: The file cannot be accessed by the system.
+(listener: The filename, directory name, or volume label syntax is incorrect.)
+```
+
+Tentado hoje, sem sucesso: renomear `AppData\Local\Docker\run` (funciona, o
+Docker recria a pasta e **cai igual** — não é socket velho, ele não consegue nem
+criar o novo); e `EnableInference: false` + `InferenceCanUseGPUVariant: false` no
+`settings-store.json` (revertido, não adiantou; `EnableDockerAI` já era `false`).
+
+A segunda linha do erro — *"volume label syntax is incorrect"* — sugere que ele
+está tentando criar um **socket unix num caminho Windows**, o que é bug de versão
+do Docker Desktop, não sujeira de estado. **Próximo passo provável: atualizar ou
+reinstalar o Docker Desktop**, não mais mexer em pasta.
+
+Pastas `run.old-*` acumuladas em `AppData\Local\Docker\` podem ser apagadas.
+
+**O que isso custa:** só os 4 testes de integração (`test_ferramentas` ×3,
+`test_llm_alvo` ×1). A régua (`generaliza.py`), os promotores, o juiz e a suíte
+inteira rodam sem Docker — 178 testes passam.
+
 ### Arquivos novos de ontem à noite
 
 ```
@@ -145,9 +192,17 @@ saidas/generaliza/*.json      dado bruto, não apagar — reprocessar não custa
 
 Em ordem de valor, e todos com detalhe em `PROXIMOS_PASSOS.md` §4:
 
-1. **Árbitro chumbado** ← a tarefa de hoje
-2. **Sem piso**: PR de 1 linha gera 17 acusações; a cota é orçamento, não critério
-3. **Lente de injection invertida**: 0 num PR de Server Actions, 2 num link
+1. ~~**Árbitro chumbado**~~ ✅ feito em 10/08
+2. **Sem piso** — *melhorou, não resolvido*. Tirei dos prompts o "se saíram menos
+   de ~5 acusações você foi conservador demais", que fabricava volume; o
+   `django#21735` de uma linha caiu de 17 para 13 acusações e o
+   `psf/requests#7576` de 11 para 7. Ainda não existe critério de parada: a cota
+   continua sendo orçamento, não julgamento.
+3. **Lente de injection** — *mudou de forma, precisa de medição nova*. Agora ela
+   diz explicitamente que sem modelo no código a resposta certa é silêncio: 0 nos
+   10 PRs (nenhum tem LLM) e 3 no PR do desafio (que tem `/chat` com RAG). Mas
+   **"0 em todos" e "quebrada" são indistinguíveis pelo número** enquanto não
+   houver um PR de terceiro *com* IA no `prs.txt`. É o próximo teste barato.
 4. **Prova diferencial não serve para endpoint novo** (não existe no base)
 5. **Fallback do Opus não pegou a recusa cyber** apesar da config correta
 6. **Juiz não tem síntese**: `MODEL_JUIZ` está no config e nunca é consumido
@@ -170,7 +225,8 @@ quanto cobertura; no falso alarme o importante é ser interpretável"*. A lista 
 descartados é a resposta a isso, e agora temos número: 7 de 11 refutados com
 motivo num PR sem defeito.
 
-**A narrativa, quatro frases:**
+**A narrativa, agora com o conserto no fim — é uma história melhor que a de
+ontem, porque tem desfecho medido:**
 
 > Testamos em dez PRs reais de Flask, Django, Gin, Next.js e Requests. A
 > cobertura generaliza — nenhuma lente cega, e a concentração num arquivo só que
@@ -181,10 +237,26 @@ motivo num PR sem defeito.
 > E achamos um vício nosso: noventa e quatro de noventa e quatro árbitros
 > citavam os critérios de aceite do **seu** desafio, aplicados a repositórios que
 > não têm nada a ver. A métrica que a gente comemorou estava medindo
-> contaminação.
+> contaminação. Pior: os rótulos que a gente mandava o modelo citar *verbatim*
+> nem existiam no seu repositório — nós tínhamos inventado a numeração.
 >
-> O verificador, esse, aguentou: refutou sete de onze num PR de documentação,
-> com motivo.
+> Consertamos hoje. O árbitro deixou de ser rótulo e virou citação com
+> procedência: a regra, e o arquivo e a linha onde ela está escrita. Sem
+> conseguir apontar onde, é `null` — que é a resposta honesta. A contaminação foi
+> de noventa e três para **zero em cento e quarenta e quatro acusações**, e a
+> taxa de árbitro passou a medir o repositório em vez do nosso prompt: dois por
+> cento em repo de terceiro, sessenta e quatro por cento no seu, que documenta as
+> próprias regras.
+>
+> O verificador aguentou desde o começo: refutou sete de onze num PR de
+> documentação, com motivo.
+
+**Se sobrar tempo, o detalhe que ele vai gostar** — o conserto expôs um furo no
+parecer que ele avaliou: o *mesmo* SQL injection saiu CRÍTICA por uma lente e
+SUSPEITA por outra, as duas com prova diferencial e artefato HTTP. A diferença
+era só qual delas tinha recitado um rótulo. Agora prova ponta a ponta com
+artefato é via própria para severidade alta, e a severidade acompanha a força da
+prova — que era o princípio desde o começo, e não estava sendo cumprido.
 
 **Outras perguntas para levar:** o que o primeiro lugar fez de diferente; onde
 ele acha que a abordagem quebra; quem compra isso na experiência dele; e — o que

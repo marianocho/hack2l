@@ -43,6 +43,35 @@ WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolv
 SAIDAS = RAIZ / "saidas"
 ARTEFATOS = RAIZ / "artefatos"
 
+# --- contexto do repositorio sob revisao ------------------------------------
+# O que o repositorio documenta sobre si mesmo (PRD, criterios de aceite,
+# convencoes), com arquivo e linha de cada regra. Entra no contexto dos
+# promotores em tempo de execucao.
+#
+# 🚨 Ate 09/08 este material estava CHUMBADO dentro dos seis prompts, e por isso
+# viajava para dentro de qualquer diff do mundo: 94 de 94 arbitros nos 10 PRs de
+# Flask, Django, Gin, Next.js e Requests citavam os criterios de aceite do
+# desafio da Vindler. Fora do Hack2L a taxa real de arbitro era ZERO.
+#
+# Por isso ele e' um ARQUIVO, e por isso pode ser vazio: repositorio que nao
+# documenta os proprios criterios roda sem contexto, os promotores acusam do
+# mesmo jeito, e o arbitro sai `null` -- que e' a resposta honesta.
+CONTEXTO = Path(_s("CONTEXTO_REPO", str(RAIZ / "contexto" / "hack2l.md")))
+
+
+def contexto_do_repo() -> str | None:
+    """O bloco de contexto, ou None quando o repo nao documenta nada.
+
+    None e vazio sao a mesma coisa de proposito: um arquivo em branco nao pode
+    virar um cabecalho "Contexto do repositorio" seguido de nada, que e' um
+    convite para o modelo preencher o silencio.
+    """
+    try:
+        texto = CONTEXTO.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return texto or None
+
 # --- app alvo ---------------------------------------------------------------
 # 🚨 127.0.0.1 e' deliberado, NAO troque por localhost.
 #

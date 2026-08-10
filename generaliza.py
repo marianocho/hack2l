@@ -21,7 +21,14 @@ de semana montando docker para dez repositórios.
   categoria sempre vazia      -> falta contexto naquela lente
   tudo num arquivo só         -> não leu o diff inteiro (foi o que deu no Hack2L:
                                  46 de 47 acusações em shares.py)
-  taxa de árbitro despencando -> sem árbitro nada sustenta CRÍTICA (regra R1)
+  qualquer acusação contaminada -> o conserto de 09/08 regrediu: a lente voltou
+                                 a recitar os critérios do desafio num repo que
+                                 não é o desafio
+
+⚠️ A taxa de árbitro CAIR em relação aos 45% de 08/08 é o resultado esperado, e
+é o certo. Aquele número media contaminação: 94 acusações com árbitro, 94
+citando os critérios de aceite da Vindler. O número que vale agora é "árbitro
+COM PROCEDÊNCIA" — regra que o promotor consegue localizar naquele repositório.
 
 ## Uso
 
@@ -46,6 +53,7 @@ RAIZ = Path(__file__).resolve().parent
 load_dotenv(RAIZ / ".env")
 sys.path.insert(0, str(RAIZ))
 
+from veredito import arbitro as arb     # noqa: E402
 from veredito import config as cfg      # noqa: E402
 from veredito import promotores         # noqa: E402
 
@@ -78,6 +86,7 @@ def baixa_diff(url: str) -> tuple[str, dict]:
     info = {
         "url": url, "repo": f"{dono}/{repo}", "numero": int(num),
         "titulo": m_json.get("title"),
+        "descricao": (m_json.get("body") or "").strip(),
         "linguagem": (m_json.get("base") or {}).get("repo", {}).get("language"),
         "arquivos": m_json.get("changed_files"),
         "adicoes": m_json.get("additions"), "remocoes": m_json.get("deletions"),
@@ -87,6 +96,44 @@ def baixa_diff(url: str) -> tuple[str, dict]:
         diff = diff[:MAX_CHARS] + "\n\n[... diff truncado ...]"
         info["truncado"] = True
     return diff, info
+
+
+# Teto da descricao. PR de projeto grande vem com template gigante de
+# checklist; o que interessa e' a intencao declarada, que mora no comeco.
+MAX_CHARS_DESCRICAO = 6_000
+
+
+def contexto_do_pr(info: dict) -> str | None:
+    """A intencao declarada DESTE PR -- o unico contexto legitimo aqui.
+
+    O repositorio de terceiro nao nos da PRD nem criterios de aceite, e e'
+    exatamente por isso que os prompts chumbavam os do Hack2L: a lente de PRD
+    nao tinha o que arbitrar, entao recitava o desafio. Sem nada, ela fica muda
+    de novo -- e muda nao e' consertada, e' so silenciosa.
+
+    O que existe num PR do GitHub e' titulo e descricao. Nao e' especificacao
+    formal, mas e' intencao declarada com procedencia conferivel: um humano abre
+    o PR e le. E' menos do que o Hack2L da', e e' honesto sobre ser menos.
+    """
+    titulo = (info.get("titulo") or "").strip()
+    descricao = (info.get("descricao") or "").strip()
+    if not titulo and not descricao:
+        return None
+    if len(descricao) > MAX_CHARS_DESCRICAO:
+        descricao = descricao[:MAX_CHARS_DESCRICAO] + "\n\n[... descricao truncada ...]"
+    partes = [
+        "Este repositorio nao forneceu PRD, criterios de aceite nem guia de",
+        "convencoes. O unico material declarado e' o proprio PR, abaixo.",
+        "",
+        "Para o campo `arbitro`, isto e' procedencia fraca porem conferivel:",
+        '`{"regra": "...", "onde": "descricao do PR"}`. Regra que voce NAO',
+        "encontrar aqui nem no codigo em volta -> `arbitro` e' `null`.",
+        "",
+        f"## Titulo do PR\n\n{titulo or '(sem titulo)'}",
+    ]
+    if descricao:
+        partes.append(f"\n## Descricao do PR\n\n{descricao}")
+    return "\n".join(partes)
 
 
 def _stem(url: str) -> str:
@@ -115,8 +162,10 @@ def roda_um(url: str, refazer: bool = False) -> dict | None:
     t0 = time.time()
     try:
         # A funcao dos promotores nao sabe de onde veio o diff -- e' o mesmo
-        # codigo que rodou no Hack2L, sem ramo especial para este script.
-        brutas = promotores.acusa(diff)
+        # codigo que rodou no Hack2L, sem ramo especial para este script. O que
+        # muda e' so o contexto: la, o PRD e as convencoes do desafio; aqui, o
+        # que o PR de terceiro declara sobre si mesmo, que e' bem menos.
+        brutas = promotores.acusa(diff, contexto_do_pr(info))
     except Exception as e:
         print(f"  ERRO nos promotores: {type(e).__name__}: {e}")
         return None
@@ -150,6 +199,22 @@ def _concentracao(acusacoes: list[dict]) -> float:
     return max(cont.values()) / len(acusacoes)
 
 
+def _contaminadas(acusacoes: list[dict]) -> list[dict]:
+    """Acusacoes que citam o vocabulario chumbado do Hack2L, em QUALQUER campo.
+
+    Nao basta olhar o `arbitro`: a hipotese "nenhum requisito R1-R4 pode ser
+    validado por esta mudanca" apareceu no `psf/requests` e o advogado a PROVOU
+    -- verdade trivial sobre criterios de outro projeto, na lista de condenados.
+    Por isso o detector varre hipotese e provado_se tambem.
+    """
+    fora = []
+    for a in acusacoes:
+        texto = " ".join(str(a.get(c) or "") for c in ("hipotese", "provado_se"))
+        if arb.cita_vocabulario_chumbado(texto) or arb.parece_chumbado(a.get("arbitro")):
+            fora.append(a)
+    return fora
+
+
 def relatorio(regs: list[dict]) -> None:
     if not regs:
         print("nada rodado ainda.")
@@ -157,15 +222,18 @@ def relatorio(regs: list[dict]) -> None:
 
     print("\n" + "=" * 78)
     print("A REGUA: troca o PR, o agente continua funcionando?\n")
-    print(f"{'repo#pr':32} {'ling':6} {'acus':>5} {'conc':>6} {'arb':>7} {'seg':>6}")
+    print(f"{'repo#pr':32} {'ling':6} {'acus':>5} {'conc':>6} {'proc':>7} {'seg':>6}")
     print("-" * 78)
 
     for r in regs:
         a = r["acusacoes"]
-        arb = sum(1 for x in a if x.get("arbitro"))
+        # `proc`, nao `arb`: arbitro PREENCHIDO foi a metrica que nos enganou em
+        # 08/08 -- 94 de 94 preenchidos, 94 de 94 reciclando o desafio. O que
+        # conta e' arbitro que diz ONDE a regra esta escrita.
+        proc = sum(1 for x in a if arb.tem_procedencia(x.get("arbitro")))
         print(f"  {(r['repo'] + '#' + str(r['numero']))[:30]:30} "
               f"{(r.get('linguagem') or '?')[:6]:6} {len(a):5} "
-              f"{_concentracao(a):5.0%} {arb:3}/{len(a):<3} {r['segundos']:6}")
+              f"{_concentracao(a):5.0%} {proc:3}/{len(a):<3} {r['segundos']:6}")
 
     todas = [x for r in regs for x in r["acusacoes"]]
     print("-" * 78)
@@ -186,18 +254,40 @@ def relatorio(regs: list[dict]) -> None:
 
     n = len(regs)
     conc = sum(_concentracao(r["acusacoes"]) for r in regs) / n
-    arb_tot = sum(1 for x in todas if x.get("arbitro"))
+    citados = sum(1 for x in todas if arb.citado(x.get("arbitro")))
+    com_proc = sum(1 for x in todas if arb.tem_procedencia(x.get("arbitro")))
     print("\n--- veredito da regua ---")
     print(f"  PRs testados             {n}")
     print(f"  acusacoes por PR         {len(todas)/n:.1f} (Hack2L: 55)")
     print(f"  concentracao media       {conc:.0%} no arquivo mais citado (Hack2L: 98%)")
-    print(f"  com arbitro citado       {arb_tot}/{len(todas)} = {arb_tot/max(len(todas),1):.0%}"
-          f" (Hack2L: 69%)")
+    print(f"  arbitro citado           {citados}/{len(todas)} = "
+          f"{citados/max(len(todas),1):.0%}")
+    print(f"  arbitro COM PROCEDENCIA  {com_proc}/{len(todas)} = "
+          f"{com_proc/max(len(todas),1):.0%}  <- o numero que vale")
     cegas = [c for c in CATS if zerados[c] == n]
     print(f"  lentes cegas em TODOS    {cegas or 'nenhuma'}")
 
+    # ------------------------------------------------ o detector de 09/08
+    #
+    # A medicao que originou o conserto: 94 de 94 arbitros citavam os criterios
+    # do desafio da Vindler, em repositorios que nao tem nada a ver com ele.
+    # Aqui isso e' uma assercao, nao leitura de 209 acusacoes na madrugada.
+    contaminadas = _contaminadas(todas)
+    print("\n--- contaminacao (o achado de 08/08 a noite) ---")
+    if not contaminadas:
+        print(f"  ZERO de {len(todas)} acusacoes citam o vocabulario chumbado do")
+        print("  Hack2L (AC1-AC5, R1-R4, C1-C8, INV-*). Era 93 de 94 nos arbitros.")
+    else:
+        print(f"  🚨 {len(contaminadas)} de {len(todas)} acusacoes ainda citam")
+        print("  vocabulario do Hack2L. Se estes PRs sao de terceiros, o conserto")
+        print("  de 09/08 regrediu -- ver ACHADO_ARBITRO_CHUMBADO.md.")
+        for a in contaminadas[:8]:
+            print(f"    {a.get('id','?'):18} {str(a.get('hipotese',''))[:52]}")
+
     print("\n  Sinal ruim: alguma categoria vazia em todos os PRs, concentracao")
-    print("  acima de ~85% em todos, ou arbitro abaixo de ~40%.")
+    print("  acima de ~85% em todos, ou QUALQUER acusacao contaminada em repo")
+    print("  de terceiro. A taxa de arbitro CAIR e' esperado e correto: os 45%")
+    print("  de 08/08 mediam contaminacao, nao cobertura.")
 
 
 def main() -> None:
@@ -206,8 +296,15 @@ def main() -> None:
     args = [a for a in args if a != "--refazer"]
 
     if args and args[0] == "--resumo":
-        regs = [json.loads(p.read_text(encoding="utf-8"))
-                for p in sorted(SAIDA.glob("*.json"))]
+        # `controle_negativo.py` grava *_advogado.json na MESMA pasta, com outro
+        # formato (veredictos, nao acusacoes). Sem este filtro o --resumo
+        # explode em KeyError -- e --resumo e' justamente o caminho de reler
+        # sem gastar API, o que nao pode depender de a pasta estar limpa.
+        regs = [
+            r for r in (json.loads(p.read_text(encoding="utf-8"))
+                        for p in sorted(SAIDA.glob("*.json")))
+            if isinstance(r, dict) and "acusacoes" in r
+        ]
         relatorio(regs)
         return
 

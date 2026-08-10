@@ -57,9 +57,13 @@ def test_sem_artefato_nenhum_a_autodeclaracao_nao_sustenta_critica():
     o bloco inteiro era pulado e a palavra do advogado passava sem conferencia
     -- justo na unica via que, pelo CONTRATO, sustenta severidade alta.
     """
+    # Arbitro COM procedencia de proposito: assim a R1 esta fora de questao e o
+    # que sobra sob teste e' so o aterramento da R0b + o teto da R2. Com um
+    # arbitro fraco o teste passaria por SUSPEITA e nao provaria nada sobre R2.
     v = juiz.aplica_regras(
         {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
-        {"arbitro": "criterio 3"},
+        {"arbitro": {"regra": "o dono e' checado antes de devolver o recurso",
+                     "onde": "docs/REFERENCE_GUIDE.md:72"}},
         None,          # nenhum teste diferencial
         artefato_http=None,   # e nenhuma chamada registrada
     )
@@ -146,23 +150,94 @@ def test_categoria_sai_no_vocabulario_do_desafio():
 
 # ------------------------------------------------------------------- regra 1
 
-def test_critica_sem_arbitro_vira_suspeita():
+ARB_OK = {"regra": "quem nao e' dono nem destinatario nao pode ler",
+          "onde": "docs/REVIEW_TASK.md:43"}
+
+
+def test_critica_sem_arbitro_e_sem_prova_ponta_a_ponta_vira_suspeita():
+    """Nenhuma das duas vias: e' opiniao de modelo com teste em anexo."""
     v = juiz.aplica_regras(
         {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
         {"arbitro": None},
-        _art(),
+        _art(),          # artefato de teste, mas nenhuma chamada http registrada
     )
     assert v["severidade"] == "SUSPEITA"
 
 
-def test_critica_com_arbitro_sobrevive():
+def test_arbitro_sem_procedencia_nao_sustenta_critica():
+    """🚨 O aperto de 10/08. "AC2" nao diz onde a regra esta escrita, e depois
+    de 09/08 sabemos que na maioria das vezes ela nao estava escrita em lugar
+    nenhum -- eram os criterios do desafio aplicados a repo de terceiro."""
     v = juiz.aplica_regras(
         {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
-        {"arbitro": "criterio de aceite no 3"},
+        {"arbitro": "AC2"},
+        _art(),
+    )
+    assert v["severidade"] == "SUSPEITA"
+    assert any("sem arbitro com procedencia" in r for r in v["regras_aplicadas"])
+
+
+def test_arbitro_com_procedencia_passa_pela_r1():
+    """Passar pela R1 nao e' virar CRITICA: a R2 ainda cobra prova ponta a
+    ponta. O que se testa aqui e' que a R1 nao rebaixou para SUSPEITA."""
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": False},
+        {"arbitro": ARB_OK},
+        _art(),
+    )
+    assert v["severidade"] == "MEDIA"
+    assert not any("R1" in r for r in v["regras_aplicadas"])
+
+
+def test_critica_com_arbitro_e_prova_sobrevive():
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": ARB_OK},
         _art(),
         artefato_http=_http(),
     )
     assert v["severidade"] == "CRITICA"
+
+
+def test_prova_ponta_a_ponta_e_a_SEGUNDA_via_para_critica():
+    """🚨 A regra nova de 10/08, e o furo que ela fecha esta no parecer premiado.
+
+    O MESMO SQL injection saiu duas vezes na rodada final do Hack2L:
+
+        padroes_01   arbitro "C2"   -> CRITICA
+        correcao_01  arbitro null   -> SUSPEITA
+
+    O correcao_01 tinha prova diferencial (passa no base, falha no head) E
+    artefato http. A severidade nao seguiu a forca da prova, seguiu o acaso de
+    uma lente ter recitado um rotulo chumbado que a outra nao recitou -- rotulo
+    que, sabemos desde 09/08, nos mesmos inventamos.
+
+    Sem esta via, desacoplar o arbitro tornaria SUSPEITA todo achado provado em
+    todo repositorio que nao documenta os proprios criterios. Ou seja: quase
+    todos.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": None},
+        _art(),
+        artefato_http=_http(),
+    )
+    assert v["severidade"] == "CRITICA"
+    assert not any("R1" in r for r in v["regras_aplicadas"])
+
+
+def test_a_segunda_via_nao_aceita_a_palavra_do_advogado():
+    """A via de prova so vale aterrada no artefato (R0b). Se valesse a
+    autodeclaracao, teriamos trocado um rotulo reciclado por um LLM dizendo
+    'provei' -- que e' pior, porque parece evidencia."""
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA", "prova_ponta_a_ponta": True},
+        {"arbitro": None},
+        _art(),
+        artefato_http=_http(alcancou_a_api=False),
+    )
+    assert v["prova_ponta_a_ponta"] is False
+    assert v["severidade"] == "SUSPEITA"
 
 
 # ------------------------------------------------------------------- regra 2

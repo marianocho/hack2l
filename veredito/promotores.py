@@ -21,6 +21,7 @@ from pathlib import Path
 
 import anthropic
 
+from . import arbitro as arb
 from . import config as cfg
 
 SISTEMA = (
@@ -75,23 +76,43 @@ def _parse(texto: str, nome: str) -> tuple[list[dict], str | None]:
         a.setdefault("categoria", nome)
         a.setdefault("id", f"{nome}_{i:02d}")
         a.setdefault("confianca", "baixa")
-        a.setdefault("arbitro", None)
+        # Normaliza na fronteira, uma vez. O modelo pode devolver o objeto novo,
+        # uma sigla solta (habito antigo) ou lixo; a jusante ninguem deveria
+        # precisar saber disso.
+        a["arbitro"] = arb.normaliza(a.get("arbitro"))
         out.append(a)
     return out, None
 
 
-def _acusa_um(cliente, nome: str, lente: str, diff: str) -> dict:
+def _acusa_um(cliente, nome: str, lente: str, diff: str,
+              contexto: str | None = None) -> dict:
     inicio = time.time()
+    # Prefixo IDENTICO nas 6 chamadas -- o Haiku cacheia uma vez e as outras
+    # cinco leem a ~10%. O contexto do repo entra aqui, junto do diff, e nao
+    # dentro da lente: ele e' o mesmo para os seis promotores, entao cacheia
+    # igual; chumbado na lente, viajaria para dentro de todo diff do mundo.
+    prefixo = [
+        {"type": "text", "text": f"# Diff do PR sob revisao\n\n{diff}",
+         "cache_control": {"type": "ephemeral"}},
+    ]
+    if contexto:
+        prefixo.append({
+            "type": "text",
+            "text": (
+                "# Contexto do repositorio sob revisao\n\n"
+                "O que ESTE repositorio documenta sobre si mesmo. E' a unica "
+                "fonte legitima para o campo `arbitro`: cite a regra e o "
+                "arquivo:linha onde ela esta escrita. Nada aqui vale para outro "
+                f"repositorio.\n\n{contexto}"
+            ),
+            "cache_control": {"type": "ephemeral"},
+        })
     try:
         r = cliente.messages.create(
             model=cfg.MODEL_PROMOTOR,
             max_tokens=8000,
             system=SISTEMA,
-            messages=[{"role": "user", "content": [
-                # O diff vem ANTES da lente: prefixo identico nas 6 chamadas, o
-                # Haiku cacheia uma vez e as outras cinco leem a ~10%.
-                {"type": "text", "text": f"# Diff do PR sob revisao\n\n{diff}",
-                 "cache_control": {"type": "ephemeral"}},
+            messages=[{"role": "user", "content": prefixo + [
                 {"type": "text", "text": lente},
             ]}],
         )
@@ -112,22 +133,31 @@ def _acusa_um(cliente, nome: str, lente: str, diff: str) -> dict:
         return {"nome": nome, "acusacoes": [], "erro": f"{type(e).__name__}: {e}"}
 
 
-def acusa(diff: str) -> list[dict]:
-    """Os 6 promotores em paralelo. Grava a lista BRUTA antes de qualquer corte."""
+def acusa(diff: str, contexto: str | None = None) -> list[dict]:
+    """Os 6 promotores em paralelo. Grava a lista BRUTA antes de qualquer corte.
+
+    `contexto` e' o que o repositorio sob revisao documenta sobre si mesmo, com
+    procedencia. **Ele e' opcional de proposito**: sem ele os promotores acusam
+    igual e o `arbitro` sai `null`, que e' a resposta honesta para os
+    repositorios que nao documentam os proprios criterios -- ou seja, quase
+    todos. Ver `arbitro.py` para o numero que comprou essa decisao.
+    """
     cfg.prepara_pastas()
     cliente = anthropic.Anthropic(api_key=cfg.ANTHROPIC_API_KEY)
     ls = lentes()
     print(f"{len(ls)} promotores em paralelo, modelo {cfg.MODEL_PROMOTOR}")
+    print(f"contexto do repo: "
+          f"{f'{len(contexto)} chars' if contexto else 'NENHUM (arbitro sai null)'}")
 
     # A primeira SOZINHA, depois as outras cinco. Uma entrada de cache so fica
     # legivel depois que a primeira resposta comeca a chegar: disparando as 6
     # juntas, nenhuma le o que as outras estao escrevendo e todas pagam preco
     # cheio pelo diff. Medido -- 5 das 6 vieram com cache zero.
-    resultados = [_acusa_um(cliente, ls[0][0], ls[0][1], diff)]
+    resultados = [_acusa_um(cliente, ls[0][0], ls[0][1], diff, contexto)]
     if len(ls) > 1:
         with cf.ThreadPoolExecutor(max_workers=len(ls) - 1) as ex:
             resultados += list(ex.map(
-                lambda t: _acusa_um(cliente, t[0], t[1], diff), ls[1:]))
+                lambda t: _acusa_um(cliente, t[0], t[1], diff, contexto), ls[1:]))
 
     todas: list[dict] = []
     vistos: set[str] = set()
@@ -165,9 +195,29 @@ def _diagnostico(acusacoes: list[dict]) -> None:
     print("  por categoria:", dict(por_cat))
     arquivos = Counter(str(a.get("local", "?")).split(":")[0] for a in acusacoes)
     print(f"  arquivos tocados: {len(arquivos)} | top: {dict(arquivos.most_common(4))}")
-    sem_arbitro = sum(1 for a in acusacoes if not a.get("arbitro"))
-    print(f"  sem arbitro: {sem_arbitro}/{len(acusacoes)} "
-          f"(essas nao sustentam CRITICA -- regra R1 do juiz)")
+
+    # Tres numeros, nao um. O antigo "sem arbitro" contava o campo preenchido, e
+    # foi exatamente essa metrica que nos enganou: 94 de 94 preenchidos, 94 de 94
+    # reciclando os criterios do desafio. Preenchido nao e' o mesmo que valido.
+    com_proc = sum(1 for a in acusacoes if arb.tem_procedencia(a.get("arbitro")))
+    citado = sum(1 for a in acusacoes if arb.citado(a.get("arbitro")))
+    n = len(acusacoes)
+    print(f"  arbitro com procedencia: {com_proc}/{n} "
+          f"(so estes sustentam CRITICA por regra -- R1 do juiz)")
+    if citado > com_proc:
+        print(f"  arbitro citado sem dizer onde: {citado - com_proc} "
+              f"(nao contam; regra que ninguem localiza e' opiniao)")
+    chumbados = [a for a in acusacoes if arb.parece_chumbado(a.get("arbitro"))]
+    if chumbados:
+        print(f"  🚨 {len(chumbados)} arbitro(s) com vocabulario CHUMBADO "
+              f"({', '.join(sorted({str(c['arbitro']['regra'])[:24] for c in chumbados}))})"
+              f" -- se este repo nao e' o Hack2L, o conserto de 09/08 regrediu")
+    # Sem arbitro nao ha chave de dedup, e sem dedup a duplicata queima vaga de
+    # cota. Com `null` honesto virando a maioria, isto deixou de ser detalhe.
+    sem_chave = sum(1 for a in acusacoes if _chave_dedup(a) is None)
+    if sem_chave:
+        print(f"  sem chave de dedup: {sem_chave}/{n} "
+              f"(nao deduplicam -- conservador de proposito, ver deduplica())")
 
 
 _PESO = {"alta": 0, "media": 1, "baixa": 2}
@@ -179,11 +229,19 @@ def _chave_dedup(a: dict) -> tuple | None:
     Conservador de proposito: sem arbitro ou sem local, nao deduplica. Fundir
     dois achados distintos e' pior que gastar uma vaga a mais -- o desafio e'
     explicito em que deixar passar defeito real custa mais que falso alarme.
+
+    ⚠️ Efeito colateral do conserto de 09/08, medido e nao consertado aqui: com
+    `arbitro` honestamente `null` na maioria dos casos, esta chave devolve None
+    quase sempre e o dedup para de acontecer. E' um problema REAL (duplicata
+    ocupa vaga de cota), mas e' o buraco 2 do handoff -- "nao existe piso" -- e
+    afrouxar a chave para (local, categoria) fundiria achados distintos no mesmo
+    arquivo. Fica registrado no diagnostico em vez de ser resolvido as escondidas.
     """
-    local, arbitro = a.get("local"), a.get("arbitro")
-    if not local or not arbitro:
+    local = a.get("local")
+    chave_arb = arb.chave(a.get("arbitro"))
+    if not local or not chave_arb:
         return None
-    return (str(local).strip(), str(arbitro).strip())
+    return (str(local).strip(), chave_arb)
 
 
 def deduplica(acusacoes: list[dict]) -> list[dict]:

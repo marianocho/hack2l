@@ -15,6 +15,7 @@ import time
 
 import anthropic
 
+from . import arbitro
 from . import config as cfg
 from . import ferramentas
 
@@ -377,7 +378,10 @@ def _prompt_da_acusacao(a: dict) -> str:
         f"- categoria: {a.get('categoria', '?')}\n"
         f"- local: {a.get('local', '?')}\n"
         f"- hipotese: {a.get('hipotese', '?')}\n"
-        f"- arbitro: {a.get('arbitro') or 'nenhum citado'}\n"
+        # "nenhum citado" nao e' o mesmo que "nao ha regra violada", e o
+        # advogado precisa saber a diferenca: sem arbitro a prova tem que ficar
+        # de pe sozinha, e e' ela que vai sustentar a severidade (regra R1).
+        f"- arbitro: {arbitro.formata(a.get('arbitro'))}\n"
         f"- provado_se: {a.get('provado_se', '?')}\n\n"
         "Prove ou refute. Termine com o JSON."
     )

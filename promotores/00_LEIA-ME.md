@@ -5,10 +5,36 @@
 Seis prompts de promotor, texto puro. **O código lê esta pasta; não importa nada
 daqui.** Integração = commit. Cada `.md` é um prompt **completo e autônomo**.
 
-Escritos **sem ler o diff do PR** — só com o PRD, os critérios de aceite, as 8
-convenções e o mapa do app (tudo do lado limpo do muro de contaminação). A régua
-se mantém: troca o PR, os prompts continuam válidos, porque descrevem **classes
-de defeito**, não achados chumbados.
+## 🚨 Reescritos em 10/08 — o PRD saiu daqui
+
+A versão original destes prompts trazia o PRD, os critérios de aceite e as 8
+convenções **colados dentro da lente**. Parecia certo: era material do lado limpo
+do muro de contaminação, e nenhum deles cita achado do diff.
+
+Estava errado por outro motivo. Medido em 08/08 à noite, em 10 PRs reais de
+Flask, Django, httpx, Gin, Next.js e Requests: **94 acusações com árbitro
+preenchido, 94 citando os critérios de aceite do desafio da Vindler** — em
+repositórios que não têm nada a ver com ele. A lente de PRD nunca ficava vazia
+porque sempre tinha critério para conferir: os critérios estavam dentro dela.
+Não lia o repositório, **recitava o desafio**.
+
+E os rótulos `AC1`–`AC5`, `R1`–`R4`, `C1`–`C8` **nunca existiram nem no desafio**
+— `grep AC1 docs/` no repo deles não acha nada. Nós inventamos a numeração ao
+escrever estes prompts, e depois mandamos o modelo citá-la *verbatim*.
+
+Detalhe em `../ACHADO_ARBITRO_CHUMBADO.md`.
+
+**O que mudou:**
+
+| | antes | agora |
+|---|---|---|
+| PRD, critérios, convenções | colados na lente | `contexto/hack2l.md`, carregado em tempo de execução |
+| `arbitro` | sigla de lista fixa (`"AC2"`) | `{"regra": "...", "onde": "arquivo:linha"}` ou `null` |
+| lente sem contexto | recitava o desafio | acusa igual, com `arbitro: null` |
+
+A régua se mantém, e agora de verdade: troca o PR, os prompts continuam válidos,
+porque descrevem **classes de defeito** — e o que é específico de um repositório
+entra por fora.
 
 ## Os arquivos
 
@@ -29,6 +55,7 @@ bucket `seguranca_ia`.
 
 ```
 [ diff do PR + código em volta ]      <- prefixo grande, IGUAL nos 6
+[ contexto do repositório ]           <- opcional, também IGUAL nos 6
 [ conteúdo do arquivo .md ]           <- a lente, específica de cada um
 ```
 
@@ -37,15 +64,20 @@ idêntico nas 6 chamadas → o Opus/Haiku cacheia o diff uma vez e relê a ~10% 
 outras cinco. Conferir `cache_read_input_tokens > 0` na 1ª rodada; se vier zero,
 tem algo variando no prefixo (timestamp/ordem de dict).
 
+O contexto entra **no prefixo, não na lente** — ele é o mesmo para os seis, então
+cacheia igual. Dentro da lente ele voltaria a viajar para dentro de todo diff do
+mundo, que é o defeito que acabamos de consertar.
+
 Cada `.md` já traz o esquema de saída e o exemplo de formato. O modelo responde
 **um array JSON** e nada mais. Mantenha o `try/except` no parse com fallback pra
 saída crua — está no CONTRATO, e é o que impede a acusação de morrer por formato.
 
-## Esquema que os promotores emitem (o do CONTRATO, sem alterações)
+## Esquema que os promotores emitem
 
 ```json
 { "id": "...", "categoria": "...", "local": "arquivo:linha",
-  "hipotese": "uma linha", "arbitro": "AC2 | C3 | INV-... | null",
+  "hipotese": "uma linha",
+  "arbitro": {"regra": "...", "onde": "arquivo:linha"},
   "provado_se": "uma linha", "confianca": "alta|media|baixa" }
 ```
 
@@ -53,14 +85,31 @@ saída crua — está no CONTRATO, e é o que impede a acusação de morrer por 
 entre os 6 promotores rodando em paralelo. Se você preferir `acusacao_NN` global,
 renumere no merge — a única exigência da fronteira é que sejam únicos.
 
-## Vocabulário do campo `arbitro` (para as regras determinísticas do juiz)
+## O campo `arbitro` — não há mais vocabulário
 
-- **PRD:** `R1 R2 R3 R4 AC1 AC2 AC3 AC4 AC5`
-- **Isolamento/injection:** `INV-ISOLAMENTO`, `INV-INSTRUCAO-NAO-E-DADO`
-- **Padrões:** `C1`…`C8`
-- **Correção/performance:** em geral `null`
+Não existe lista de rótulos válidos, e é esse o conserto. O árbitro é uma **regra
+escrita no repositório sob revisão**, citada com o arquivo e a linha onde está.
+Sem conseguir apontar onde, é `null` — a resposta honesta, e a mais comum fora de
+um repositório que documente os próprios critérios.
 
-A regra do juiz "CRÍTICA sem árbitro → SUSPEITA" consome exatamente este campo.
+`veredito/arbitro.py` normaliza o campo na fronteira (aceita o objeto novo, a
+string das rodadas antigas, e lixo) e é quem responde a pergunta que as regras do
+juiz fazem: `tem_procedencia()`, não "o campo está preenchido".
+
+**A regra R1 do juiz mudou junto**, e em duas direções:
+
+- **mais estrita** — árbitro sem `onde` não sustenta CRÍTICA. "AC2" não diz onde
+  a regra mora, e a essa altura sabemos que na maioria das vezes ela não morava
+  em lugar nenhum.
+- **mais larga** — **prova ponta a ponta com artefato** virou uma segunda via
+  para CRÍTICA, independente de árbitro. Sem isso, desacoplar o árbitro tornaria
+  SUSPEITA todo achado provado em todo repositório que não documenta os próprios
+  critérios, ou seja, quase todos.
+
+O furo que a segunda via fecha está no parecer premiado: o **mesmo** SQL
+injection saiu como `padroes_01` (árbitro `"C2"`) → CRÍTICA e como `correcao_01`
+(árbitro `null`) → SUSPEITA, tendo os dois prova diferencial e artefato HTTP. A
+severidade seguiu o acaso de uma lente ter recitado um rótulo chumbado.
 
 ## ⚠️ Dois pontos de integração que preciso te passar
 
@@ -85,8 +134,23 @@ adicionei a 5ª categoria que o enunciado nomeia, ou você dá 1 vaga a performa
 (total 11), ou ela disputa só o curinga. Recomendo `performance: 1`. É uma linha
 no orquestrador — decide junto com o `TOP_N` das 12h, com a medição.
 
-## Contaminação
+## Contaminação — e a lição de 09/08
 
-Estes prompts não citam nenhum arquivo nem linha do diff. Os nomes de endpoint
-que aparecem (`/share`, `/shared-with-me`, `/shared/{id}`) vêm da **descrição do
-PR no `REVIEW_TASK.md`** — briefing público, não o diff. Nada aqui chumba achado.
+Estes prompts não citam nenhum arquivo nem linha do diff, e continuam não
+citando. **Mas essa nunca foi a única forma de contaminar.**
+
+O muro que construímos era contra chumbar *o achado*. O que passou por baixo dele
+foi chumbar *o repositório*: PRD, critérios, convenções, nomes de endpoint e até
+o mapa do app viajaram dentro da lente para dentro de Flask, Django e Gin. Nada
+disso era resposta do PR — e mesmo assim tornou a métrica de árbitro inútil e a
+lente de PRD incapaz de ver qualquer outro projeto.
+
+A regra que sobra, e que vale para o próximo prompt que alguém escrever aqui:
+
+> **Se a frase só faz sentido no desafio, ela não é lente — é contexto.** Vai
+> para `contexto/`, entra em tempo de execução, e some sozinha quando o
+> repositório é outro.
+
+`tests/test_prompts_limpos.py` verifica isso mecanicamente nos seis arquivos:
+vocabulário chumbado, marcas do app do desafio, e o contrato do árbitro presente
+em todas as lentes. Prompt regride em silêncio; asserção não.

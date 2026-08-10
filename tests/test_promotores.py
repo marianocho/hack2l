@@ -1,8 +1,19 @@
 """Deduplicacao antes do advogado. Nao bate na API.
 
 O que esta sob teste e' a regra de fusao, nao a chamada de modelo.
+
+⚠️ Desde 10/08 o `arbitro` e' um objeto com procedencia, nao uma sigla. Os
+literais aqui usam o formato novo de proposito: teste que so exercita o formato
+velho passa a medir uma coisa que o sistema nao produz mais.
 """
 from veredito.promotores import COTAS, _chave_dedup, deduplica, seleciona
+
+# Dois arbitros distintos, os dois com procedencia. Sao os que aparecem em
+# quase todo caso abaixo; o que muda entre os testes e' o local.
+DONO = {"regra": "quem nao e' dono nem destinatario nao pode ler",
+        "onde": "docs/REVIEW_TASK.md:43"}
+IDEMP = {"regra": "compartilhar duas vezes deixa exatamente um share",
+         "onde": "docs/REVIEW_TASK.md:55"}
 
 
 def acu(id_, cat, local, arbitro, conf="media", **extra):
@@ -13,22 +24,32 @@ def acu(id_, cat, local, arbitro, conf="media", **extra):
 # ------------------------------------------------------------------ a chave
 
 def test_mesmo_local_e_arbitro_e_a_mesma_acusacao():
-    a = acu("prd_01", "prd", "shares.py:89", "AC2")
-    b = acu("correcao_03", "correcao", "shares.py:89", "AC2")
+    a = acu("prd_01", "prd", "shares.py:89", DONO)
+    b = acu("correcao_03", "correcao", "shares.py:89", DONO)
     assert _chave_dedup(a) == _chave_dedup(b)
 
 
 def test_mesmo_local_arbitro_diferente_nao_funde():
-    """shares.py:89 apareceu com AC2 E com INV-INSTRUCAO na rodada real."""
-    a = acu("prd_01", "prd", "shares.py:89", "AC2")
-    b = acu("injection_01", "injection", "shares.py:89", "INV-INSTRUCAO-NAO-E-DADO")
+    """shares.py:89 apareceu com dois arbitros distintos na rodada real."""
+    a = acu("prd_01", "prd", "shares.py:89", DONO)
+    b = acu("injection_01", "injection", "shares.py:89", IDEMP)
     assert _chave_dedup(a) != _chave_dedup(b)
     assert len(deduplica([a, b])) == 2
 
 
 def test_espaco_em_volta_nao_cria_duplicata_falsa():
-    a = acu("a", "prd", " shares.py:89 ", "AC2")
-    b = acu("b", "correcao", "shares.py:89", " AC2 ")
+    a = acu("a", "prd", " shares.py:89 ", DONO)
+    b = acu("b", "correcao", "shares.py:89",
+            {"regra": f"  {DONO['regra']}  ", "onde": f" {DONO['onde']} "})
+    assert len(deduplica([a, b])) == 1
+
+
+def test_acusacao_de_rodada_antiga_ainda_deduplica():
+    """saidas/*.json de antes de 10/08 tem `arbitro` como string. Reprocessar
+    aquilo nao pode explodir nem parar de deduplicar."""
+    a = acu("a", "prd", "shares.py:89", "AC2")
+    b = acu("b", "correcao", "shares.py:89", {"regra": "AC2", "onde": None})
+    assert _chave_dedup(a) == _chave_dedup(b)
     assert len(deduplica([a, b])) == 1
 
 
@@ -41,16 +62,16 @@ def test_sem_arbitro_nunca_deduplica():
 
 
 def test_sem_local_nunca_deduplica():
-    a = acu("a", "prd", None, "AC2")
-    b = acu("b", "correcao", None, "AC2")
+    a = acu("a", "prd", None, DONO)
+    b = acu("b", "correcao", None, DONO)
     assert len(deduplica([a, b])) == 2
 
 
 # ------------------------------------------------------------------ a fusao
 
 def test_sobrevive_a_de_maior_confianca():
-    baixa = acu("baixa", "prd", "shares.py:54", "AC4", conf="baixa")
-    alta = acu("alta", "correcao", "shares.py:54", "AC4", conf="alta")
+    baixa = acu("baixa", "prd", "shares.py:54", DONO, conf="baixa")
+    alta = acu("alta", "correcao", "shares.py:54", DONO, conf="alta")
     r = deduplica([baixa, alta])
     assert len(r) == 1 and r[0]["id"] == "alta"
 
@@ -58,9 +79,9 @@ def test_sobrevive_a_de_maior_confianca():
 def test_as_fundidas_viram_duplicatas_e_nao_somem():
     """'3 promotores independentes apontaram isto' e' produto, nao limpeza."""
     r = deduplica([
-        acu("a", "prd", "shares.py:54", "AC4", conf="alta"),
-        acu("b", "correcao", "shares.py:54", "AC4"),
-        acu("c", "padroes", "shares.py:54", "AC4"),
+        acu("a", "prd", "shares.py:54", DONO, conf="alta"),
+        acu("b", "correcao", "shares.py:54", DONO),
+        acu("c", "padroes", "shares.py:54", DONO),
     ])
     assert len(r) == 1
     dups = r[0]["_duplicatas"]
@@ -70,7 +91,7 @@ def test_as_fundidas_viram_duplicatas_e_nao_somem():
 
 
 def test_acusacao_unica_nao_ganha_campo_duplicatas():
-    r = deduplica([acu("a", "prd", "shares.py:1", "AC1")])
+    r = deduplica([acu("a", "prd", "shares.py:1", DONO)])
     assert "_duplicatas" not in r[0]
 
 
@@ -83,13 +104,13 @@ def test_lista_vazia():
 def test_seleciona_deduplica_antes_da_cota():
     """Duplicata que ocupa vaga de cota tira a vaga de uma CATEGORIA inteira."""
     acusacoes = [
-        acu(f"inj_{i}", "injection", f"a.py:{i}", "INV-INSTRUCAO-NAO-E-DADO")
+        acu(f"inj_{i}", "injection", f"a.py:{i}", IDEMP)
         for i in range(3)
     ] + [
         # tres iguais: sem dedup comeriam vagas que sao de outras categorias
-        acu("prd_1", "prd", "b.py:9", "AC2", conf="alta"),
-        acu("cor_1", "correcao", "b.py:9", "AC2"),
-        acu("pad_1", "padroes", "b.py:9", "AC2"),
+        acu("prd_1", "prd", "b.py:9", DONO, conf="alta"),
+        acu("cor_1", "correcao", "b.py:9", DONO),
+        acu("pad_1", "padroes", "b.py:9", DONO),
         acu("perf_1", "performance", "c.py:3", None),
     ]
     r = seleciona(acusacoes, teto=10)
@@ -100,13 +121,17 @@ def test_seleciona_deduplica_antes_da_cota():
 
 
 def test_seleciona_respeita_o_teto_depois_do_dedup():
-    acusacoes = [acu(f"x{i}", "correcao", f"a.py:{i}", "AC3") for i in range(20)]
+    acusacoes = [acu(f"x{i}", "correcao", f"a.py:{i}", IDEMP) for i in range(20)]
     assert len(seleciona(acusacoes, teto=4)) == 4
 
 
 def test_cotas_continuam_valendo():
     """Regressao: o dedup nao pode ter quebrado a repartição por bucket."""
-    acusacoes = [acu(f"i{i}", "injection", f"a.py:{i}", f"INV-{i}") for i in range(9)]
+    acusacoes = [
+        acu(f"i{i}", "injection", f"a.py:{i}",
+            {"regra": f"regra {i}", "onde": f"docs/X.md:{i}"})
+        for i in range(9)
+    ]
     r = seleciona(acusacoes, teto=3, cotas=dict(COTAS))
     assert len(r) == 3
 
@@ -115,8 +140,8 @@ def test_cotas_continuam_valendo():
 
 def test_promotores_diferentes_marcam_corroborado():
     r = deduplica([
-        acu("prd_1", "prd", "a.py:9", "AC2", conf="alta"),
-        acu("cor_1", "correcao", "a.py:9", "AC2"),
+        acu("prd_1", "prd", "a.py:9", DONO, conf="alta"),
+        acu("cor_1", "correcao", "a.py:9", DONO),
     ])
     assert r[0]["_corroborado"] is True
 
@@ -128,12 +153,12 @@ def test_mesmo_promotor_repetindo_NAO_e_corroboracao():
     falso -- a flag existe para impedir esse slide.
     """
     r = deduplica([
-        acu("prd_1", "prd", "a.py:9", "AC2", conf="alta"),
-        acu("prd_2", "prd", "a.py:9", "AC2"),
+        acu("prd_1", "prd", "a.py:9", DONO, conf="alta"),
+        acu("prd_2", "prd", "a.py:9", DONO),
     ])
     assert r[0]["_corroborado"] is False
 
 
 def test_corroborado_ausente_quando_nao_ha_duplicata():
-    r = deduplica([acu("a", "prd", "a.py:1", "AC1")])
+    r = deduplica([acu("a", "prd", "a.py:1", DONO)])
     assert "_corroborado" not in r[0]

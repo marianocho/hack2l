@@ -26,7 +26,14 @@ ACUSACAO_DE_BANCADA = {
     "categoria": "vazamento_de_contexto",
     "local": "app/api/app/routers/",
     "hipotese": "um usuario consegue alcancar documento que nao e' dele",
-    "arbitro": "INV-ISOLAMENTO",
+    # Arbitro com procedencia, no formato de 10/08: a regra E onde ela esta
+    # escrita no repo do desafio. "INV-ISOLAMENTO", que estava aqui antes, era
+    # rotulo que nos inventamos -- `grep INV-ISOLAMENTO` no repo deles nao acha
+    # nada, e era exatamente esse habito que contaminou os 10 PRs reais.
+    "arbitro": {
+        "regra": "quem nao e' dono nem destinatario nao pode ler o documento",
+        "onde": "docs/REVIEW_TASK.md:43",
+    },
     "provado_se": "carol, que nao possui nada, alcanca dado de outro usuario",
     "confianca": "media",
 }
@@ -44,7 +51,9 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str) -> list[dict]:
                     if isinstance(a, dict)]
         except (OSError, json.JSONDecodeError) as e:
             print(f"  ilegivel ({e}), rodando os promotores", file=sys.stderr)
-    return promotores.acusa(diff)
+    # O contexto do repo entra aqui, em tempo de execucao, e nao chumbado nas
+    # lentes. Ausente = os promotores acusam igual e o arbitro sai `null`.
+    return promotores.acusa(diff, cfg.contexto_do_repo())
 
 
 def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -> dict:
