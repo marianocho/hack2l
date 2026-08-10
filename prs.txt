@@ -1,0 +1,21 @@
+# Candidatos para a regua. Variedade deliberada: linguagem, dominio, tamanho.
+# Rodar:  py -3.12 generaliza.py --lote prs.txt
+# Custo: ~$0,05 e ~40s por PR. Rate limit do GitHub sem auth: 60/hora.
+
+# --- Python, backend ---
+https://github.com/pallets/flask/pull/6095
+https://github.com/encode/httpx/pull/3773
+https://github.com/encode/httpx/pull/3730
+https://github.com/django/django/pull/21735
+
+# --- Go ---
+https://github.com/gin-gonic/gin/pull/4709
+https://github.com/gin-gonic/gin/pull/4707
+
+# --- TypeScript / frontend ---
+https://github.com/vercel/next.js/pull/96945
+https://github.com/vercel/next.js/pull/96932
+
+# --- controle negativo: PR de doc, o agente deve achar POUCO ---
+https://github.com/psf/requests/pull/7576
+https://github.com/django/django/pull/21725
