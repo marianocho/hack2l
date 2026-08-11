@@ -1,0 +1,128 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:32",
+    "hipotese": "SQL injection em lookup de usuário por email: string interpolada diretamente na query sem prepared statement",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "SELECT id FROM users WHERE email = '{email}' com email='x' OR 1=1--' devolve todos os IDs; ou email='admin@x.dev'; DROP TABLE users;--' executa comando",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:54-60",
+    "hipotese": "list_shared_with_me retorna documentos do próprio usuário, viola requisito 3",
+    "arbitro": {
+      "regra": "GET /shared-with-me devolve o que outros compartilharam com o usuário atual. Não pode devolver os documentos do próprio usuário",
+      "onde": "docs/REVIEW_TASK.md:45"
+    },
+    "provado_se": "Login como demo@hack2l.dev (dono de 3 documentos); GET /shared-with-me devolve 3 documentos com Document.owner_id == user.id, viola AND shared_with_user_id == user.id necessário",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:30",
+    "hipotese": "email do usuário é interpolado diretamente em SQL cru sem parametrização, abrindo brecha para SQL injection",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "email contendo `' OR '1'='1` consegue retornar usuários não esperados ou alterar comportamento da query",
+    "confianca": "alta",
+    "_duplicatas": [
+      {
+        "id": "padroes_01",
+        "categoria": "padroes",
+        "confianca": "alta",
+        "hipotese": "SQL cru em query de usuário em vez de usar ORM, violando convenção de persistência"
+      }
+    ],
+    "_corroborado": true
+  },
+  {
+    "id": "injection_02",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:56-60",
+    "hipotese": "query no endpoint /shared-with-me filtra por Document.owner_id == user.id, mas retorna Share records que o usuário controla; se documento for compartilhado COM o usuário, ele não é owner, então logica inverte o que deveria retornar",
+    "arbitro": {
+      "regra": "Um usuário pode ler um documento compartilhado com ele. GET /shared-with-me devolve o que outros compartilharam com o usuário atual. Não pode devolver os documentos do próprio usuário",
+      "onde": "docs/REVIEW_TASK.md:43,45"
+    },
+    "provado_se": "usuário B faz GET /shared-with-me após A compartilhar doc D com B; a query filtra por Document.owner_id == B.id, excluindo shares onde D.owner_id == A.id, retornando lista vazia quando deveria retornar D",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_03",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:82-92",
+    "hipotese": "endpoint /shared/{doc_id} não valida se o documento foi compartilhado especificamente COM o usuário atual; query SELECT Share retorna qualquer share do documento, sem filtrar por shared_with_user_id",
+    "arbitro": {
+      "regra": "Um usuário pode ler um documento que tem sido compartilhado com ele. Quem não é dono nem destinatário não pode ler o documento",
+      "onde": "docs/REVIEW_TASK.md:43"
+    },
+    "provado_se": "usuário C (não é A nem B) chama GET /shared/{doc_id} para documento que A compartilhou com B; sem filtro shared_with_user_id == current_user.id na query, C consegue ler o documento",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/api/app/routers/shares.py:37",
+    "hipotese": "SQL cru em query de contagem em vez de usar ORM, violando convenção de persistência",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "grep por text( em shares.py linha 37 mostra COUNT(*) cru; compara com padrão em documents.py que usa db.scalars(select())",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_03",
+    "categoria": "padroes",
+    "local": "app/api/app/routers/shares.py:44",
+    "hipotese": "lê MAX_SHARES_PER_DOC diretamente de os.getenv em vez de usar módulo de configuração",
+    "arbitro": {
+      "regra": "Configuração se lê só por settings em config.py, nunca os.getenv solto",
+      "onde": "docs/REFERENCE_GUIDE.md:69"
+    },
+    "provado_se": "grep por os.getenv em shares.py linha 44; compara com outros routers que não contêm os.getenv, indicando config centralizada",
+    "confianca": "alta"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/api/app/routers/shares.py:53-61",
+    "hipotese": "list_shared_with_me executa N+2 queries adicionais (uma por share para buscar Document, outra para buscar User) em lugar de um join com prefetch",
+    "arbitro": null,
+    "provado_se": "GET /shared-with-me com N shares dispara N queries de Document.get() + N queries de User.get() em loop; um select().join() resolveria em 1 query",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/api/app/routers/shares.py:29",
+    "hipotese": "share_document usa SQL cru em vez de ORM, violando convenção do repositório",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "grep 'text(f\"SELECT id FROM users' app/api/app/routers/shares.py retorna resultado",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/api/app/routers/shares.py:23-47",
+    "hipotese": "share_document não devolve schema Pydantic, apenas dict, violando convenção",
+    "arbitro": {
+      "regra": "Todo endpoint devolve um schema Pydantic de schemas.py",
+      "onde": "docs/REFERENCE_GUIDE.md:71"
+    },
+    "provado_se": "POST /documents/1/share retorna dict sem wrapper Pydantic; schemas.py não contém ShareResult",
+    "confianca": "alta"
+  }
+]
