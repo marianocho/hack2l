@@ -48,6 +48,69 @@ def _bucket(categoria: str) -> str:
     return BUCKET.get(categoria, categoria)
 
 
+def mede_diff(diff: str) -> tuple[int, int]:
+    """(linhas alteradas, arquivos tocados) de um diff unificado."""
+    linhas = arquivos = 0
+    for l in diff.splitlines():
+        if l.startswith("+++") or l.startswith("---"):
+            continue
+        if l.startswith("diff --git"):
+            arquivos += 1
+        elif l.startswith("+") or l.startswith("-"):
+            linhas += 1
+    return linhas, arquivos
+
+
+# Teto de acusacoes POR LENTE, em funcao do tamanho do diff.
+#
+# 🚨 Medido em 11/08 nos 10 PRs reais: a contagem de acusacoes e' praticamente
+# CONSTANTE (7 a 29) enquanto o diff varia 400x (1 a 389 linhas). A taxa por 10
+# linhas vai de 130 (django#21735, UMA linha, 13 acusacoes) a 0,7 (next.js, 389
+# linhas, 29 acusacoes) -- 185x de diferenca. Os promotores nao escalam: eles
+# produzem "um punhado" e pronto.
+#
+# A formula e' linear no pe e limitada no teto, de proposito: ela so MORDE nos
+# PRs minusculos, que e' onde o comportamento atual e' absurdo. Conferida
+# contra os 10:
+#
+#   1 linha  -> 1/lente (6 no total)   hoje: 13   MORDE
+#   2 linhas -> 1/lente                hoje:  8   MORDE
+#   13       -> 3/lente (18)           hoje: 15   nao morde
+#   51       -> 9/lente (54)           hoje: 20   nao morde
+#   389      -> 10/lente (teto)        hoje: 29   nao morde
+#
+# ⚠️ Isto NAO e' pedir seletividade -- a regra do doc continua valendo, e a
+# diferenca importa. "Reporte apenas problemas relevantes" faz o modelo aplicar
+# filtro de qualidade e engolir achado real. "Este diff muda 1 linha; emita ate
+# 1" e' calibracao de escala, e so aperta onde 13 acusacoes para uma linha ja
+# era ruido. Em PR de tamanho normal o teto nem encosta.
+TETO_LENTE_MIN = 1
+TETO_LENTE_MAX = 10
+
+
+def orcamento_por_lente(diff: str) -> int:
+    linhas, _ = mede_diff(diff)
+    bruto = -(-(3 + linhas) // 6)          # ceil((3 + linhas) / 6)
+    return max(TETO_LENTE_MIN, min(TETO_LENTE_MAX, bruto))
+
+
+def _bloco_orcamento(diff: str) -> str:
+    linhas, arquivos = mede_diff(diff)
+    teto = orcamento_por_lente(diff)
+    return (
+        "# Tamanho da mudanca sob revisao\n\n"
+        f"Este diff altera **{linhas} linha(s)** em **{arquivos} arquivo(s)**.\n\n"
+        f"**Emita no maximo {teto} acusacao(oes)** nesta lente.\n\n"
+        "Isto e' calibracao de escala, nao filtro de relevancia: uma mudanca "
+        "pequena tem menos superficie para esconder defeito, entao levantar "
+        "dezenas de hipoteses sobre ela e' ruido que enterra o achado real e "
+        "queima o orcamento de quem vai testar. Continue sem filtrar por "
+        "gravidade ou por 'quao importante parece' -- so escolha as mais "
+        "plausiveis se estourar o teto. Se a mudanca nao tem nada da sua lente, "
+        "**devolver um array vazio e' resposta correta.**"
+    )
+
+
 def lentes() -> list[tuple[str, str]]:
     """(nome, texto) de cada promotor. 00_LEIA-ME e' documentacao, nao lente."""
     pasta = cfg.RAIZ / "promotores"
@@ -94,6 +157,8 @@ def _acusa_um(cliente, nome: str, lente: str, diff: str,
     prefixo = [
         {"type": "text", "text": f"# Diff do PR sob revisao\n\n{diff}",
          "cache_control": {"type": "ephemeral"}},
+        # Derivado do diff, entao identico nas 6 chamadas -- cacheia junto.
+        {"type": "text", "text": _bloco_orcamento(diff)},
     ]
     if contexto:
         prefixo.append({
@@ -121,6 +186,14 @@ def _acusa_um(cliente, nome: str, lente: str, diff: str,
             return {"nome": nome, "acusacoes": [], "erro": "recusa do classificador"}
         texto = "\n".join(b.text for b in r.content if getattr(b, "type", None) == "text")
         acusacoes, erro = _parse(texto, nome)
+        # Anteparo do orcamento. O prompt ja pediu o teto; isto pega o caso de o
+        # modelo ignorar. MARCA, nao apaga: a lista bruta continua completa em
+        # disco, e quem desprioriza e' `seleciona` -- nada some em silencio.
+        teto = orcamento_por_lente(diff)
+        if len(acusacoes) > teto:
+            acusacoes.sort(key=lambda a: _PESO.get(a.get("confianca"), 3))
+            for i, a in enumerate(acusacoes[teto:], 1):
+                a["_excedente_orcamento"] = teto + i
         return {
             "nome": nome, "acusacoes": acusacoes, "erro": erro,
             "saida_crua": texto if erro else None,
@@ -347,6 +420,11 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
     escolhidas, sobra, excedente = [], [], []
     por_local: Counter = Counter()
     for a in ordenadas:
+        # Estourou o orcamento da lente: vai para o fim, junto das de local
+        # concentrado. Mesmo tratamento, mesma razao -- despriorizar, nao sumir.
+        if a.get("_excedente_orcamento"):
+            excedente.append(a)
+            continue
         loc = _local_chave(a)
         if loc and por_local[loc] >= max_por_local:
             a["_excedente_no_local"] = por_local[loc] + 1

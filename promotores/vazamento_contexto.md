@@ -63,6 +63,10 @@ um, ele é o centro da sua revisão.
 - **Uma hipótese por acusação.** Não funda, não deduplique.
 - **`hipotese` é UMA linha.**
 - Você **não testa**. Diz em `provado_se` a chamada exata que prova.
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade: mudança pequena tem
+  menos superfície para esconder defeito. Se a mudança não tem nada da sua
+  lente, **array vazio é resposta correta** — não force.
 - **Se o diff não tem superfície de autorização nenhuma** (não há principais, não
   há recursos com dono), poucas acusações — ou nenhuma — é a resposta correta.
   Não invente fronteira onde o sistema não tem uma.

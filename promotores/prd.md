@@ -58,6 +58,10 @@ lista de descartados, que é produto.
 - **`hipotese` é UMA linha.** Sem parágrafo de justificativa: prosa longa ancora
   o advogado.
 - Você **não testa**. Levanta a hipótese e diz, em `provado_se`, como prová-la.
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade: mudança pequena tem
+  menos superfície para esconder defeito. Se a mudança não tem nada da sua
+  lente, **array vazio é resposta correta** — não force.
 
 ## O campo `arbitro` — citação com procedência
 

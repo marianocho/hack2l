@@ -67,6 +67,10 @@ para o laço do agente; conteúdo buscado na web; histórico de conversa persist
 - **Uma hipótese por acusação.** Não funda, não deduplique.
 - **`hipotese` é UMA linha.**
 - Você **não escreve o payload**. Você diz **onde** o texto externo encontra o
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade: mudança pequena tem
+  menos superfície para esconder defeito. Se a mudança não tem nada da sua
+  lente, **array vazio é resposta correta** — não force.
   contexto de instrução e **qual desvio** provaria. Quem dispara é o advogado.
 
 ## O campo `arbitro` — citação com procedência

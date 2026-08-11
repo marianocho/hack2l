@@ -326,6 +326,53 @@ conserto do httpx.** O conserto do httpx é o piso, e continua aberto.
 **Leitura corrigida da metade A: os 5 sobreviventes são ~5 alegações distintas,
 não 2.** A afirmação anterior subestimava o falso positivo.
 
+### O piso (11/08) — o conserto de verdade
+
+Medido: **a contagem de acusações era praticamente constante** (7 a 29)
+enquanto o diff variava 400× (1 a 389 linhas). A taxa por 10 linhas ia de
+**130** (`django#21735`, uma linha, 13 acusações) a **0,7** (`next.js`, 389
+linhas) — **185× de amplitude**. Os promotores não escalavam: produziam "um
+punhado" e pronto.
+
+Conserto em duas camadas:
+
+1. **`promotores.orcamento_por_lente(diff)`** calcula um teto de
+   `ceil((3 + linhas) / 6)`, limitado a [1, 10]. Linear no pé, limitado no topo
+   — só morde nos PRs minúsculos, que é onde o comportamento era absurdo.
+2. **O bloco "Tamanho da mudança"** entra no prefixo cacheado dizendo ao modelo
+   quantas linhas mudaram e qual o teto, com `array vazio é resposta correta`
+   explícito. As 6 lentes referenciam esse bloco.
+
+⚠️ **Isto não é pedir seletividade**, e a distinção importa: *"reporte apenas
+problemas relevantes"* faz o modelo aplicar filtro de qualidade e engolir achado
+real; *"este diff muda 1 linha, emita até 1"* é calibração de escala. Em PR de
+tamanho normal o teto nem encosta.
+
+**Medido no lote inteiro, depois:**
+
+| | antes | depois |
+|---|---|---|
+| PRs pequenos (≤5 linhas) | 36 acusações | **15** (−58%) |
+| PRs grandes (≥51 linhas) | 70 | **88** (+26%) |
+| amplitude da taxa | **185×** | **44×** |
+| contaminação | 0 | **0** (segue) |
+
+Os grandes **subirem** é o comportamento desejado — é o teto dizendo que ali há
+superfície de sobra. O `django#21735` foi de **13 para 4**, e três lentes
+devolveram **zero**, que é a resposta certa para uma linha num helper de
+tradução.
+
+**Não está resolvido:** 44× ainda é muito. PR pequeno continua sobrecoberto
+(40 acusações por 10 linhas contra 0,9 do next.js). O piso melhorou 4×, não
+fechou.
+
+⚠️ **Efeito colateral a vigiar:** a lente de `injection` agora fica vazia nos
+**10** PRs, e a heurística da própria régua marca isso como sinal ruim. Neste
+caso é correto — nenhum dos 10 usa modelo de linguagem, então silêncio é a
+resposta certa, e antes ela produzia 2 acusações de ruído num conserto de link.
+Mas a heurística precisa dessa ressalva, senão o próximo a ler o relatório
+conserta o que não está quebrado.
+
 ### 2. O advogado disse PROVADO com todas as ferramentas falhando
 
 Na rodada com a worktree corrompida, ele escreveu no próprio motivo *"as

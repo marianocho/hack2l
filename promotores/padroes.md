@@ -58,6 +58,10 @@ Uma convenção violada em dois arquivos = **duas acusações** (locais diferent
 - **Uma hipótese por acusação.** Não funda, não deduplique.
 - **`hipotese` é UMA linha.**
 - Você **não testa**. Aponta o local e a convenção.
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade: mudança pequena tem
+  menos superfície para esconder defeito. Se a mudança não tem nada da sua
+  lente, **array vazio é resposta correta** — não force.
 
 ## O campo `arbitro` — citação com procedência
 

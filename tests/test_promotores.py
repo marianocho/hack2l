@@ -223,3 +223,53 @@ def test_sem_local_nao_entra_no_limite():
     r = seleciona(a, teto=10)
     assert len(r) == 4
     assert not any(x.get("_excedente_no_local") for x in r)
+
+
+# ------------------------------------------ orcamento por tamanho (11/08)
+
+from veredito.promotores import mede_diff, orcamento_por_lente, _bloco_orcamento
+
+
+def _diff(n_linhas: int, n_arquivos: int = 1) -> str:
+    partes = []
+    for f in range(n_arquivos):
+        partes += [f"diff --git a/f{f}.py b/f{f}.py", "--- a/f.py", "+++ b/f.py", "@@ -1 +1 @@"]
+    partes += ["+linha alterada"] * n_linhas
+    return "\n".join(partes)
+
+
+def test_mede_diff_ignora_cabecalho():
+    """+++ e --- sao cabecalho, nao mudanca. Contar errado inflaria o teto."""
+    linhas, arquivos = mede_diff(_diff(5, n_arquivos=2))
+    assert linhas == 5 and arquivos == 2
+
+
+def test_pr_de_uma_linha_ganha_o_teto_minimo():
+    """django#21735: 1 linha alterada gerou 13 acusacoes. E' o caso que motivou."""
+    assert orcamento_por_lente(_diff(1)) == 1
+
+
+def test_pr_grande_nao_e_estrangulado():
+    """next.js#96932: 389 linhas, 29 acusacoes -- o teto nao pode morder ai."""
+    assert orcamento_por_lente(_diff(389)) == 10
+    assert orcamento_por_lente(_diff(51)) * 6 > 20, "flask#6095 tinha 20; nao pode apertar"
+
+
+def test_o_teto_cresce_com_o_diff():
+    tetos = [orcamento_por_lente(_diff(n)) for n in (1, 13, 51, 200)]
+    assert tetos == sorted(tetos) and len(set(tetos)) > 1
+
+
+def test_o_bloco_diz_o_numero_ao_modelo():
+    b = _bloco_orcamento(_diff(1))
+    assert "1 linha" in b and "no maximo 1" in b
+    assert "array vazio" in b, "silencio precisa ser resposta legitima"
+
+
+def test_excedente_de_orcamento_e_despriorizado_nao_apagado():
+    a = [acu(f"x{i}", "correcao", f"a.py:{i}", None) for i in range(4)]
+    for x in a[2:]:
+        x["_excedente_orcamento"] = 3
+    r = seleciona(a, teto=10)
+    assert len(r) == 4, "acusacao sumiu por causa do orcamento"
+    assert all(x.get("_excedente_orcamento") for x in r[-2:])

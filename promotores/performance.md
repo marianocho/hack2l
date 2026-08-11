@@ -38,8 +38,9 @@ promotor a cobre.
 - **Uma hipótese por acusação.** Não funda, não deduplique.
 - **`hipotese` é UMA linha.**
 - Você **não testa**. Diz em `provado_se` o custo observável.
-- **Proporcione ao tamanho da mudança.** Diff mínimo raramente esconde problema
-  de escala; forçar acusações ali é ruído que queima o orçamento do advogado.
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade. Se a mudança não tem
+  nada da sua lente, **array vazio é resposta correta** — não force.
 
 ## O campo `arbitro` — citação com procedência
 

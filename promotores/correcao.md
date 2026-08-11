@@ -47,10 +47,9 @@ justamente os que ninguém escreveu.
 - **Uma hipótese por acusação.** Não funda, não deduplique.
 - **`hipotese` é UMA linha.**
 - Você **não testa**. Diz em `provado_se` o teste ou a chamada que prova.
-- **Proporcione ao tamanho da mudança.** Um diff de uma linha não esconde vinte
-  defeitos; levantar vinte ali não é cobertura, é ruído que enterra o achado real
-  e queima o orçamento do advogado. Diff grande, muitas hipóteses; diff mínimo,
-  poucas e boas.
+- **Respeite o teto de acusações** informado no bloco "Tamanho da mudança".
+  Ele é calibração de escala, não filtro de gravidade. Se a mudança não tem
+  nada da sua lente, **array vazio é resposta correta** — não force.
 
 ## O campo `arbitro` — citação com procedência
 
