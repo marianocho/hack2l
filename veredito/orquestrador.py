@@ -15,7 +15,8 @@ import json
 import sys
 import time
 
-from . import advogado, config as cfg, juiz, llm_alvo, promotores, tracing
+from . import (advogado, config as cfg, ferramentas, juiz, llm_alvo,
+               promotores, tracing)
 
 # Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
 # ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
@@ -62,6 +63,24 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -
         raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
 
     inicio = time.time()
+
+    # PRE-VOO. Segundos, uma vez, antes de gastar ~US$0,07 por acusacao numa
+    # rodada condenada. Em 10/08 a worktree estava corrompida e o advogado
+    # devolveu PROVADO com TODAS as chamadas falhando -- infraestrutura podre
+    # virando veredito positivo. A R3b do juiz pega depois; isto pega antes.
+    sonda = ferramentas.autoteste()
+    for nome, res in sonda["ferramentas"].items():
+        print(f"  {'ok ' if res['ok'] else 'FALHOU'} {nome:16} {res['detalhe'][:90]}")
+    if not sonda["ok"]:
+        raise SystemExit(
+            "pre-voo falhou nas ferramentas essenciais "
+            f"({', '.join(ferramentas.ESSENCIAIS)}). A rodada nao comeca: sem "
+            "leitura nao ha observacao, e veredito sem observacao e' opiniao.\n"
+            "Worktree parcial e' a causa comum -- apague os diretorios em "
+            "WORKTREES e rode `git worktree prune` no repo do desafio."
+        )
+    if not sonda["ferramentas"].get("http_request", {}).get("ok"):
+        print("  ⚠ app fora do ar: sem prova ponta a ponta, nada passa de MEDIA (R2)")
 
     # Mede o LLM alvo UMA vez e grava. O juiz roda depois, possivelmente em
     # outro processo, e a decisao dele nao pode depender de sondar o app de novo.

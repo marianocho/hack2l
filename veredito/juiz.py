@@ -128,6 +128,42 @@ def aplica_regras(
             v["regras_aplicadas"] = aplicadas
             return v
 
+    # REGRA 3b -- veredito com ZERO observacao nao e' veredito.
+    #
+    # 🚨 O caso real de 10/08: com a worktree corrompida, o advogado chamou
+    # read_file/grep, TODA chamada voltou RuntimeError, e ele devolveu PROVADO
+    # -- duas vezes -- escrevendo no proprio motivo que as ferramentas tinham
+    # falhado. Ele sabia, e concluiu assim mesmo.
+    #
+    # A R3 nao pegava porque ela olha `artefato.erro`, e verificacao so estatica
+    # nao gera artefato. Mesmo formato de furo da R0b, que morava dentro de
+    # `if artefato is not None` e ficava muda justo onde nao havia artefato.
+    #
+    # Isto nao e' restricao nova, e' a regra central aplicada: "nao argumenta,
+    # TESTA". Veredito sem nenhuma observacao e' opiniao de modelo -- o que o
+    # produto existe para barrar. Vale nos dois sentidos: falsa condenacao
+    # (PROVADO) e falsa absolvicao (REFUTADO) tem a mesma causa.
+    #
+    # ⚠️ AUSENTE nao e' ZERO. Rodada gravada antes de 11/08 nao tem o campo;
+    # tratar ausencia como zero viraria todo reprocessamento em inconclusivo,
+    # inventando um problema que nao houve.
+    ok = v.get("ferramentas_ok")
+    if ok == 0 and v.get("veredito") in ("PROVADO", "REFUTADO"):
+        erros = v.get("ferramentas_erro") or 0
+        antes = v["veredito"]
+        v["veredito"] = "INCONCLUSIVO"
+        v["severidade"] = "SUSPEITA"
+        v["motivo"] = (
+            f"nenhuma ferramenta funcionou ({erros} chamada(s) com erro), entao "
+            f"nao houve observacao que sustentasse {antes}. "
+            + (v.get("motivo") or "")
+        ).strip()
+        aplicadas.append(
+            f"R3b: {antes} com zero ferramenta bem-sucedida -> INCONCLUSIVO"
+        )
+        v["regras_aplicadas"] = aplicadas
+        return v
+
     # REGRA 3 (antes das de severidade: execucao falha encerra o assunto)
     if v.get("veredito") == "INCONCLUSIVO" or (artefato or {}).get("erro"):
         v["veredito"] = "INCONCLUSIVO"

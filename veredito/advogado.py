@@ -257,6 +257,9 @@ def julga(acusacao: dict, diff: str) -> dict:
         "id": id_, "veredito": "INCONCLUSIVO", "severidade": "BAIXA",
         "prova_ponta_a_ponta": False, "motivo": "o loop nao chegou a concluir",
         "voltas": 0, "erro": None,
+        # Alimentam a R3b do juiz. Sao contagem de OBSERVACAO, nao de tentativa:
+        # o advogado ja disse PROVADO com as cinco chamadas falhando.
+        "ferramentas_ok": 0, "ferramentas_erro": 0,
     }
 
     try:
@@ -310,6 +313,9 @@ def julga(acusacao: dict, diff: str) -> dict:
             resposta_tool = runner.generate_tool_call_response()
             if resposta_tool is not None:
                 historico.append(resposta_tool)
+                ok, erro = _conta_ferramentas(resposta_tool)
+                v["ferramentas_ok"] += ok
+                v["ferramentas_erro"] += erro
 
             # stop_reason ANTES de content, sempre. Uma recusa vem como HTTP 200
             # com content vazio, e ler content[0] vira IndexError no meio da
@@ -370,6 +376,43 @@ def julga(acusacao: dict, diff: str) -> dict:
     v.update(uso)
     v["segundos"] = round(time.time() - inicio, 1)
     return v
+
+
+def _texto_do_resultado(bloco) -> str:
+    """O conteudo de um tool_result, que vem string ou lista de blocos."""
+    c = bloco.get("content") if isinstance(bloco, dict) else None
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return " ".join(
+            b.get("text", "") if isinstance(b, dict) else str(b) for b in c
+        )
+    return "" if c is None else str(c)
+
+
+def _conta_ferramentas(resposta_tool) -> tuple[int, int]:
+    """(sucessos, erros) numa resposta de ferramenta. Nunca levanta.
+
+    ⚠️ A deteccao e' por PREFIXO DE STRING, e isso e' fragil de propósito
+    reconhecido: as ferramentas devolvem `f"ERRO ao ler {caminho}: ..."` em vez
+    de estado estruturado, porque a assinatura que o `@beta_tool` expoe ao
+    modelo e' `-> str`. Uma ferramenta que falhe sem esse prefixo passa batida.
+    O conserto de verdade e' resultado estruturado; fica anotado como item
+    separado, e ate la e' melhor esta guarda que nenhuma.
+    """
+    conteudo = resposta_tool.get("content") if isinstance(resposta_tool, dict) else None
+    if not isinstance(conteudo, list):
+        return 0, 0
+    ok = erro = 0
+    for bloco in conteudo:
+        if not isinstance(bloco, dict) or bloco.get("type") != "tool_result":
+            continue
+        texto = _texto_do_resultado(bloco).lstrip()
+        if bloco.get("is_error") or texto.startswith("ERRO"):
+            erro += 1
+        else:
+            ok += 1
+    return ok, erro
 
 
 def _prompt_da_acusacao(a: dict) -> str:

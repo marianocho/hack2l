@@ -383,3 +383,71 @@ def test_parecer_de_condenado_cita_os_dois_commits():
                                  acusacoes, artefatos)
     assert "32a5241" in texto and "1dd2e5c" in texto
     assert "CONSERTO SUGERIDO" in texto
+
+
+# ------------------------------------------------------- regra 3b (11/08)
+
+def test_provado_com_TODAS_as_ferramentas_falhando_e_inconclusivo():
+    """🚨 O caso real de 10/08, e o furo que ele expos.
+
+    Numa rodada com a worktree corrompida, o advogado chamou read_file/grep,
+    TODA chamada voltou RuntimeError, e ele devolveu PROVADO -- duas vezes --
+    escrevendo no proprio motivo que as ferramentas falharam. Ele sabia.
+
+    A R3 nao pegava: ela olha `artefato.erro`, e numa verificacao so estatica
+    nao existe artefato. Mesmo formato de furo da R0b, que morava dentro de
+    `if artefato is not None` e ficava muda onde nao havia artefato.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA",
+         "prova_ponta_a_ponta": False, "ferramentas_ok": 0, "ferramentas_erro": 7,
+         "motivo": "as ferramentas de leitura/grep falharam (worktree corrompida)"},
+        {"arbitro": None}, None,
+    )
+    assert v["veredito"] == "INCONCLUSIVO"
+    assert v["severidade"] == "SUSPEITA"
+    assert any("R3b" in r for r in v["regras_aplicadas"])
+
+
+def test_refutado_com_todas_as_ferramentas_falhando_tambem_e_inconclusivo():
+    """Falsa condenacao e falsa absolvicao tem a mesma causa: zero observacao."""
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "REFUTADO", "severidade": "BAIXA",
+         "ferramentas_ok": 0, "ferramentas_erro": 3, "motivo": "nao se sustenta"},
+        {"arbitro": None}, None,
+    )
+    assert v["veredito"] == "INCONCLUSIVO"
+
+
+def test_uma_ferramenta_que_funcionou_basta_para_o_veredito_valer():
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "REFUTADO", "severidade": "BAIXA",
+         "ferramentas_ok": 1, "ferramentas_erro": 4, "motivo": "li o codigo, e falso"},
+        {"arbitro": None}, None,
+    )
+    assert v["veredito"] == "REFUTADO"
+
+
+def test_veredicto_antigo_sem_o_campo_NAO_vira_inconclusivo():
+    """Ausencia do campo nao e' o mesmo que zero.
+
+    saidas/*.json de antes de 11/08 nao tem `ferramentas_ok`. Tratar ausente
+    como zero viraria toda rodada antiga em inconclusiva no reprocessamento --
+    inventando um problema que nao houve.
+    """
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "PROVADO", "severidade": "CRITICA",
+         "prova_ponta_a_ponta": True},
+        {"arbitro": None}, _art(), artefato_http=_http(),
+    )
+    assert v["veredito"] == "PROVADO"
+
+
+def test_inconclusivo_com_zero_ferramentas_continua_inconclusivo_sem_ruido():
+    v = juiz.aplica_regras(
+        {"id": "a1", "veredito": "INCONCLUSIVO", "ferramentas_ok": 0,
+         "motivo": "docker fora"},
+        {"arbitro": None}, None,
+    )
+    assert v["veredito"] == "INCONCLUSIVO"
+    assert sum("R3b" in r for r in v["regras_aplicadas"]) <= 1

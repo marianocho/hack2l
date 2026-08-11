@@ -145,3 +145,44 @@ def test_recusa_sem_sinal_nenhum_admite_que_nao_sabe():
 def test_recusa_sem_stop_details_nao_levanta():
     msg = SimpleNamespace(stop_reason="refusal", stop_details=None, usage=None)
     assert adv._diagnostico_da_recusa(msg).startswith("recusa do classificador")
+
+
+# --------------------------------------- contagem de ferramentas (11/08)
+
+from veredito.advogado import _conta_ferramentas
+
+
+def _res(*textos, is_error=None):
+    return {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": f"t{i}", "content": t,
+         **({"is_error": is_error} if is_error is not None else {})}
+        for i, t in enumerate(textos)
+    ]}
+
+
+def test_conta_sucesso_e_erro_pelo_prefixo():
+    ok, erro = _conta_ferramentas(_res("    1 | import os", "ERRO ao ler x.py: RuntimeError"))
+    assert (ok, erro) == (1, 1)
+
+
+def test_o_caso_real_todas_falhando():
+    """A rodada de 10/08: worktree corrompida, 5 chamadas, 5 RuntimeError."""
+    ok, erro = _conta_ferramentas(_res(*["ERRO ao ler shares.py: RuntimeError"] * 5))
+    assert (ok, erro) == (0, 5)
+
+
+def test_is_error_do_sdk_tambem_conta():
+    """Se o SDK marcar o bloco, nao depende do nosso prefixo de string."""
+    ok, erro = _conta_ferramentas(_res("qualquer coisa", is_error=True))
+    assert (ok, erro) == (0, 1)
+
+
+def test_conteudo_em_lista_de_blocos():
+    r = {"role": "user", "content": [
+        {"type": "tool_result", "content": [{"type": "text", "text": "ERRO ao ler"}]}]}
+    assert _conta_ferramentas(r) == (0, 1)
+
+
+def test_resposta_sem_ferramenta_nao_conta_nada():
+    assert _conta_ferramentas(None) == (0, 0)
+    assert _conta_ferramentas({"role": "user", "content": "texto"}) == (0, 0)

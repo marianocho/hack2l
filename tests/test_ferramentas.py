@@ -375,3 +375,33 @@ def test_worktree_do_teste_fica_limpo_depois():
         sujeira = f.cfg.WORKTREES / lado / "app" / "api" / "tests" / "test_selftest_limpa.py"
         assert not sujeira.exists(), f"sobrou {sujeira}"
 
+
+
+# ------------------------------------------------------- pre-voo (11/08)
+
+def test_autoteste_reporta_cada_ferramenta():
+    """Nao exige que passem -- exige que o relatorio exista e seja legivel."""
+    r = f.autoteste(sondar_app=False)
+    assert set(r["ferramentas"]) >= {"read_file", "grep"}
+    for nome, res in r["ferramentas"].items():
+        assert isinstance(res["ok"], bool), nome
+        assert isinstance(res["detalhe"], str), nome
+
+
+def test_ok_global_depende_so_das_essenciais():
+    """App fora do ar e' degradacao conhecida, nao motivo para nao comecar:
+    26 das 38 acusacoes de 10/08 foram refutadas so com leitura."""
+    assert f.ESSENCIAIS == ("read_file", "grep")
+    r = f.autoteste(sondar_app=False)
+    assert r["ok"] == all(r["ferramentas"][n]["ok"] for n in f.ESSENCIAIS)
+
+
+def test_autoteste_nao_levanta_com_worktree_quebrada(monkeypatch):
+    """O caso real de 10/08. O pre-voo tem que REPORTAR, nunca explodir --
+    se ele mesmo estourar, a rodada morre sem diagnostico."""
+    def explode(_lado):
+        raise RuntimeError("worktree 'head' nao ficou em 1dd2e5c / already exists")
+    monkeypatch.setattr(f, "_worktree_de", explode)
+    r = f.autoteste(sondar_app=False)
+    assert r["ok"] is False
+    assert "worktree" in r["ferramentas"]["read_file"]["detalhe"]

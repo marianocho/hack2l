@@ -748,3 +748,76 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
 
 
 TOOLS = [prova_diferencial, run_tests, read_file, grep, http_request]
+
+
+# ----------------------------------------------------------------- pre-voo
+
+# Ferramentas sem as quais a rodada nao produz NADA. `http_request`,
+# `run_tests` e `prova_diferencial` ficam de fora de proposito: sem elas a
+# rodada degrada (nao ha prova ponta a ponta), mas ainda decide por leitura --
+# foi assim que 26 das 38 acusacoes de 10/08 foram refutadas.
+ESSENCIAIS = ("read_file", "grep")
+
+
+def autoteste(sondar_app: bool = True) -> dict:
+    """Exercita cada ferramenta uma vez, ANTES da rodada.
+
+    🚨 Por que isto existe: em 10/08 a worktree do desafio estava corrompida
+    (um `.git` diretorio vazio deixado por uma criacao parcial). Toda chamada de
+    `read_file`/`grep` voltou RuntimeError, e o advogado devolveu PROVADO duas
+    vezes -- infraestrutura podre virou veredito positivo, e o modo de falha foi
+    "PROVADO", nao "erro". A R3b do juiz pega isso depois; este pre-voo pega
+    antes, por segundos em vez de ~US$0,71 de rodada condenada.
+
+    Devolve `{"ok": bool, "ferramentas": {nome: {"ok", "detalhe"}}}`. `ok` e'
+    False so quando ESSENCIAL falha -- app fora do ar e' degradacao conhecida,
+    nao motivo para nao comecar.
+    """
+    r: dict[str, dict] = {}
+
+    # A sonda de leitura precisa de um alvo que EXISTA. Achar um arquivo real na
+    # worktree e' parte do teste: se nem listar da', o problema e' anterior.
+    alvo = None
+    try:
+        raiz = _worktree_de("head")
+        for p in sorted(raiz.rglob("*.py")) + sorted(raiz.rglob("*.ts")):
+            # Arquivo VAZIO nao serve de sonda: `__init__.py` le como "" e a
+            # leitura bem-sucedida seria indistinguivel da falha.
+            if not any(x in p.parts for x in _IGNORA) and p.stat().st_size > 80:
+                alvo = p.relative_to(raiz).as_posix()
+                break
+        if alvo is None:
+            r["read_file"] = {"ok": False, "detalhe": f"nenhum arquivo em {raiz}"}
+    except Exception as e:
+        r["read_file"] = {"ok": False, "detalhe": f"worktree: {type(e).__name__}: {e}"}
+
+    if alvo is not None:
+        saida = _read_file(alvo)
+        deu = not saida.lstrip().startswith("ERRO") and "|" in saida
+        r["read_file"] = {
+            "ok": deu,
+            "detalhe": f"{alvo}: {len(saida)} chars" if deu else saida[:160],
+        }
+
+    # Padrao que casa com qualquer linha nao vazia: o que esta sob teste e' a
+    # ferramenta, nao a regex.
+    try:
+        saida = _grep(r".", glob="**/*.py", teto=3)
+        deu = not saida.lstrip().startswith("ERRO") and ":" in saida
+        r["grep"] = {"ok": deu, "detalhe": "casou" if deu else saida[:160]}
+    except Exception as e:
+        r["grep"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
+    if sondar_app:
+        try:
+            resp = _http_request("GET", "/health")
+            deu = bool(resp.get("status"))
+            r["http_request"] = {
+                "ok": deu,
+                "detalhe": f"GET /health -> {resp.get('status')}" if deu
+                else str(resp.get("erro"))[:160],
+            }
+        except Exception as e:
+            r["http_request"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
+    return {"ok": all(r.get(n, {}).get("ok") for n in ESSENCIAIS), "ferramentas": r}
