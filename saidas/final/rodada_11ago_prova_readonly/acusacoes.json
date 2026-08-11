@@ -1,0 +1,119 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:31",
+    "hipotese": "SQL injection na busca de usuário por email: interpolação direta de parâmetro de usuário em query raw sem prepared statement",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "POST /documents/1/share com email='admin@hack2l.dev' OR '1'='1 -- retorna múltiplos usuários; ou email='' OR 1=1 -- bypassa a busca legítima",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:51-59",
+    "hipotese": "list_shared_with_me retorna documentos do próprio usuário, viola requisito de não devolver os documentos dele",
+    "arbitro": {
+      "regra": "GET /shared-with-me retorna o que outros compartilharam com o usuário atual. Não pode devolver os documentos do próprio usuário",
+      "onde": "docs/REVIEW_TASK.md:45"
+    },
+    "provado_se": "Login como alice@hack2l.dev; alice cria e compartilha seu próprio documento consigo mesma; GET /shared-with-me lista o documento da alice. Deveria estar vazio ou listar só shares de terceiros",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:29-31",
+    "hipotese": "email do usuário é interpolado diretamente em SQL sem parametrização",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "email contendo SQL injection (ex: `' OR '1'='1`) é enviado em /documents/{doc_id}/share; query executada retorna todos os usuários ou executa comando não autorizado",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_02",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:54-60",
+    "hipotese": "query em list_shared_with_me retorna documentos onde Document.owner_id == user.id, mas o resultado é mapeado como shares pertencentes ao usuário logado (inversão de semântica)",
+    "arbitro": {
+      "regra": "GET /shared-with-me devolve documentos compartilhados COM o usuário atual, não documentos DELE; não pode devolver seus próprios documentos",
+      "onde": "docs/REVIEW_TASK.md:45"
+    },
+    "provado_se": "usuário demo loga e acessa /shared-with-me; resposta lista os 3 documentos de demo (que demo possui), não documentos compartilhados com demo por outros",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_03",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:89-93",
+    "hipotese": "validação de acesso em read_shared_document não valida se quem está lendo é o destinatário da share; só checa se EXISTE uma share, sem validar shared_with_user_id",
+    "arbitro": {
+      "regra": "Um usuário pode ler um documento compartilhado com ELE; quem não é dono nem destinatário não pode ler",
+      "onde": "docs/REVIEW_TASK.md:43"
+    },
+    "provado_se": "alice compartilha documento D com bob; carol (terceiro usuário sem share) acessa GET /shared/{D.id} com seu token; resposta devolve conteúdo de D ao invés de 403",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/api/app/routers/shares.py:30",
+    "hipotese": "SQL cru com string interpolation em vez de ORM ou prepared statements",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "grep por text() em routers/shares.py:30 revela SELECT com f-string: text(f\"SELECT id FROM users WHERE email = '{email}'\") sem parametrização",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/api/app/routers/shares.py:18-47",
+    "hipotese": "endpoint não devolve schema Pydantic declarado; retorna dict literal",
+    "arbitro": {
+      "regra": "Todo endpoint devolve um schema Pydantic de schemas.py",
+      "onde": "docs/REFERENCE_GUIDE.md:71"
+    },
+    "provado_se": "read_file em routers/shares.py:47: return é dict literal {\"document_id\": doc_id, \"shared_with_user_id\": recipient_id}, sem response_model e sem schema em schemas.py",
+    "confianca": "alta"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/api/app/routers/shares.py:54-61",
+    "hipotese": "list_shared_with_me carrega N shares e depois executa N queries adicionais (db.get para Document, db.get para User) — N+1 em cascata",
+    "arbitro": null,
+    "provado_se": "GET /shared-with-me com 10 shares dispararia 21 queries (1 para listar shares + 10 para documentos + 10 para usuários); cresce linear 2N+1",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/api/app/routers/shares.py:29-34",
+    "hipotese": "Endpoint de compartilhamento usa SQL cru com string interpolation em vez de ORM, violando convenção de persistência declarada",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "Verificar que a consulta SELECT id FROM users WHERE email usa text() com f-string em vez de query ORM com modelos",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/api/app/routers/shares.py:50-80",
+    "hipotese": "GET /shared-with-me consulta shares onde owner_id == current_user.id, mas requisito pede docs compartilhados COM o usuário, não documentos do próprio usuário",
+    "arbitro": {
+      "regra": "GET /shared-with-me devolve o que outros compartilharam com o usuário atual, não pode devolver os documentos do próprio usuário",
+      "onde": "docs/REVIEW_TASK.md:45"
+    },
+    "provado_se": "Teste: login como demo; chamar GET /shared-with-me; verificar se retorna documentos de demo (que são seus, não compartilhados COM ele)",
+    "confianca": "alta"
+  }
+]

@@ -99,6 +99,11 @@ fora do módulo de configuração".
 Ciente de que prova estática (não ponta a ponta) sustenta no máximo severidade
 **média** — e tudo bem: aqui o valor é cobertura e interpretabilidade.
 
+⚠️ Se a violação de convenção **também** for explorável (ex.: "SQL cru" que é
+injeção), a prova dela é **read-only**: `' OR '1'='1` devolvendo linhas demais,
+**nunca** `DROP`/`DELETE`. O advogado roda contra o app real, e leitura prova a
+mesma coisa sem apagar dado.
+
 ## Saída — APENAS um array JSON. Sem prosa, sem cercas ```.
 
 ```json

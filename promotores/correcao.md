@@ -86,6 +86,12 @@ e a linha.
   idempotência: "chamar a operação duas vezes com a mesma entrada; a tabela fica
   com 2 linhas para o par que deveria ter 1".
 
+⚠️ **Prova de injeção é sempre READ-ONLY.** Para SQL injection, o `provado_se`
+usa `' OR '1'='1` fazendo a query devolver linhas demais — **nunca** `DROP`,
+`DELETE` ou `; --` que altere o banco. O advogado roda isso contra o app real:
+um payload destrutivo apagaria dado de verdade, e a prova de leitura demonstra a
+mesma falha.
+
 ## Saída — APENAS um array JSON. Sem prosa, sem cercas ```.
 
 ```json
