@@ -170,6 +170,83 @@ Firmar o número exige rodar as duas em 3–4 apps com defeito conhecido.
 
 ---
 
+## Adendo 2 (11/08) — o scanner rende mais por dólar? Não.
+
+A ideia testada: o scanner tem precisão alta e volume baixo, então o advogado
+deveria **começar pelos achados dele**, que renderiam mais por dólar.
+
+Comparação limpa — **mesmo repo** (PR do desafio), **mesmas ferramentas**
+(`read_file`, `grep`), quatro fontes:
+
+| fonte | tipo de alegação | n | PROV | REF | INC | US$ | **US$/decidido** |
+|---|---|---|---|---|---|---|---|
+| promotores | hipótese (Haiku) | 10 | 9 | 0 | 1 | 0,52 | **0,057** |
+| revisor de IA | comportamento, prosa | 9 | 5 | 1 | 3 | 0,47 | 0,078 |
+| semgrep taint | fluxo | 2 | 2 | 0 | 0 | 0,11 | **0,057** |
+| bandit | forma | 1 | 1 | 0 | 0 | 0,07 | 0,074 |
+
+**Scanner US$0,062 por decisão contra US$0,057 dos promotores — 1,09×.** Sem
+vantagem. A premissa não tem base.
+
+A métrica é dólar por veredito **decidido** (provado ou refutado), não por
+acusação: inconclusivo é gasto sem decisão, e dividir por acusação esconderia
+isso.
+
+### Por que parecia que teria
+
+| promotores em… | veredito |
+|---|---|
+| PRs de terceiro (metade A) | **68% REFUTADO** |
+| PR do desafio | **90% PROVADO, zero refutado** |
+
+Mesma lente, distribuição invertida. **A precisão aparente do scanner era
+artefato de comparação:** scanner medido em repo *com* defeito contra
+promotores medidos em repo *sem* defeito.
+
+🚨 **Terceira vez nesta rodada de experimentos que a resposta é a mesma:**
+
+> **O repositório domina a fonte.** Ter defeito importa mais do que quem aponta.
+
+Deu na conversão (10% → 90%), deu no bandit (10% → 50%), deu aqui. É o viés que
+mais atrapalhou a leitura de todos estes experimentos, e vale conferir contra
+ele **antes** de comparar qualquer fonte com qualquer outra.
+
+### O que o teste achou de verdade — e não era o que eu procurava
+
+**O nosso esquema ganha da prosa:**
+
+| | inconclusivos |
+|---|---|
+| promotores (`provado_se` no esquema) | **1 de 10 — 10%** |
+| revisor de IA (prosa livre) | **3 de 9 — 33%** |
+
+`provado_se` é escrito **sabendo quais ferramentas existem**. A prosa do revisor
+genérico alega o que exige execução que não temos (concorrência, log HTTP) e
+trava no terceiro estado. Três vezes menos gasto sem decisão — é ativo real, e
+é argumento a favor de manter o adaptador **traduzindo** para o esquema em vez
+de mandar prosa direto ao advogado.
+
+### Ressalva
+
+**n = 3 para o scanner.** Isto **não refuta** a premissa — não dá suporte a ela,
+com amostra pequena demais para detectar diferença mesmo que existisse. A frase
+honesta é *"nenhuma evidência de vantagem"*, não *"provado que é igual"*.
+
+### Decisão
+
+- ❌ **não reordenar** o advogado por fonte: sem ganho medido, e o scanner não
+  tem volume para ser motor (2–3 achados contra 45 dos promotores)
+- ❌ **não mostrar ao promotor o que o scanner achou**: ancora (o defeito de
+  isolamento mora em `shares.py:92`, três funções abaixo da injeção que o
+  scanner pega em `:31`) e destrói o sinal de `_corroborado`
+- ✅ **scanner como fonte PARALELA**: é grátis, é preciso, e quando ele e um
+  promotor caem na mesma linha a corroboração é genuína
+- ✅ **dedup por local exato com árbitro nulo**: pré-requisito das duas coisas
+
+Reproduzir: `py -3.12 comparar_fontes.py` (lê do disco, não gasta API).
+
+---
+
 ## A assimetria que vale mais que os dois placares
 
 Olhando o que precisou de execução em cada lado:

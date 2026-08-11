@@ -79,7 +79,7 @@ SAIDA = cfg.SAIDAS / "experimento_adaptador"
 # COMPORTAMENTO: revisor de IA, relatorio de bug bounty, achado de scanner
 # dinamico. Por isso a fonte virou parametro, e a de IA existe: e' o unico
 # stand-in fiel do Greptile/CodeRabbit que da' para rodar aqui.
-FONTES = ("bandit", "ia", "desafio", "bandit-desafio", "semgrep")
+FONTES = ("bandit", "ia", "desafio", "bandit-desafio", "semgrep", "promotores")
 
 # O app do desafio, para as fontes que rodam scanner nele.
 APP_DESAFIO = cfg.DESAFIO / "app" / "api" / "app"
@@ -213,6 +213,37 @@ def fonte_bandit(raiz: Path | None = None) -> list[dict]:
 
 # Revisor comercial nao promete formato. Aceita "1.", "1)", "## 1.", "**1.**",
 # "### Problem 1" -- e se nada casar, o chamador reclama em vez de devolver [].
+def fonte_promotores() -> list[dict]:
+    """As acusacoes dos NOSSOS promotores no PR do desafio.
+
+    E' a terceira celula da comparacao. Elas ja estao no esquema (tem
+    `provado_se` por construcao), entao nao passam pelo adaptador -- a etapa de
+    conversao e' no-op e marcada como tal, senao o numero de conversao mentiria
+    a favor da casa.
+
+    Amostra estratificada por categoria: as 45 vem agrupadas por promotor, e um
+    corte simples mediria uma lente so.
+    """
+    from experimento_verificador import amostra as _amostra
+    bruto = json.loads(
+        (cfg.SAIDAS / "acusacoes_brutas.json").read_text(encoding="utf-8"))
+    esc = _amostra([a for a in bruto if isinstance(a, dict)], 10)
+    print(f"  {len(bruto)} acusacoes dos promotores, amostra de {len(esc)}")
+    fora = []
+    for a in esc:
+        fora.append({
+            "ferramenta": "promotores do Veredito (Haiku, 6 lentes)",
+            "regra": a.get("id", "?"),
+            "texto": a.get("hipotese", ""),
+            "arquivo": str(a.get("local", "?")).split(":")[0],
+            "linha": (str(a.get("local", "")).split(":") + ["?"])[1],
+            "codigo": "", "severidade": a.get("confianca", "?"),
+            "confianca_ferramenta": a.get("confianca", "?"),
+            "_ja_no_esquema": a,
+        })
+    return fora
+
+
 def fonte_semgrep() -> list[dict]:
     """Taint: alegacao de FLUXO -- "entrada do cliente chega neste sink".
 
@@ -367,6 +398,8 @@ def roda(fonte: str = "ia", so_adapta: bool = False) -> None:
         escolhidos = fonte_bandit(APP_DESAFIO)
     elif fonte == "semgrep":
         escolhidos = fonte_semgrep()
+    elif fonte == "promotores":
+        escolhidos = fonte_promotores()
     else:
         escolhidos = fonte_revisor_ia(pr, desafio=(fonte == "desafio"))
     if not escolhidos:
@@ -376,7 +409,12 @@ def roda(fonte: str = "ia", so_adapta: bool = False) -> None:
     print("--- conversao: achado externo -> alegacao testavel ---\n")
     convertidos = []
     for i, ach in enumerate(escolhidos, 1):
-        res = adapta(cliente, ach)
+        # Promotor ja emite no esquema: converter seria pedir ao modelo que
+        # reescrevesse o que ele mesmo escreveu, e inflaria a conversao.
+        if ach.get("_ja_no_esquema"):
+            res = {"testavel": True, "_passthrough": True, **ach["_ja_no_esquema"]}
+        else:
+            res = adapta(cliente, ach)
         reg = {
             "origem": {k: ach[k] for k in
                        ("ferramenta", "regra", "texto", "severidade",
@@ -411,7 +449,7 @@ def roda(fonte: str = "ia", so_adapta: bool = False) -> None:
     print(f"\n--- verificacao: as {len(testaveis)} testaveis ao advogado ---\n")
     # No desafio o cfg JA aponta para o repo certo -- redirecionar mandaria o
     # verificador ler o Flask enquanto julga achado do desafio.
-    if fonte in ("desafio", "bandit-desafio", "semgrep"):
+    if fonte in ("desafio", "bandit-desafio", "semgrep", "promotores"):
         diff, _ = diff_do_desafio()
     else:
         aponta_config_para(pr)
