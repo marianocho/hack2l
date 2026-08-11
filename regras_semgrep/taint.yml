@@ -1,0 +1,96 @@
+# Regras de TAINT para o experimento de 11/08.
+#
+# A pergunta: achado de FLUXO converte melhor em alegacao testavel que achado de
+# PADRAO? O bandit converteu a 10% porque ele afirma FORMA ("existe um assert
+# aqui") e o verificador precisa de COMPORTAMENTO.
+#
+# Taint afirma CAMINHO: "entrada controlada pelo cliente chega neste sink".
+# Caminho e' comportamento -- testa-se mandando a entrada e vendo se chega.
+#
+# ATENCAO -- dois resultados do experimento ficam registrados aqui:
+#
+# 1. Os rulesets publicos do Semgrep CE (p/python, p/security-audit,
+#    p/owasp-top-ten, p/default) deram 1-2 achados e ZERO taint neste app.
+#    Precisar de regra propria e' resultado, nao detalhe de implementacao.
+#
+# 2. ESTE ARQUIVO NAO PODE TER ACENTO. O semgrep no Windows le o config com o
+#    codepage ANSI (cp1252) e morre com UnicodeDecodeError em UTF-8.
+
+rules:
+  - id: rota-param-para-sqlalchemy-text
+    mode: taint
+    message: >-
+      Parametro controlado pelo cliente alcanca sqlalchemy.text() sem
+      parametrizacao. A string vai ao banco praticamente inalterada, entao
+      quem controla o parametro controla o SQL.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      categoria: injection
+      tipo-de-alegacao: fluxo
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              @$ROUTER.$METODO(...)
+              def $HANDLER(...):
+                ...
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: ^(email|q|query|search|name|title|filtro|termo)$
+    pattern-sinks:
+      - pattern: text(...)
+
+  - id: rota-param-para-execute
+    mode: taint
+    message: >-
+      Parametro controlado pelo cliente alcanca db.execute() por um caminho
+      que nao passa por bind params.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      categoria: injection
+      tipo-de-alegacao: fluxo
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              @$ROUTER.$METODO(...)
+              def $HANDLER(...):
+                ...
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: ^(email|q|query|search|name|title|filtro|termo)$
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.execute($SQL, ...)
+          - focus-metavariable: $SQL
+
+  - id: rota-param-em-fstring-de-sql
+    mode: taint
+    message: >-
+      Parametro do cliente e' interpolado numa string que parece SQL antes de
+      chegar ao banco.
+    languages: [python]
+    severity: WARNING
+    metadata:
+      categoria: injection
+      tipo-de-alegacao: fluxo
+    pattern-sources:
+      - patterns:
+          - pattern-inside: |
+              @$ROUTER.$METODO(...)
+              def $HANDLER(...):
+                ...
+          - pattern: $PARAM
+          - metavariable-regex:
+              metavariable: $PARAM
+              regex: ^(email|q|query|search|name|title|filtro|termo)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: f"...SELECT...{...}..."
+              - pattern: f"...INSERT...{...}..."
+              - pattern: f"...UPDATE...{...}..."
+              - pattern: f"...DELETE...{...}..."
+              - pattern: f"...WHERE...{...}..."

@@ -79,7 +79,11 @@ SAIDA = cfg.SAIDAS / "experimento_adaptador"
 # COMPORTAMENTO: revisor de IA, relatorio de bug bounty, achado de scanner
 # dinamico. Por isso a fonte virou parametro, e a de IA existe: e' o unico
 # stand-in fiel do Greptile/CodeRabbit que da' para rodar aqui.
-FONTES = ("bandit", "ia", "desafio")
+FONTES = ("bandit", "ia", "desafio", "bandit-desafio", "semgrep")
+
+# O app do desafio, para as fontes que rodam scanner nele.
+APP_DESAFIO = cfg.DESAFIO / "app" / "api" / "app"
+REGRAS_TAINT = RAIZ / "regras_semgrep" / "taint.yml"
 
 SISTEMA_REVISOR_IA = (
     "You are an expert code reviewer. Review the pull request and list the "
@@ -175,12 +179,13 @@ def _rel(caminho: str) -> str:
     return p[len(marca):].lstrip("/") if p.startswith(marca) else p
 
 
-def fonte_bandit() -> list[dict]:
-    """Scanner estatico: alegacao de PADRAO. O caso desfavoravel, e o controle."""
-    if not ALVO.is_dir():
-        raise SystemExit(f"worktree ausente: {ALVO}")
+def fonte_bandit(raiz: Path | None = None) -> list[dict]:
+    """Scanner estatico: alegacao de PADRAO. O controle do experimento."""
+    raiz = raiz or ALVO
+    if not raiz.is_dir():
+        raise SystemExit(f"caminho ausente: {raiz}")
     r = subprocess.run(
-        ["py", "-3.12", "-m", "bandit", "-r", str(ALVO), "-f", "json", "-q"],
+        ["py", "-3.12", "-m", "bandit", "-r", str(raiz), "-f", "json", "-q"],
         capture_output=True, text=True, timeout=600,
     )
     m = re.search(r"\{.*\}", r.stdout, re.DOTALL)
@@ -192,8 +197,8 @@ def fonte_bandit() -> list[dict]:
     for a in todos:
         por_regra[a["test_id"]].append(a)
     fora = []
-    for regra, k in COTA.items():
-        for a in por_regra.get(regra, [])[:k]:
+    for regra, lista in por_regra.items():
+        for a in lista[:COTA.get(regra, 3)]:
             fora.append({
                 "ferramenta": "bandit (analise estatica de seguranca, Python)",
                 "regra": f"{a['test_id']} ({a['test_name']})",
@@ -208,6 +213,40 @@ def fonte_bandit() -> list[dict]:
 
 # Revisor comercial nao promete formato. Aceita "1.", "1)", "## 1.", "**1.**",
 # "### Problem 1" -- e se nada casar, o chamador reclama em vez de devolver [].
+def fonte_semgrep() -> list[dict]:
+    """Taint: alegacao de FLUXO -- "entrada do cliente chega neste sink".
+
+    E' o outro lado do experimento. bandit diz que a forma do codigo e' X;
+    semgrep diz que existe um CAMINHO de A ate B. Caminho e' comportamento, e
+    comportamento se testa mandando a entrada e vendo se chega.
+    """
+    if not REGRAS_TAINT.is_file():
+        raise SystemExit(f"regras ausentes: {REGRAS_TAINT}")
+    r = subprocess.run(
+        ["semgrep", "--config", str(REGRAS_TAINT), "--dataflow-traces",
+         "--json", "--quiet", str(APP_DESAFIO)],
+        capture_output=True, text=True, timeout=900, errors="replace",
+    )
+    m = re.search(r"\{.*\}", r.stdout, re.DOTALL)
+    if not m:
+        raise SystemExit(f"semgrep nao devolveu JSON: {r.stderr[:300]}")
+    res = json.loads(m.group(0)).get("results", [])
+    print(f"  {len(res)} achados de taint")
+    fora = []
+    for a in res:
+        caminho = a["path"].replace("\\\\", "/")
+        fora.append({
+            "ferramenta": "semgrep (analise de fluxo / taint, regra propria)",
+            "regra": a["check_id"].split(".")[-1],
+            "texto": " ".join(str(a["extra"].get("message", "")).split()),
+            "arquivo": caminho, "linha": a["start"]["line"],
+            "codigo": (a["extra"].get("lines") or "")[:600],
+            "severidade": a["extra"].get("severity", "?"),
+            "confianca_ferramenta": "fluxo rastreado da fonte ao sink",
+        })
+    return fora
+
+
 _ITEM = re.compile(r"^[#*\s]*(?:problem[a]?\s*)?(\d+)[.):]\s*\**\s*(.+)", re.M | re.I)
 
 
@@ -324,6 +363,10 @@ def roda(fonte: str = "ia", so_adapta: bool = False) -> None:
     print(f"fonte: {fonte}", flush=True)
     if fonte == "bandit":
         escolhidos = fonte_bandit()
+    elif fonte == "bandit-desafio":
+        escolhidos = fonte_bandit(APP_DESAFIO)
+    elif fonte == "semgrep":
+        escolhidos = fonte_semgrep()
     else:
         escolhidos = fonte_revisor_ia(pr, desafio=(fonte == "desafio"))
     if not escolhidos:
@@ -368,7 +411,7 @@ def roda(fonte: str = "ia", so_adapta: bool = False) -> None:
     print(f"\n--- verificacao: as {len(testaveis)} testaveis ao advogado ---\n")
     # No desafio o cfg JA aponta para o repo certo -- redirecionar mandaria o
     # verificador ler o Flask enquanto julga achado do desafio.
-    if fonte == "desafio":
+    if fonte in ("desafio", "bandit-desafio", "semgrep"):
         diff, _ = diff_do_desafio()
     else:
         aponta_config_para(pr)

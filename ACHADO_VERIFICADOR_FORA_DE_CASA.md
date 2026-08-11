@@ -99,6 +99,77 @@ REFUTADO é o verificador matando uma alegação falsa do revisor.
 
 ---
 
+## Adendo (11/08) — a fonte precisa ser paga?
+
+A metade B deixou uma dúvida de negócio: se a entrada vem de outra plataforma,
+o cliente precisa **usar** outra plataforma? Testado com dois scanners
+**gratuitos**, e a resposta é não.
+
+⚠️ **A hipótese que eu tinha estava errada.** Eu apostei que alegação de
+**fluxo** (taint) converteria melhor que alegação de **forma** (padrão), porque
+fluxo afirma um caminho e caminho se testa. O dado não sustenta isso.
+
+| | repo **sem** defeito | repo **com** defeito |
+|---|---|---|
+| `bandit` — afirma forma | 10% (1/10) | **50%** (1/2) |
+| `semgrep` taint — afirma fluxo | — | **100%** (2/2) |
+| revisor de IA — afirma comportamento | 20% (1/5) | 90% (9/10) |
+
+Tudo que converteu no desafio foi **PROVADO** pelo verificador.
+
+**O que o dado diz:**
+
+1. **A variável dominante é ter defeito, não o formato.** O `bandit` foi de 10%
+   para 50% *só trocando de repositório* — mesma ferramenta, mesmo tipo de
+   alegação.
+2. **A diferença entre 50% e 100% é UM achado**: o `bandit` trouxe também um
+   `hardcoded_password` no `seed.py`, que o adaptador recusou — corretamente.
+   Com n=2 contra n=2, isso não sustenta "taint converte melhor".
+3. **O mesmo defeito converteu nas duas formulações.** A injeção de SQL em
+   `shares.py:31` virou alegação testável dita como forma ("SQL montado por
+   concatenação") **e** como fluxo ("parâmetro do cliente alcança `text()`"), e
+   foi provada nas duas.
+
+### A consequência de negócio
+
+**Não há dependência de plataforma paga.** O `bandit` é grátis, é
+`pip install`, roda local — e produziu alegação que converteu e foi provada.
+
+Mas com um limite honesto: **scanner grátis dá precisão sem cobertura.**
+
+- `bandit` no `psf/requests` (maduro): 708 achados, quase todos `assert` em teste
+- `bandit` no app do desafio: **2 achados** — pegou a injeção de SQL e mais nada
+
+Ele não viu a quebra de isolamento, nem a config morta, nem o `/shared-with-me`
+errado. O scanner é o **teto** do que se consegue verificar.
+
+Então são três fontes, e o verificador é o denominador comum:
+
+| fonte | custo | cobertura | precisão |
+|---|---|---|---|
+| scanner grátis (`bandit`, `semgrep`) | ~zero | **baixa** | alta |
+| nossos promotores | US$0,05/PR | **alta** | baixa |
+| revisor de IA do cliente | dele | média | média |
+
+### Duas pedras operacionais
+
+**Os rulesets públicos do Semgrep CE** (`p/python`, `p/security-audit`,
+`p/owasp-top-ten`, `p/default`) deram **1–2 achados e ZERO taint** neste app.
+Precisou de regra própria — `regras_semgrep/taint.yml`. Isso é custo real
+(alguém escreve regra por framework) e também ativo acumulável.
+
+**O Semgrep no Windows lê config em cp1252**: YAML com acento morre com
+`UnicodeDecodeError`. O arquivo de regras é ASCII de propósito.
+
+### Ressalva
+
+**n = 2 contra n = 2.** Pequeno demais para afirmar diferença de taxa entre
+formatos. O que se afirma com segurança é o pareado: *o mesmo defeito, dito de
+dois jeitos por duas ferramentas grátis, converteu e foi provado nas duas.*
+Firmar o número exige rodar as duas em 3–4 apps com defeito conhecido.
+
+---
+
 ## A assimetria que vale mais que os dois placares
 
 Olhando o que precisou de execução em cada lado:
@@ -203,7 +274,13 @@ diz não sei.
 ## Reproduzir
 
 ```bash
-py -3.12 experimento_verificador.py            # metade A, ~US$2,70
-py -3.12 experimento_adaptador.py --desafio    # metade B, ~US$0,70
-py -3.12 experimento_verificador.py --resumo   # relê sem gastar API
+py -3.12 experimento_verificador.py                  # metade A, ~US$2,70
+py -3.12 experimento_adaptador.py --desafio          # metade B, ~US$0,70
+py -3.12 experimento_adaptador.py --semgrep          # adendo: fluxo
+py -3.12 experimento_adaptador.py --bandit-desafio   # adendo: forma
+py -3.12 experimento_verificador.py --resumo         # relê sem gastar API
 ```
+
+As fontes do adaptador: `--bandit` (padrão, `psf/requests`), `--ia` (revisor de
+IA em PR de terceiro), `--desafio` (revisor de IA no PR do desafio),
+`--bandit-desafio` e `--semgrep` (scanners no app do desafio).
