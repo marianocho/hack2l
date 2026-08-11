@@ -241,7 +241,8 @@ honesta é *"nenhuma evidência de vantagem"*, não *"provado que é igual"*.
   scanner pega em `:31`) e destrói o sinal de `_corroborado`
 - ✅ **scanner como fonte PARALELA**: é grátis, é preciso, e quando ele e um
   promotor caem na mesma linha a corroboração é genuína
-- ✅ **dedup por local exato com árbitro nulo**: pré-requisito das duas coisas
+- ✅ **limite de concentração por local** (feito, 11/08) — mas ver o achado 1:
+  ele **não** é dedup, e o que parecia duplicata eram alegações distintas
 
 Reproduzir: `py -3.12 comparar_fontes.py` (lê do disco, não gasta API).
 
@@ -266,26 +267,64 @@ A leitura de produto: **a primeira coisa vendável é a refutação, não a prov
 
 ## Quatro achados sobre o próprio produto
 
-### 1. O dedup evaporou, e apareceu medido em 12 horas
+### 1. O dedup evaporou — e o diagnóstico óbvio estava errado
 
-Os **4 sobreviventes do httpx são a mesma alegação** — mesmo arquivo, **mesma
-linha** (`test-suite.yml:17`), `arbitro=None` nos quatro, lentes diferentes
-dizendo que o título "3.11+" não bate com o diff.
+**A primeira versão deste item dizia que os 4 sobreviventes do `httpx` eram "a
+mesma alegação quatro vezes" e propunha fundir por conteúdo. Estava errado**, e
+a correção (11/08) vale mais que o achado original.
 
-A chave de dedup é `(local, arbitro)`. Com árbitro nulo ela devolve `None`, não
-deduplica, e a mesma coisa foi verificada **quatro vezes a US$0,07** — e
-chegaria ao humano como quatro achados.
+Lendo o texto completo das quatro, são **preocupações distintas** sobre a mesma
+mudança de uma linha:
 
-É exatamente o efeito colateral registrado em `promotores.py::_chave_dedup` na
-manhã de 10/08, ao desacoplar o árbitro. Ficou anotado em vez de consertado às
-escondidas; doze horas depois ele é **4 dos 5 falsos positivos do experimento
-inteiro**.
+1. o título diz `3.11+` mas `setup.py`/`pyproject` não foram atualizados
+2. dependências foram validadas contra 3.10; a remoção deixa esse usuário sem aviso
+3. o título promete `3.11+` mas o diff só remove o 3.10 — divergência de escopo
+4. remover o 3.10 pode violar política de suporte documentada
 
-**Leitura corrigida da metade A: 5 sobreviventes são 2 alegações distintas.**
+Mesmo **assunto**, alegações **diferentes**. Fundir perderia informação.
 
-Conserto candidato: com árbitro nulo, deduplicar por `local` exato
-(arquivo **e** linha, não só arquivo) e marcar `_corroborado=True`. Quatro
-lentes na mesma linha é um achado com quatro corroborações, não quatro achados.
+E a similaridade lexical confirma que não dá para separar automaticamente:
+
+```
+pares que DEVERIAM fundir      Jaccard 0,00 – 0,13
+pares que NÃO deveriam         Jaccard 0,00 – 0,06
+```
+
+Indistinguível. Pior: **dedup por linha exata falharia no caso que mais
+importa** — a injeção de SQL do desafio foi reportada em `shares.py:31`, `:32` e
+`:33` por três lentes. Mesma linha, nenhuma. E `:36` (config morta) e `:39`
+(race condition) são bugs distintos a 3 linhas de distância. Nem conteúdo nem
+proximidade separam.
+
+### O que era o problema de verdade
+
+Medido nos 11 PRs, com o limite de concentração (`MAX_POR_LOCAL = 2`):
+
+| PR | acusações | locais | maior local | despriorizadas |
+|---|---|---|---|---|
+| `django#21735` | 13 | 3 | **11** | 6 |
+| `httpx#3730` | 8 | **1** | 8 | 6 |
+| `httpx#3773` | 8 | 3 | 5 | 3 |
+| `requests#7576` | 7 | **1** | 7 | 5 |
+| `next.js#96932` | 29 | 24 | 4 | 0 |
+| `flask#6095` | 20 | 15 | 2 | 0 |
+| desafio | 45 | 38 | 2 | 0 |
+
+O limite só dispara nos **PRs pequenos** — e ali não é concentração, é
+**sobregeração**: o PR muda uma linha, então claro que todas as acusações
+apontam para ela. É o buraco 2 do handoff ("não existe piso"), disfarçado.
+
+**Efeito medido do limite: melhora 1 dos 11 PRs.** No `django#21735` a rodada
+passa a verificar 3 locais em vez de 2. Nos de local único não há para onde ir;
+nos bem distribuídos não é preciso.
+
+Foi implementado assim mesmo (`promotores.seleciona`, teto **mole** — a
+excedente vai para o fim da fila, nunca para o lixo), porque é guarda barata que
+não machuca e que passa a valer mais conforme os PRs crescem. Mas **não é o
+conserto do httpx.** O conserto do httpx é o piso, e continua aberto.
+
+**Leitura corrigida da metade A: os 5 sobreviventes são ~5 alegações distintas,
+não 2.** A afirmação anterior subestimava o falso positivo.
 
 ### 2. O advogado disse PROVADO com todas as ferramentas falhando
 

@@ -293,7 +293,35 @@ def deduplica(acusacoes: list[dict]) -> list[dict]:
     return saida
 
 
-def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None) -> list[dict]:
+# Quantas acusacoes do MESMO arquivo:linha podem ocupar vaga do advogado.
+#
+# 🚨 Medido em 10/08, no `encode/httpx#3730`: 4 das 6 vagas foram para
+# `.github/workflows/test-suite.yml:17`. As outras lentes ficaram sem verificar.
+#
+# ⚠️ E o diagnostico obvio estava ERRADO. Eu chamei aquilo de "a mesma alegacao
+# quatro vezes" e ia fundir por conteudo. Lendo o texto inteiro, sao quatro
+# preocupacoes DIFERENTES sobre a mesma mudanca de uma linha: metadados nao
+# atualizados, usuario de 3.10 sem aviso, titulo que promete mais que o diff, e
+# politica de suporte. Fundir perderia informacao.
+#
+# A similaridade lexical confirma que nao da para separar automaticamente: os
+# pares que "deveriam fundir" deram 0,00-0,13 de Jaccard, indistinguivel dos que
+# nao deveriam (0,00-0,06). E dedup por linha exata falharia no caso que mais
+# importa -- a injecao de SQL do desafio foi reportada em shares.py:31, :32 e
+# :33 por tres lentes, mesma linha nenhuma.
+#
+# Entao nao se funde nada: limita-se CONCENTRACAO. O dano real nunca foi
+# duplicata, foi ponto quente comendo o orcamento.
+MAX_POR_LOCAL = 2
+
+
+def _local_chave(a: dict) -> str | None:
+    loc = str(a.get("local") or "").strip()
+    return loc.casefold() or None
+
+
+def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
+              max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
     """Escolhe quem vai ao advogado, por COTA de categoria e nao por ordem.
 
     Sem isto, TOP_N pega as N primeiras e uma categoria barulhenta engole as
@@ -301,6 +329,13 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None) -> li
 
     Deduplica antes de aplicar a cota: uma duplicata que ocupa vaga de cota
     tira a vaga de uma categoria inteira, nao so de outra acusacao.
+
+    E limita quantas do MESMO local ocupam vaga -- ver MAX_POR_LOCAL.
+
+    ⚠️ O limite e' MOLE de proposito: a excedente vai para o FIM da sobra, nao
+    para o lixo. Com fila cheia ela nao rouba vaga; com fila curta ela ainda
+    entra. "Nada e' descartado em silencio" vale aqui tambem -- um teto duro
+    sumiria com acusacao sem ninguem ver.
     """
     cotas = dict(cotas or COTAS)
     antes = len(acusacoes)
@@ -309,13 +344,26 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None) -> li
         print(f"  dedup: {antes} -> {len(acusacoes)} "
               f"({antes - len(acusacoes)} fundidas em _duplicatas)")
     ordenadas = sorted(acusacoes, key=lambda a: _PESO.get(a.get("confianca"), 3))
-    escolhidas, sobra = [], []
+    escolhidas, sobra, excedente = [], [], []
+    por_local: Counter = Counter()
     for a in ordenadas:
+        loc = _local_chave(a)
+        if loc and por_local[loc] >= max_por_local:
+            a["_excedente_no_local"] = por_local[loc] + 1
+            excedente.append(a)
+            continue
         b = _bucket(a.get("categoria", "?"))
         if cotas.get(b, 0) > 0:
             cotas[b] -= 1
+            if loc:
+                por_local[loc] += 1
             escolhidas.append(a)
         else:
             sobra.append(a)  # curinga: preenche o que a cota deixou vago
+    if excedente:
+        quentes = {l: n for l, n in por_local.items() if n >= max_por_local}
+        print(f"  concentracao: {len(excedente)} acusacao(oes) despriorizada(s) "
+              f"em {len(quentes)} local(is) ja com {max_por_local} vaga(s)")
     escolhidas.extend(sobra)
+    escolhidas.extend(excedente)   # por ultimo, mas nunca descartado
     return escolhidas[:teto]

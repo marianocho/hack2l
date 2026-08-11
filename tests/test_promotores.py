@@ -162,3 +162,64 @@ def test_mesmo_promotor_repetindo_NAO_e_corroboracao():
 def test_corroborado_ausente_quando_nao_ha_duplicata():
     r = deduplica([acu("a", "prd", "a.py:1", DONO)])
     assert "_corroborado" not in r[0]
+
+
+# ------------------------------------------- concentracao num local so (10/08)
+
+def test_um_local_nao_come_a_rodada():
+    """Medido no encode/httpx#3730: 4 das 6 vagas foram para test-suite.yml:17.
+
+    NAO sao duplicatas -- sao quatro preocupacoes distintas sobre a mesma
+    mudanca. Por isso o conserto limita CONCENTRACAO em vez de fundir.
+    """
+    quentes = [acu(f"q{i}", "padroes", "ci.yml:17", None) for i in range(4)]
+    outras = [acu(f"o{i}", "correcao", f"outro{i}.py:{i}", None) for i in range(4)]
+    r = seleciona(quentes + outras, teto=6)
+    ids = [a["id"] for a in r]
+    do_local = [i for i in ids if i.startswith("q")]
+    assert len(do_local) <= 2, f"um local levou {len(do_local)} vagas de 6"
+    assert sum(1 for i in ids if i.startswith("o")) >= 4
+
+
+def test_excedente_e_despriorizado_nunca_descartado():
+    """Teto MOLE: com fila curta, a excedente ainda entra. Nada some em silencio."""
+    quentes = [acu(f"q{i}", "padroes", "ci.yml:17", None) for i in range(4)]
+    r = seleciona(quentes, teto=10)
+    assert len(r) == 4, "acusacao sumiu por causa do limite de concentracao"
+    assert r[-1].get("_excedente_no_local"), "a excedente devia vir marcada e por ultimo"
+
+
+def test_locais_diferentes_no_mesmo_arquivo_nao_disputam():
+    """A injecao de SQL do desafio foi reportada em shares.py:31, :32 e :33.
+
+    Linha diferente = local diferente. Um teto por ARQUIVO mataria achados
+    legitimos (shares.py tinha tambem :36 config morta e :39 race condition).
+    """
+    a = [acu(f"s{i}", "correcao", f"shares.py:{i}", None) for i in (31, 32, 33, 36, 39)]
+    r = seleciona(a, teto=10)
+    assert len(r) == 5
+    assert not any(x.get("_excedente_no_local") for x in r)
+
+
+def test_limite_de_concentracao_e_ajustavel():
+    """Com a fila CHEIA o limite segura. Fila curta e' o caso do teste seguinte."""
+    quentes = [acu(f"q{i}", "padroes", "ci.yml:17", None) for i in range(4)]
+    outras = [acu(f"o{i}", "correcao", f"a{i}.py:{i}", None) for i in range(6)]
+    r = seleciona(quentes + outras, teto=4, max_por_local=1)
+    assert sum(1 for a in r if a["id"].startswith("q")) == 1
+
+
+def test_com_fila_curta_o_limite_cede_em_vez_de_descartar():
+    """O contrario do teste acima, e e' de proposito: sem concorrencia por vaga,
+    despriorizar viraria descartar -- e nada e' descartado em silencio."""
+    quentes = [acu(f"q{i}", "padroes", "ci.yml:17", None) for i in range(4)]
+    r = seleciona(quentes, teto=4, max_por_local=1)
+    assert len(r) == 4
+
+
+def test_sem_local_nao_entra_no_limite():
+    """Acusacao sem local nao pode ser agrupada com as outras sem local."""
+    a = [acu(f"n{i}", "correcao", None, None) for i in range(4)]
+    r = seleciona(a, teto=10)
+    assert len(r) == 4
+    assert not any(x.get("_excedente_no_local") for x in r)
