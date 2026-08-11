@@ -48,7 +48,49 @@ function Daemon-Responde {
     } catch { return $false }
 }
 
+function Limpa-Velhas {
+    $velhas = @()
+    foreach ($d in $Pastas) {
+        $pai = Split-Path $d -Parent
+        $folha = Split-Path $d -Leaf
+        if (Test-Path $pai) {
+            $velhas += Get-ChildItem $pai -Directory -Filter "$folha.old-*" -ErrorAction SilentlyContinue
+        }
+    }
+    if ($velhas.Count -eq 0) { return }
+    if (-not $Limpar) {
+        Write-Host "  ($($velhas.Count) pasta(s) .old-* acumulada(s); -Limpar tenta apagar)"
+        return
+    }
+    $apagadas = 0; $presas = 0
+    foreach ($v in $velhas) {
+        try {
+            Remove-Item $v.FullName -Recurse -Force -ErrorAction Stop
+            Write-Host "  apagada   $($v.Name)"; $apagadas++
+        } catch { $presas++ }
+    }
+    if ($presas -gt 0) {
+        # Testado em 11/08: Remove-Item, `cmd rd /s /q`, caminho estendido
+        # \\?\ e `del /f` falham TODOS com "nao e' possivel o acesso ao arquivo
+        # pelo sistema". E' a mesma causa raiz do problema original -- socket
+        # AF_UNIX cujo objeto de respaldo sumiu; o Windows nao abre o arquivo,
+        # entao nao apaga, entao a pasta nao sai.
+        Write-Host "  $presas pasta(s) presa(s): o Windows nao consegue apagar os"
+        Write-Host "  sockets mortos la dentro (mesma causa do bug original)."
+        Write-Host "  Ocupam ZERO byte -- e' sujeira visual, nao problema. Some"
+        Write-Host "  de vez com um reboot, se incomodar."
+    }
+}
+
 # 1. Idempotente. Reiniciar um Docker saudavel derruba containers de graca.
+#
+# ⚠️ A limpeza roda ANTES desta saida, e de proposito: na primeira versao ela
+# vinha depois, entao `-Limpar` nao fazia nada com o daemon no ar -- que e'
+# justamente quando se quer limpar sem mexer em nada. Era o padrao de bug do
+# projeto outra vez: guarda condicionada ao mesmo sinal do qual nao deveria
+# depender. Ver "O PADRAO DE BUG DESTE PROJETO" no CLAUDE.md.
+if ($Limpar) { Limpa-Velhas }
+
 if (Daemon-Responde) {
     $v = & docker version --format '{{.Server.Version}}' 2>$null
     Write-Host "daemon ja esta no ar (Server $v). Nada a fazer."
@@ -79,24 +121,9 @@ foreach ($d in $Pastas) {
 }
 
 # 4. As .old-* se acumulam. So contamos -- apagar e' decisao de quem roda.
-$velhas = @()
-foreach ($d in $Pastas) {
-    $pai = Split-Path $d -Parent
-    $folha = Split-Path $d -Leaf
-    if (Test-Path $pai) {
-        $velhas += Get-ChildItem $pai -Directory -Filter "$folha.old-*" -ErrorAction SilentlyContinue
-    }
-}
-if ($velhas.Count -gt 0) {
-    if ($Limpar) {
-        foreach ($v in $velhas) {
-            try { Remove-Item $v.FullName -Recurse -Force -ErrorAction Stop; Write-Host "  apagada   $($v.Name)" }
-            catch { Write-Host "  nao apagou $($v.Name) (socket morto nao sai; ignore)" }
-        }
-    } else {
-        Write-Host "  ($($velhas.Count) pasta(s) .old-* acumulada(s); use -Limpar para apagar)"
-    }
-}
+#    (Com -Limpar, as que ja existiam foram apagadas la em cima; esta chamada
+#    pega as que acabaram de ser criadas nesta execucao.)
+Limpa-Velhas
 
 # 5. Subir e esperar de verdade -- "iniciado" nao e' "no ar".
 if (-not (Test-Path $DockerExe)) { Write-Error "nao achei $DockerExe"; exit 1 }
