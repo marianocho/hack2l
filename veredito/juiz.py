@@ -333,6 +333,19 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = N
         # parecer pode ir conferir. Era isso que "ARBITRO: AC2" nunca permitiu.
         f"ARBITRO: {arbitro.formata(acusacao.get('arbitro'))}",
     ]
+    # Ferramenta deterministica e INDEPENDENTE apontou o mesmo lugar. E' sinal
+    # de forca diferente de "duas lentes concordaram" -- as duas lentes sao o
+    # mesmo modelo. Sem imprimir, o sinal morre em disco.
+    #
+    # ⚠️ Cita a ferramenta VERBATIM em vez de resumir. "Corroborado por bandit"
+    # deixa o leitor supor que a ferramenta confirmou ESTE achado; o scanner
+    # afirmou uma coisa especifica sobre aquela linha, e quem le tem que poder
+    # julgar se aquilo sustenta este achado ou so' cai perto.
+    for s in acusacao.get("_scanner", [])[:2]:
+        linhas.append(
+            f"CORROBORADO POR: {s.get('ferramenta', '?')} em {s.get('local', '?')} "
+            f'-- "{str(s.get("texto") or "")[:110]}"'
+        )
     linha_http = _evidencia_http(http)
     if artefato and artefato.get("estado") == "PROVADO":
         linhas.append(

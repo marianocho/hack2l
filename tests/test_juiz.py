@@ -451,3 +451,27 @@ def test_inconclusivo_com_zero_ferramentas_continua_inconclusivo_sem_ruido():
     )
     assert v["veredito"] == "INCONCLUSIVO"
     assert sum("R3b" in r for r in v["regras_aplicadas"]) <= 1
+
+
+def test_corroboracao_externa_aparece_no_parecer():
+    """Sinal que nao e' impresso morre em disco. E precisa ser distinguivel de
+    'duas lentes concordaram' -- as duas lentes sao o mesmo modelo."""
+    acusacao = {"id": "a1", "categoria": "injection", "local": "shares.py:31",
+                "hipotese": "SQL injection", "arbitro": None, "confianca": "alta",
+                "_corroborado_externo": True,
+                "_scanner": [
+                    {"ferramenta": "bandit", "local": "shares.py:31",
+                     "texto": "Possible SQL injection vector"},
+                    {"ferramenta": "semgrep", "local": "shares.py:31",
+                     "texto": "parametro do cliente alcanca text()"}]}
+    bloco = juiz._bloco({"severidade": "MEDIA"}, acusacao, _art())
+    assert "CORROBORADO POR" in bloco
+    assert "bandit" in bloco and "semgrep" in bloco
+    # Verbatim, nao resumido: quem le julga se aquilo sustenta ESTE achado.
+    assert "Possible SQL injection vector" in bloco
+
+
+def test_sem_corroboracao_externa_a_linha_nao_aparece():
+    bloco = juiz._bloco({"severidade": "MEDIA"},
+                        {"id": "a1", "categoria": "prd", "local": "x.py:1"}, _art())
+    assert "CORROBORADO POR" not in bloco

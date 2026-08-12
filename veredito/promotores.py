@@ -248,9 +248,11 @@ def acusa(diff: str, contexto: str | None = None) -> list[dict]:
             vistos.add(a["id"])
             todas.append(a)
 
-    (cfg.SAIDAS / "acusacoes_brutas.json").write_text(
-        json.dumps(todas, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    # Quem grava `acusacoes_brutas.json` e' o orquestrador, DEPOIS de juntar
+    # todas as fontes. Gravar aqui fazia o arquivo omitir o que nao veio das
+    # seis lentes -- e a lista bruta e' justamente o que se olha quando algo
+    # passou batido. Os scripts que chamam `acusa` direto (generaliza,
+    # experimentos) gravam a propria saida.
     _diagnostico(todas)
     return todas
 

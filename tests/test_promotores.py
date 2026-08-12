@@ -273,3 +273,153 @@ def test_excedente_de_orcamento_e_despriorizado_nao_apagado():
     r = seleciona(a, teto=10)
     assert len(r) == 4, "acusacao sumiu por causa do orcamento"
     assert all(x.get("_excedente_orcamento") for x in r[-2:])
+
+
+# ---------------------------------------- scanner como fonte paralela (11/08)
+
+from veredito import fontes
+
+
+def test_arquivos_do_diff():
+    d = ("diff --git a/app/routers/shares.py b/app/routers/shares.py\n"
+         "--- a/app/routers/shares.py\n+++ b/app/routers/shares.py\n+x\n"
+         "diff --git a/app/models.py b/app/models.py\n+y\n")
+    assert fontes.arquivos_do_diff(d) == {"app/routers/shares.py", "app/models.py"}
+
+
+def test_achado_fora_do_diff_e_descartado():
+    """bandit no psf/requests devolve 708 achados no repo inteiro, quase todos
+    `assert` em teste. Sem o filtro, o scanner fala de codigo que ninguem tocou."""
+    alvos = {"app/routers/shares.py"}
+    assert fontes._dentro_do_diff("/x/app/routers/shares.py", alvos)
+    assert not fontes._dentro_do_diff("/x/tests/test_utils.py", alvos)
+
+
+def test_sem_diff_nao_filtra_nada():
+    """Diff vazio nao pode virar 'descarta tudo' em silencio."""
+    assert fontes._dentro_do_diff("qualquer/coisa.py", set())
+
+
+def test_acusacao_de_scanner_entra_na_cota_como_qualquer_outra():
+    """O scanner nao tem tratamento especial: mesma cota, mesmo dedup."""
+    do_scanner = [acu("scanner_01", "injection", "shares.py:31", None, conf="alta")]
+    dos_promotores = [acu(f"p{i}", "injection", f"outro.py:{i}", None) for i in range(5)]
+    r = seleciona(do_scanner + dos_promotores, teto=3)
+    assert "scanner_01" in [a["id"] for a in r], "achado de scanner perdeu a vaga"
+
+
+def test_scanner_e_promotor_no_mesmo_local_corroboram():
+    """A primeira vez que `_corroborado` significa FONTES INDEPENDENTES, e nao
+    duas lentes do mesmo modelo."""
+    regra = {"regra": "sem SQL cru", "onde": "docs/GUIA.md:70"}
+    r = deduplica([
+        acu("scanner_01", "injection", "shares.py:31", regra, conf="alta"),
+        acu("padroes_01", "padroes", "shares.py:31", regra),
+    ])
+    assert len(r) == 1
+    assert r[0]["_corroborado"] is True
+
+
+def test_local_do_scanner_bate_com_o_do_promotor():
+    """O scanner devolve caminho ABSOLUTO e o promotor relativo. Se nao
+    normalizar, dedup nao funde, concentracao nao agrupa, `_corroborado` nunca
+    fica True -- e o parecer imprime o caminho da maquina de quem rodou."""
+    from pathlib import Path
+    raiz = Path("C:/hack_agents/Hack2L/desafio")
+    abs_ = "C:/hack_agents/Hack2L/desafio/app/api/app/routers/shares.py"
+    assert fontes._relativo(abs_, raiz) == "app/api/app/routers/shares.py"
+
+
+def test_caminho_fora_da_raiz_nao_explode():
+    from pathlib import Path
+    assert fontes._relativo("/outro/lugar/x.py", Path("C:/hack_agents")) == "/outro/lugar/x.py"
+
+
+def test_scanner_que_coincide_CORROBORA_em_vez_de_disputar_vaga():
+    """🚨 O desenho anterior nao funcionava, e a medicao de 11/08 mostrou:
+
+    arbitro do scanner e' sempre null (a regra e' da ferramenta), o dedup
+    chaveia em (local, arbitro), logo chave None, logo nunca funde e
+    `_corroborado` nunca fica True. As duas regras se contradiziam.
+
+    Corroborar vale mais que ocupar 1 das 10 vagas para reverificar a mesma
+    linha: e' a evidencia de que o promotor nao alucinou.
+    """
+    prom = [acu("correcao_01", "correcao", "shares.py:31", None)]
+    scan = [{"id": "scanner_01", "categoria": "injection", "local": "shares.py:31",
+             "hipotese": "SQL injection", "arbitro": None,
+             "_fonte": "bandit (analise estatica de seguranca)"}]
+    novas = fontes.cruza(prom, scan)
+    assert novas == [], "achado que coincide nao pode virar acusacao nova"
+    assert prom[0]["_corroborado_externo"] is True
+    assert prom[0]["_scanner"][0]["ferramenta"].startswith("bandit")
+
+
+def test_scanner_que_ninguem_viu_ENTRA_como_acusacao():
+    """A outra metade: onde o scanner acha o que as seis lentes perderam, ele
+    e' cobertura de verdade e precisa de vaga."""
+    prom = [acu("correcao_01", "correcao", "outro.py:10", None)]
+    scan = [{"id": "scanner_01", "categoria": "injection", "local": "shares.py:31",
+             "hipotese": "SQL injection", "arbitro": None, "_fonte": "bandit"}]
+    novas = fontes.cruza(prom, scan)
+    assert [n["id"] for n in novas] == ["scanner_01"]
+    assert not prom[0].get("_corroborado_externo")
+
+
+def test_corroboracao_externa_e_diferente_de_corroboracao_entre_lentes():
+    """`_corroborado` = duas lentes do mesmo modelo. `_corroborado_externo` =
+    uma ferramenta deterministica e independente. Sao sinais de forca diferente
+    e nao podem virar o mesmo campo."""
+    prom = [acu("a", "correcao", "x.py:1", None)]
+    fontes.cruza(prom, [{"id": "s1", "local": "x.py:1", "hipotese": "h",
+                         "_fonte": "semgrep"}])
+    assert prom[0].get("_corroborado") is None
+    assert prom[0]["_corroborado_externo"] is True
+
+
+# --------------------------------- cruzamento por FAIXA de linha (11/08)
+
+def test_promotor_emite_faixa_e_scanner_emite_linha():
+    """🚨 A primeira rodada integrada deu ZERO corroboracao por causa disto.
+
+    Para o mesmo defeito de SQL os promotores escreveram shares.py:30, :31,
+    :32, :30-34, :32-35 e ate :23-35, enquanto o scanner -- que le a AST --
+    emite :31 seco. Casamento exato de string nunca casaria.
+    """
+    assert fontes._mesmo_ponto("shares.py:30-34", "shares.py:31")
+    assert fontes._mesmo_ponto("shares.py:32", "shares.py:31")
+    assert fontes._mesmo_ponto("app/api/app/routers/shares.py:31", "shares.py:31")
+    # `:23-35` tambem apareceu na rodada real, mas e' REGIAO (13 linhas) -- ver
+    # test_acusacao_que_aponta_uma_REGIAO_nao_e_corroborada.
+
+
+def test_a_tolerancia_nao_funde_defeitos_vizinhos():
+    """Em shares.py a injecao esta na :31 e a config morta na :36. Tolerancia
+    larga fundiria defeitos distintos que por acaso moram perto."""
+    assert not fontes._mesmo_ponto("shares.py:36", "shares.py:31")
+    assert not fontes._mesmo_ponto("shares.py:39-46", "shares.py:31")
+
+
+def test_arquivo_diferente_nunca_e_o_mesmo_ponto():
+    assert not fontes._mesmo_ponto("models.py:31", "shares.py:31")
+
+
+def test_local_ilegivel_nao_casa_com_nada():
+    """Local sem linha (ex.: um diretorio) nao pode casar com tudo."""
+    assert not fontes._mesmo_ponto("app/api/app/routers/", "shares.py:31")
+    assert not fontes._mesmo_ponto(None, "shares.py:31")
+
+
+def test_acusacao_que_aponta_uma_REGIAO_nao_e_corroborada():
+    """🚨 Medido: com o scanner apontando so shares.py:31, o cruzamento sem
+    limite de largura marcou ONZE acusacoes como corroboradas -- incluindo uma
+    em `:15-96` (82 linhas, o arquivo inteiro) que falava de schema Pydantic.
+
+    Inflar o sinal e' o erro de sempre deste projeto: "arbitro preenchido"
+    contava 94 de 94.
+    """
+    assert not fontes._mesmo_ponto("shares.py:15-96", "shares.py:31")
+    assert not fontes._mesmo_ponto("shares.py:19-48", "shares.py:31")
+    assert not fontes._mesmo_ponto("shares.py:23-35", "shares.py:31")
+    # Faixa estreita continua valendo: e' um ponto, so' que impreciso.
+    assert fontes._mesmo_ponto("shares.py:30-34", "shares.py:31")

@@ -15,8 +15,8 @@ import json
 import sys
 import time
 
-from . import (advogado, config as cfg, ferramentas, juiz, llm_alvo,
-               promotores, tracing)
+from . import (advogado, config as cfg, ferramentas, fontes, juiz,
+               llm_alvo, promotores, tracing)
 
 # Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
 # ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
@@ -40,7 +40,8 @@ ACUSACAO_DE_BANCADA = {
 }
 
 
-def _carrega_acusacoes(manual: bool, reusar: bool, diff: str) -> list[dict]:
+def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
+                       com_scanner: bool = True) -> list[dict]:
     if manual:
         return [ACUSACAO_DE_BANCADA]
     caminho = cfg.SAIDAS / "acusacoes_brutas.json"
@@ -54,10 +55,32 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str) -> list[dict]:
             print(f"  ilegivel ({e}), rodando os promotores", file=sys.stderr)
     # O contexto do repo entra aqui, em tempo de execucao, e nao chumbado nas
     # lentes. Ausente = os promotores acusam igual e o arbitro sai `null`.
-    return promotores.acusa(diff, cfg.contexto_do_repo())
+    brutas = promotores.acusa(diff, cfg.contexto_do_repo())
+
+    # Scanner gratis EM PARALELO, nao em serie -- os promotores nao sabem que
+    # ele existe. Ver o cabecalho de fontes.py: mostrar o achado do scanner ao
+    # promotor ancora a lente e destroi o sinal de `_corroborado`.
+    if com_scanner:
+        print("\nfontes externas (scanner gratis, em paralelo):")
+        do_scanner = fontes.acusa(diff)
+        if do_scanner:
+            novas = fontes.cruza(brutas, do_scanner)
+            corrob = sum(1 for a in brutas if a.get("_corroborado_externo"))
+            print(f"  {corrob} acusacao(oes) corroborada(s) por ferramenta "
+                  f"independente | {len(novas)} achado(s) que ninguem viu")
+            brutas += novas
+
+    # A lista bruta COMPLETA, com todas as fontes. `promotores.acusa` gravava a
+    # dele por dentro, entao o arquivo nunca teve o que veio de fora -- e
+    # "imprima a lista bruta" e' a primeira coisa que este projeto manda fazer
+    # quando algo passa batido.
+    (cfg.SAIDAS / "acusacoes_brutas.json").write_text(
+        json.dumps(brutas, indent=2, ensure_ascii=False), encoding="utf-8")
+    return brutas
 
 
-def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -> dict:
+def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
+         com_scanner: bool = True) -> dict:
     cfg.prepara_pastas()
     if not cfg.ANTHROPIC_API_KEY:
         raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
@@ -90,7 +113,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False) -
     diff = advogado.diff_do_pr()  # prefixo cacheado; NUNCA imprimir
     print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)\n")
 
-    brutas = _carrega_acusacoes(manual, reusar, diff)
+    brutas = _carrega_acusacoes(manual, reusar, diff, com_scanner)
     if not brutas:
         return {}
     teto = top_n if top_n is not None else cfg.TOP_N
@@ -178,5 +201,8 @@ if __name__ == "__main__":
     p.add_argument("--top-n", type=int, default=None)
     p.add_argument("--reusar", action="store_true",
                    help="reusa saidas/acusacoes_brutas.json em vez de rodar os promotores")
+    p.add_argument("--sem-scanner", action="store_true",
+                   help="so os promotores, sem as fontes externas gratuitas")
     args = p.parse_args()
-    roda(manual=args.manual, top_n=args.top_n, reusar=args.reusar)
+    roda(manual=args.manual, top_n=args.top_n, reusar=args.reusar,
+         com_scanner=not args.sem_scanner)
