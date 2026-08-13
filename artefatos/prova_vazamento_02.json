@@ -1,0 +1,18 @@
+{
+  "id": "vazamento_02",
+  "arquivo_do_teste": "test_share_recipient_only.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 4.33s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-2a400d93aafb Creating \n Container desafio-api-run-2a400d93aafb Created \n",
+  "stdout_head": "F                                                                        [100%]\n=================================== FAILURES ===================================\n_________ test_outsider_cannot_read_document_shared_with_someone_else __________\n\n    def test_outsider_cannot_read_document_shared_with_someone_else():\n        _owner_email, owner = _user(\"owner\")\n        recipient_email, _recipient = _user(\"recipient\")\n        _outsider_email, outsider = _user(\"outsider\")\n    \n        secret = \"SEKRIT-\" + uuid.uuid4().hex\n        r = client.post(\n            \"/documents\",\n            json={\"title\": \"owner private doc\", \"content\": secret},\n            headers=owner,\n        )\n        assert r.status_code in (200, 201), r.text\n        doc_id = r.json()[\"id\"]\n    \n        # Owner shares with the recipient (no-op on the base commit, where the\n        # endpoint does not exist yet -- that is fine, the invariant still holds).\n        client.post(f\"/documents/{doc_id}/share?email={recipient_email}\", headers=owner)\n    \n        # The outsider must not reach the content through any route.\n        for path in (f\"/shared/{doc_id}\", f\"/documents/{doc_id}\"):\n            resp = client.get(path, headers=outsider)\n>           assert resp.status_code != 200, (\n                f\"outsider read {path}: {resp.status_code} {resp.text}\"\n            )\nE           AssertionError: outsider read /shared/1: 200 {\"id\":1,\"title\":\"owner private doc\",\"content\":\"SEKRIT-3ce52dc4e18b4de5a8b9d5fae1c5d481\"}\nE           assert 200 != 200\nE            +  where 200 = <Response [200 OK]>.status_code\n\ntests/test_share_recipient_only.py:44: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_share_recipient_only.py::test_outsider_cannot_read_document_shared_with_someone_else\n1 failed, 1 warning in 3.84s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-2e3f94381641 Creating \n Container desafio-api-run-2e3f94381641 Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 24.3,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

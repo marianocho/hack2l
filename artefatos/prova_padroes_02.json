@@ -1,0 +1,18 @@
+{
+  "id": "padroes_02",
+  "arquivo_do_teste": "test_response_model_convention.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 0.37s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-af64abc794ab Creating \n Container desafio-api-run-af64abc794ab Created \n",
+  "stdout_head": "F                                                                        [100%]\n=================================== FAILURES ===================================\n________________ test_every_endpoint_returns_a_pydantic_schema _________________\n\n    def test_every_endpoint_returns_a_pydantic_schema():\n        offenders = [\n            f\"{sorted(r.methods)} {r.path} -> response_model={r.response_model!r}\"\n            for r in _body_routes()\n            if not _declares_schema(r.response_model)\n        ]\n>       assert offenders == [], (\n            \"endpoints devolvendo corpo sem schema Pydantic de app/schemas.py: \"\n            + \"; \".join(offenders)\n        )\nE       AssertionError: endpoints devolvendo corpo sem schema Pydantic de app/schemas.py: ['POST'] /documents/{doc_id}/share -> response_model=None; ['GET'] /shared-with-me -> response_model=None; ['GET'] /shared/{doc_id} -> response_model=None\nE       assert [\"['POST'] /d...e_model=None\"] == []\nE         \nE         Left contains 3 more items, first extra item: \"['POST'] /documents/{doc_id}/share -> response_model=None\"\nE         Use -v to get more diff\n\ntests/test_response_model_convention.py:54: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_response_model_convention.py::test_every_endpoint_returns_a_pydantic_schema\n1 failed, 1 warning in 0.47s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-e45d9577c95d Creating \n Container desafio-api-run-e45d9577c95d Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 24.7,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

@@ -1,5 +1,5 @@
 {
-  "id": "bancada_isolamento",
+  "id": "prd_02",
   "tipo": "http",
   "chamadas": [
     {
@@ -17,14 +17,6 @@
       "status": 201,
       "erro": null,
       "corpo": "{\"document_id\":1,\"shared_with_user_id\":2}"
-    },
-    {
-      "metodo": "GET",
-      "caminho": "/shared/1",
-      "como": "carol",
-      "status": 200,
-      "erro": null,
-      "corpo": "{\"id\":1,\"title\":\"Company travel policy\",\"content\":\"Employees may book economy flights for trips under six hours and premium economy for longer trips. Hotel spending is capped at 250 US dollars per night. Receipts must be submitted within fifteen days of the trip. Meals are reimbursed up to 60 US dollars per day. Personal travel added to a business trip is not reimbursable.\"}"
     }
   ],
   "alcancou_a_api": true

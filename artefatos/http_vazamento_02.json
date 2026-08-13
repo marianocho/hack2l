@@ -1,0 +1,23 @@
+{
+  "id": "vazamento_02",
+  "tipo": "http",
+  "chamadas": [
+    {
+      "metodo": "GET",
+      "caminho": "/shared/1",
+      "como": "carol",
+      "status": 200,
+      "erro": null,
+      "corpo": "{\"id\":1,\"title\":\"Company travel policy\",\"content\":\"Employees may book economy flights for trips under six hours and premium economy for longer trips. Hotel spending is capped at 250 US dollars per night. Receipts must be submitted within fifteen days of the trip. Meals are reimbursed up to 60 US dollars per day. Personal travel added to a business trip is not reimbursable.\"}"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/documents",
+      "como": "alice",
+      "status": 200,
+      "erro": null,
+      "corpo": "[{\"id\":4,\"title\":\"Q3 board pre-read\",\"created_at\":\"2026-08-08T12:45:53.704418Z\"}]"
+    }
+  ],
+  "alcancou_a_api": true
+}

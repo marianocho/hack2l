@@ -1,0 +1,17 @@
+{
+  "id": "prd_02",
+  "arquivo_do_teste": "test_engine_redirect_order.py",
+  "commit_base": "30b5f98",
+  "commit_head": "32a5241",
+  "exit_base": 1,
+  "exit_head": 0,
+  "stdout_base": "F..                                                                      [100%]\n=================================== FAILURES ===================================\n_______________ test_engine_nao_aponta_para_o_banco_da_aplicacao _______________\n\n    def test_engine_nao_aponta_para_o_banco_da_aplicacao():\n>       assert appdb.engine.url.database != \"kb\", (\n            f\"engine aponta para {appdb.engine.url.database!r}, o banco da aplicacao\"\n        )\nE       AssertionError: engine aponta para 'kb', o banco da aplicacao\nE       assert 'kb' != 'kb'\nE        +  where 'kb' = postgresql+psycopg://kb:***@db:5432/kb.database\nE        +    where postgresql+psycopg://kb:***@db:5432/kb = Engine(postgresql+psycopg://kb:***@db:5432/kb).url\nE        +      where Engine(postgresql+psycopg://kb:***@db:5432/kb) = appdb.engine\n\ntests/test_engine_redirect_order.py:17: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_engine_redirect_order.py::test_engine_nao_aponta_para_o_banco_da_aplicacao\n1 failed, 2 passed, 1 warning in 0.78s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-b0948fd7b014 Creating \n Container desafio-api-run-b0948fd7b014 Created \n\n",
+  "stdout_head": "...                                                                      [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n3 passed, 1 warning in 0.63s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-4def762b57f9 Creating \n Container desafio-api-run-4def762b57f9 Created \n",
+  "estado": "INCONCLUSIVO",
+  "provado": false,
+  "motivo": "o teste ja falha no commit base, entao nao isola a mudanca do PR -- reescreva o teste para passar no codigo de hoje",
+  "erro": null,
+  "segundos": 11.5,
+  "rodou_base": true,
+  "rodou_head": true
+}

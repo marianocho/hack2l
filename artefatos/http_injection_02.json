@@ -11,28 +11,36 @@
       "corpo": "[{\"id\":4,\"title\":\"Q3 board pre-read\",\"created_at\":\"2026-08-08T12:45:53.704418Z\"}]"
     },
     {
+      "metodo": "GET",
+      "caminho": "/shared-with-me",
+      "como": "carol",
+      "status": 200,
+      "erro": null,
+      "corpo": "[]"
+    },
+    {
       "metodo": "POST",
-      "caminho": "/documents/4/share?email=carol@hack2l.dev",
+      "caminho": "/documents/4/share?email=bob@hack2l.dev",
       "como": "alice",
       "status": 201,
       "erro": null,
-      "corpo": "{\"document_id\":4,\"shared_with_user_id\":4}"
+      "corpo": "{\"document_id\":4,\"shared_with_user_id\":3}"
     },
     {
-      "metodo": "POST",
-      "caminho": "/chat",
+      "metodo": "GET",
+      "caminho": "/shared/4",
       "como": "carol",
       "status": 200,
       "erro": null,
-      "corpo": "{\"conversation_id\":171,\"answer\":\"I do not have enough information to answer that.\",\"citations\":[]}"
+      "corpo": "{\"id\":4,\"title\":\"Q3 board pre-read\",\"content\":\"Confidential, for board members only. Revenue grew 18 percent quarter over quarter and gross margin held at 71 percent. The acquisition target is codenamed Blue Harbor and the term sheet is unsigned. The Q4 headcount plan adds four engineers and one designer. Do not circulate outside the board.\"}"
     },
     {
-      "metodo": "POST",
-      "caminho": "/chat",
-      "como": "carol",
+      "metodo": "GET",
+      "caminho": "/shared-with-me",
+      "como": "alice",
       "status": 200,
       "erro": null,
-      "corpo": "{\"conversation_id\":172,\"answer\":\"I do not have enough information to answer that.\",\"citations\":[]}"
+      "corpo": "[{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":1},{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":2},{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":3}]"
     }
   ],
   "alcancou_a_api": true

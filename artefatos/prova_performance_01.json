@@ -1,0 +1,18 @@
+{
+  "id": "performance_01",
+  "arquivo_do_teste": "test_listagem_sem_n_mais_1.py",
+  "commit_base": "32a5241",
+  "commit_head": "1dd2e5c",
+  "exit_base": 0,
+  "exit_head": 1,
+  "stdout_base": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 0.30s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-ecfb61d79d10 Creating \n Container desafio-api-run-ecfb61d79d10 Created \n",
+  "stdout_head": ".F                                                                       [100%]\n=================================== FAILURES ===================================\n_______________ test_listagem_nao_faz_n_mais_1[/shared-with-me] ________________\n\nclient = <starlette.testclient.TestClient object at 0x7e1400ddec30>\nauth_header = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNzg2NTM3NjAzfQ.IzFzssFIcNt19KWvyegpveZoEw_mv4ITxVq5wjxwuoE'}\npath = '/shared-with-me'\n\n    @pytest.mark.parametrize(\"path\", _list_routes())\n    def test_listagem_nao_faz_n_mais_1(client, auth_header, path):\n        _seed(\"alice@test.dev\", 1)\n        resp_small, small = _count_queries(client, path, auth_header)\n        if resp_small.status_code != 200:\n            pytest.skip(f\"{path} nao listavel: {resp_small.status_code}\")\n    \n        _seed(\"alice@test.dev\", 6)\n        resp_big, big = _count_queries(client, path, auth_header)\n        assert resp_big.status_code == 200\n    \n>       assert big <= small + 1, (\n            f\"{path}: {small} queries com 1 linha, {big} queries com 7 linhas -> N+1\"\n        )\nE       AssertionError: /shared-with-me: 3 queries com 1 linha, 9 queries com 7 linhas -> N+1\nE       assert 9 <= (3 + 1)\n\ntests/test_listagem_sem_n_mais_1.py:68: AssertionError\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_listagem_sem_n_mais_1.py::test_listagem_nao_faz_n_mais_1[/shared-with-me]\n1 failed, 1 passed, 1 warning in 0.63s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-c97551c3e217 Creating \n Container desafio-api-run-c97551c3e217 Created \n\n",
+  "estado": "PROVADO",
+  "provado": true,
+  "motivo": "passa no commit base e falha no head do PR",
+  "erro": null,
+  "segundos": 12.4,
+  "rodou_base": true,
+  "rodou_head": true,
+  "exit_base_confirmacao": 0
+}

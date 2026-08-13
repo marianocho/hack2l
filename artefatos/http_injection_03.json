@@ -12,7 +12,7 @@
     },
     {
       "metodo": "GET",
-      "caminho": "/documents",
+      "caminho": "/shared-with-me",
       "como": "carol",
       "status": 200,
       "erro": null,
@@ -33,6 +33,14 @@
       "status": 200,
       "erro": null,
       "corpo": "{\"id\":4,\"title\":\"Q3 board pre-read\",\"content\":\"Confidential, for board members only. Revenue grew 18 percent quarter over quarter and gross margin held at 71 percent. The acquisition target is codenamed Blue Harbor and the term sheet is unsigned. The Q4 headcount plan adds four engineers and one designer. Do not circulate outside the board.\"}"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/documents/4",
+      "como": "carol",
+      "status": 404,
+      "erro": null,
+      "corpo": "{\"detail\":\"Document not found\"}"
     }
   ],
   "alcancou_a_api": true

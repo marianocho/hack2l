@@ -1,0 +1,23 @@
+{
+  "id": "correcao_02",
+  "tipo": "http",
+  "chamadas": [
+    {
+      "metodo": "GET",
+      "caminho": "/shared-with-me",
+      "como": "alice",
+      "status": 200,
+      "erro": null,
+      "corpo": "[{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":1},{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":2},{\"document_id\":4,\"title\":\"Q3 board pre-read\",\"owner_email\":\"alice@hack2l.dev\",\"position\":3}]"
+    },
+    {
+      "metodo": "GET",
+      "caminho": "/documents",
+      "como": "alice",
+      "status": 200,
+      "erro": null,
+      "corpo": "[{\"id\":4,\"title\":\"Q3 board pre-read\",\"created_at\":\"2026-08-08T12:45:53.704418Z\"}]"
+    }
+  ],
+  "alcancou_a_api": true
+}

@@ -1,0 +1,17 @@
+{
+  "id": "vazamento_01",
+  "arquivo_do_teste": "test_rewrite_preserva_host.py",
+  "commit_base": "30b5f98",
+  "commit_head": "32a5241",
+  "exit_base": 0,
+  "exit_head": 0,
+  "stdout_base": "...                                                                      [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n3 passed, 1 warning in 0.63s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-c52cdb4779ec Creating \n Container desafio-api-run-c52cdb4779ec Created \n",
+  "stdout_head": "...                                                                      [100%]\n=============================== warnings summary ===============================\n../usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854\n  /usr/local/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13\n    from crypt import crypt as _crypt\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n3 passed, 1 warning in 0.60s\n Container desafio-db-1 Running \n Container desafio-db-1 Waiting \n Container desafio-db-1 Healthy \n Container desafio-api-run-5d9aefec50ae Creating \n Container desafio-api-run-5d9aefec50ae Created \n",
+  "estado": "REFUTADO",
+  "provado": false,
+  "motivo": "o teste passa nos dois lados: a mudanca do PR nao quebra isto",
+  "erro": null,
+  "segundos": 11.4,
+  "rodou_base": true,
+  "rodou_head": true
+}
