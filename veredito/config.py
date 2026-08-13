@@ -45,8 +45,93 @@ BRANCH_BASE = _s("BASE_BRANCH", "main")
 WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolve()
 
 # --- nossas saidas ----------------------------------------------------------
+#
+# SAIDAS e' a RAIZ das saidas (rodadas/, final/, e as pastas dos experimentos).
+# O que uma rodada produz NAO mora aqui -- mora em RODADA, abaixo.
 SAIDAS = RAIZ / "saidas"
+RODADAS = SAIDAS / "rodadas"
+
+# O ponteiro para a ultima rodada gravada. Arquivo de texto, e nao symlink, de
+# proposito: symlink no Windows exige modo desenvolvedor ou admin, e uma
+# ferramenta que so' funciona na maquina de um dos socios nao serve.
+PONTEIRO = RODADAS / "ULTIMA"
+
+# 🚨 POR QUE ISTO EXISTE
+#
+# Ate' 13/08 toda rodada escrevia nos MESMOS caminhos: saidas/veredictos.json e
+# artefatos/<tipo>_<id>. Namespace plano, chave que se repete entre rodadas --
+# entao cada rodada apagava a anterior. Medido no commit cfeb64b: 11 artefatos
+# sobrescritos, e as rodadas de 11/08 16h e 21h so' sobrevivem no que a seguinte
+# nao pisou. Dado que ja foi PAGO para produzir (US$~1,30 por rodada) e que nao
+# da para recuperar.
+#
+# ⚠️ E os artefatos entram junto, nao so' as saidas. Sao a EVIDENCIA -- num
+# produto cuja regra central e' "sem artefato nao ha prova", perder o artefato e
+# guardar o veredito e' guardar exatamente a metade que nao vale nada.
+#
+# RODADA e ARTEFATOS sao REBINDADOS por nova_rodada()/usa_ultima_rodada(). Todo
+# consumidor acessa `cfg.RODADA` no momento da chamada, nunca faz `from .config
+# import RODADA` -- e' o mesmo motivo pelo qual os testes ja conseguem trocar
+# cfg.ARTEFATOS por tmp_path com monkeypatch.
+RODADA = SAIDAS
 ARTEFATOS = RAIZ / "artefatos"
+
+
+def _rodada_do_ponteiro() -> Path | None:
+    """A pasta apontada por ULTIMA, ou None se ela nao existe MAIS.
+
+    ⚠️ Conferir o diretorio, e nao so' ler o arquivo, e' o ponto todo: o
+    ponteiro e' uma string e a pasta pode ter sido apagada a mao. Ponteiro
+    pendurado que passa batido faria o juiz ler uma rodada vazia e imprimir
+    "0 com parecer" -- absolvicao limpa por acidente de arquivo, que e'
+    precisamente o modo de falha que este produto existe para impedir.
+    """
+    try:
+        nome = PONTEIRO.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not nome or "/" in nome or "\\" in nome:
+        return None
+    destino = RODADAS / nome
+    return destino if destino.is_dir() else None
+
+
+def nova_rodada(carimbo: str) -> Path:
+    """Abre a pasta DESTA rodada e faz ULTIMA apontar para ela.
+
+    Chamada uma vez, no comeco de `orquestrador.roda`, ANTES de qualquer
+    escrita -- o pre-voo e o `llm_alvo.registra` ja gravam artefato.
+    """
+    global RODADA, ARTEFATOS
+    destino = RODADAS / carimbo
+    (destino / "artefatos").mkdir(parents=True, exist_ok=True)
+    RODADA, ARTEFATOS = destino, destino / "artefatos"
+    PONTEIRO.write_text(carimbo + "\n", encoding="utf-8")
+    return destino
+
+
+def usa_ultima_rodada() -> Path | None:
+    """Aponta este processo para a ultima rodada gravada, SEM criar nada.
+
+    E' o que sustenta a disciplina no 2 do CLAUDE.md: ajustar o juiz pela
+    trigesima vez nao pode re-executar o advogado. `python -m veredito.juiz`
+    sozinho tem que achar a rodada que o orquestrador acabou de gravar.
+
+    Devolve None quando ainda nao ha rodada nenhuma -- e ai RODADA continua
+    valendo saidas/ e ARTEFATOS continua valendo artefatos/, que e' onde estao
+    as rodadas gravadas antes desta mudanca. Legado continua legivel.
+    """
+    global RODADA, ARTEFATOS
+    destino = _rodada_do_ponteiro()
+    if destino is None:
+        return None
+    RODADA, ARTEFATOS = destino, destino / "artefatos"
+    return destino
+
+
+# Resolve na importacao: quem so' LE (juiz avulso, script de analise) ja abre
+# apontando para a ultima rodada, sem precisar saber que rodadas existem.
+usa_ultima_rodada()
 
 # --- banco descartavel do agente --------------------------------------------
 #
@@ -227,5 +312,8 @@ CORTE_SAIDA = _i("CORTE_SAIDA", 4000)
 
 
 def prepara_pastas() -> None:
-    for p in (SAIDAS, ARTEFATOS, WORKTREES):
+    # RODADA e ARTEFATOS sao lidos do modulo a cada chamada, e nao capturados no
+    # topo, porque nova_rodada() os rebinda -- capturar aqui criaria a pasta da
+    # rodada ANTERIOR e deixaria a atual sem existir.
+    for p in (SAIDAS, RODADAS, RODADA, ARTEFATOS, WORKTREES):
         p.mkdir(parents=True, exist_ok=True)

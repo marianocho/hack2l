@@ -225,8 +225,9 @@ def fonte_promotores() -> list[dict]:
     corte simples mediria uma lente so.
     """
     from experimento_verificador import amostra as _amostra
+    # cfg.RODADA = a ultima rodada gravada, resolvida na importacao de config.
     bruto = json.loads(
-        (cfg.SAIDAS / "acusacoes_brutas.json").read_text(encoding="utf-8"))
+        (cfg.RODADA / "acusacoes_brutas.json").read_text(encoding="utf-8"))
     esc = _amostra([a for a in bruto if isinstance(a, dict)], 10)
     print(f"  {len(bruto)} acusacoes dos promotores, amostra de {len(esc)}")
     fora = []

@@ -5,7 +5,11 @@ pela trigesima vez nao pode re-executar o advogado, e se a rodada morrer no meio
 o que ja foi provado continua provado.
 
     python -m veredito.orquestrador --manual   # uma acusacao escrita a mao
-    python -m veredito.orquestrador            # le saidas/acusacoes.json
+    python -m veredito.orquestrador            # roda os 6 promotores
+
+Cada rodada tem a SUA pasta, em saidas/rodadas/<data>T<hora>-<commit>/, e
+saidas/rodadas/ULTIMA aponta para a mais recente. Rodada nao apaga rodada; o
+juiz avulso acha a ultima sozinho.
 """
 
 from __future__ import annotations
@@ -14,9 +18,28 @@ import argparse
 import json
 import sys
 import time
+from pathlib import Path
 
 from . import (advogado, config as cfg, ferramentas, fontes, juiz,
                llm_alvo, promotores, tracing)
+
+
+def _carimbo_da_rodada() -> str:
+    """`<data>T<hora>-<commit head>`. Ordena sozinho e diz o que foi revisado.
+
+    O commit e' o do HEAD do PR: duas rodadas sobre o mesmo codigo ficam lado a
+    lado e comparaveis, e rodada de outro commit nunca se confunde com elas.
+
+    ⚠️ Carimbo NUNCA derruba rodada. Se o git nao responder, o horario sozinho
+    ja separa as pastas -- que e' o objetivo. Perder o sufixo custa legibilidade;
+    levantar aqui custaria a rodada inteira, e o pre-voo logo abaixo e' quem tem
+    a tarefa de reclamar de git quebrado.
+    """
+    agora = time.strftime("%Y%m%dT%H%M")
+    try:
+        return f"{agora}-{ferramentas.commit_head()[:7]}"
+    except Exception:
+        return agora
 
 # Acusacao de bancada para o slot 1: exercita o pipeline inteiro sem depender de
 # ninguem ter lido o diff. Vem da INVARIANTE do desafio (o seed com carol sem
@@ -41,10 +64,12 @@ ACUSACAO_DE_BANCADA = {
 
 
 def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
-                       com_scanner: bool = True) -> list[dict]:
+                       com_scanner: bool = True,
+                       anterior: Path | None = None) -> list[dict]:
     if manual:
         return [ACUSACAO_DE_BANCADA]
-    caminho = cfg.SAIDAS / "acusacoes_brutas.json"
+    # --reusar le da rodada ANTERIOR: a desta acabou de ser criada e esta vazia.
+    caminho = (anterior or cfg.RODADA) / "acusacoes_brutas.json"
     if reusar and caminho.is_file():
         # Afinar o advogado nao pode custar outra rodada de promotores.
         print(f"reusando {caminho.name} (--reusar)")
@@ -74,7 +99,7 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
     # dele por dentro, entao o arquivo nunca teve o que veio de fora -- e
     # "imprima a lista bruta" e' a primeira coisa que este projeto manda fazer
     # quando algo passa batido.
-    (cfg.SAIDAS / "acusacoes_brutas.json").write_text(
+    (cfg.RODADA / "acusacoes_brutas.json").write_text(
         json.dumps(brutas, indent=2, ensure_ascii=False), encoding="utf-8")
     return brutas
 
@@ -84,6 +109,17 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     cfg.prepara_pastas()
     if not cfg.ANTHROPIC_API_KEY:
         raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
+
+    # A rodada anterior, ANTES de abrir a nova -- na importacao cfg ja apontava
+    # para ela. E' de onde --reusar le.
+    anterior = cfg.RODADA
+
+    # Abre a pasta desta rodada antes de QUALQUER escrita: o pre-voo grava
+    # artefato de selftest e avisos.json, e llm_alvo.registra grava
+    # ambiente.json. Abrir depois deles espalharia a rodada por duas pastas.
+    pasta = cfg.nova_rodada(_carimbo_da_rodada())
+    cfg.prepara_pastas()
+    print(f"rodada em {pasta.relative_to(cfg.RAIZ)}\n")
 
     inicio = time.time()
 
@@ -113,7 +149,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     diff = advogado.diff_do_pr()  # prefixo cacheado; NUNCA imprimir
     print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)\n")
 
-    brutas = _carrega_acusacoes(manual, reusar, diff, com_scanner)
+    brutas = _carrega_acusacoes(manual, reusar, diff, com_scanner, anterior)
     if not brutas:
         return {}
     teto = top_n if top_n is not None else cfg.TOP_N
@@ -148,10 +184,10 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
 
         # Grava a cada acusacao, nao no fim: rodada que morre no meio nao perde
         # o que ja foi provado.
-        (cfg.SAIDAS / "veredictos.json").write_text(
+        (cfg.RODADA / "veredictos.json").write_text(
             json.dumps(veredictos, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        (cfg.SAIDAS / "acusacoes.json").write_text(
+        (cfg.RODADA / "acusacoes.json").write_text(
             json.dumps(acusacoes, indent=2, ensure_ascii=False), encoding="utf-8"
         )
 
@@ -173,7 +209,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
         et.evento("parecer", caracteres=len(texto))
     rod_cm.__exit__(None, None, None)   # fecha o trace e faz flush
     if rod.url:
-        print(f"\ntrace: {rod.url}  (tambem em saidas/trace.txt)")
+        print(f"\ntrace: {rod.url}  (tambem em {(cfg.RODADA / 'trace.txt').relative_to(cfg.RAIZ)})")
 
     total = {
         "acusacoes": len(veredictos),
@@ -188,7 +224,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
         f"{total['tokens_saida']} saida / {total['cache_read']} de cache, "
         f"em {total['segundos']}s"
     )
-    (cfg.SAIDAS / "custo.json").write_text(
+    (cfg.RODADA / "custo.json").write_text(
         json.dumps(total, indent=2, ensure_ascii=False), encoding="utf-8"
     )
     return total
@@ -197,10 +233,10 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--manual", action="store_true",
-                   help="usa a acusacao de bancada em vez de saidas/acusacoes.json")
+                   help="usa a acusacao de bancada em vez de rodar os promotores")
     p.add_argument("--top-n", type=int, default=None)
     p.add_argument("--reusar", action="store_true",
-                   help="reusa saidas/acusacoes_brutas.json em vez de rodar os promotores")
+                   help="reusa acusacoes_brutas.json da ULTIMA rodada, sem chamar os promotores")
     p.add_argument("--sem-scanner", action="store_true",
                    help="so os promotores, sem as fontes externas gratuitas")
     args = p.parse_args()

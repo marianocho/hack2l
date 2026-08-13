@@ -263,7 +263,8 @@ def _diagnostico(acusacoes: list[dict]) -> None:
     Categoria com contagem destoante = falta contexto naquela lente.
     Tudo concentrado em poucos arquivos = nao leu o diff inteiro.
     """
-    print(f"\n  {len(acusacoes)} acusacoes brutas -> saidas/acusacoes_brutas.json")
+    print(f"\n  {len(acusacoes)} acusacoes brutas -> "
+          f"{(cfg.RODADA / 'acusacoes_brutas.json').relative_to(cfg.RAIZ)}")
     if not acusacoes:
         return
     por_cat = Counter(a.get("categoria", "?") for a in acusacoes)

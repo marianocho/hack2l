@@ -76,7 +76,7 @@ funcao_publica(...)  -> str     # o que o modelo lê. Prosa.
 
 ```mermaid
 flowchart TD
-    P["promotores/*.md<br/>6 lentes · Haiku · paralelo"] --> AC["saidas/acusacoes.json"]
+    P["promotores/*.md<br/>6 lentes · Haiku · paralelo"] --> AC["acusacoes.json"]
     AC --> ADV["advogado<br/>Opus · tool_runner<br/>uma acusação por vez"]
 
     ADV -->|"chama"| FER["veredito/ferramentas.py<br/>5 tools · zero LLM"]
@@ -84,14 +84,19 @@ flowchart TD
     FER --> AVI["artefatos/avisos.json<br/>degradação por acusação"]
     LLM["veredito/llm_alvo.py<br/>sonda o modelo do alvo"] --> AMB["artefatos/ambiente.json"]
 
-    ADV --> VER["saidas/veredictos.json<br/>texto + severidade proposta"]
+    ADV --> VER["veredictos.json<br/>texto + severidade proposta"]
 
     VER --> J["veredito/juiz.py<br/>R0–R4 determinísticas"]
     ART --> J
     AVI --> J
     AMB --> J
-    J --> PAR["saidas/parecer.md<br/>3 listas"]
+    J --> PAR["parecer.md<br/>3 listas"]
 ```
+
+Todos esses arquivos moram na pasta **desta** rodada,
+`saidas/rodadas/<data>T<hora>-<commit>/` — nada é escrito em caminho fixo, então
+rodada não apaga rodada. `saidas/rodadas/ULTIMA` aponta para a mais recente, e é
+assim que o juiz avulso se acha. Layout completo em `CONTRATO.md` §5.
 
 ### Por que disco entre cada etapa
 
@@ -299,7 +304,7 @@ cp .env.example .env          # ANTHROPIC_API_KEY é o único bloqueio
 python -m pip install -r requirements.txt
 python checar_paridade.py     # a máquina consegue rodar? (8 checagens)
 
-python -m veredito.juiz       # gera saidas/parecer.md do que está em disco
+python -m veredito.juiz       # re-sentencia a ÚLTIMA rodada, sem re-executar o advogado
 ```
 
 ⚠️ **A checagem `app serve o PR` é a que evita o falso negativo mais caro entre

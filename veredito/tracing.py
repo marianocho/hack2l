@@ -237,8 +237,8 @@ def _grava_url(url: str | None) -> None:
     if not url:
         return
     try:
-        cfg.SAIDAS.mkdir(parents=True, exist_ok=True)
-        (cfg.SAIDAS / "trace.txt").write_text(
+        cfg.RODADA.mkdir(parents=True, exist_ok=True)
+        (cfg.RODADA / "trace.txt").write_text(
             f"{datetime.now().isoformat(timespec='seconds')}  {url}\n",
             encoding="utf-8",
         )

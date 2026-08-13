@@ -435,8 +435,8 @@ def carrega_do_disco() -> tuple[list[dict], dict, dict, dict, dict]:
     Ajustar o juiz pela trigesima vez nao pode re-executar o advogado -- meia
     hora de disciplina que se paga dez vezes.
     """
-    veredictos = _carrega_json(cfg.SAIDAS / "veredictos.json", [])
-    acusacoes = {a["id"]: a for a in _carrega_json(cfg.SAIDAS / "acusacoes.json", []) if "id" in a}
+    veredictos = _carrega_json(cfg.RODADA / "veredictos.json", [])
+    acusacoes = {a["id"]: a for a in _carrega_json(cfg.RODADA / "acusacoes.json", []) if "id" in a}
     avisos = _carrega_json(cfg.ARTEFATOS / "avisos.json", {})
     # prova_* = teste diferencial (causalidade). http_* = app rodando (alcance).
     return veredictos, acusacoes, _por_id("prova_*.json"), avisos, _por_id("http_*.json")
@@ -447,7 +447,7 @@ def sentencia() -> str:
     organizado = organiza(veredictos, acusacoes, artefatos, avisos, http)
     texto = formata_parecer(organizado, acusacoes, artefatos, http)
     cfg.prepara_pastas()
-    (cfg.SAIDAS / "parecer.md").write_text(texto, encoding="utf-8")
+    (cfg.RODADA / "parecer.md").write_text(texto, encoding="utf-8")
     return texto
 
 

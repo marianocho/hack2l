@@ -8,6 +8,12 @@ __pycache__/
 
 # Ruido das rodadas de dev. saidas/final/ NAO e' ignorado de proposito: e' a
 # evidencia da rodada que vai pro palco, e a maquina que apresenta e' a outra.
+#
+# Desde 13/08 cada rodada tem a sua pasta em saidas/rodadas/<data>T<hora>-<commit>/,
+# com os artefatos dela dentro, e saidas/rodadas/ULTIMA aponta para a mais
+# recente. Tudo isso cai neste `saidas/*` e fica FORA do git de proposito: sao
+# dezenas de rodadas de dev por semana. O que vale viaja por copia deliberada
+# para saidas/final/<nome>/, com um LEIA.md dizendo o que aquela rodada prova.
 saidas/*
 !saidas/final/
 
@@ -15,8 +21,10 @@ saidas/*
 # para saidas/final/, que nao e' ignorado -- a maquina que apresenta e' a outra.
 logs/
 
-# Artefatos dos testes da propria pericia. Os artefatos de prova de verdade
-# ficam versionados -- sao a evidencia.
+# artefatos/ na raiz e' o LEGADO: as rodadas ate' 13/08 escreviam aqui, e o que
+# esta commitado continua sendo a evidencia daquelas rodadas. Rodada nova grava
+# em saidas/rodadas/<carimbo>/artefatos/, que ja e' ignorado pela regra acima.
+# As tres regras abaixo seguem valendo para o que restou aqui.
 artefatos/*selftest*
 # estado de execucao por maquina, nao evidencia de acusacao. A rodada final
 # commita o seu explicitamente com git add -f se o parecer citar.
@@ -28,5 +36,4 @@ artefatos/*docker_quebrado*
 # maquina. Commitar isto faz o duble de uma sobrescrever o vivo da outra, e a R4
 # dispara falso-inconclusivo na maquina do palco.
 artefatos/ambiente.json
-saidas/trace.txt
 .repos/

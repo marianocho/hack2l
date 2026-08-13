@@ -292,19 +292,45 @@ sustenta.
 A disciplina nº 2 do doc (salvar cada etapa) é também a fronteira entre as duas
 pessoas. Ajustar o juiz pela trigésima vez não pode re-executar o advogado.
 
+**Uma rodada, uma pasta.** Desde 13/08 nada é escrito em caminho fixo: cada
+rodada abre `saidas/rodadas/<data>T<hora>-<commit do head>/` e escreve só lá
+dentro, artefatos inclusive.
+
 ```
 hack2l/
-├── promotores/*.md          <- prompts, texto puro. Integrar = dar commit.
-├── saidas/acusacoes.json    <- promotores -> advogado
-├── saidas/veredictos.json   <- advogado -> juiz
-├── artefatos/prova_*.json   <- a prova crua. O juiz le daqui.
-├── artefatos/avisos.json    <- degradacao por acusacao. Alimenta a R4.
-└── saidas/parecer.md        <- a saida final
+├── promotores/*.md                  <- prompts, texto puro. Integrar = dar commit.
+└── saidas/rodadas/
+    ├── ULTIMA                       <- texto: o nome da pasta mais recente
+    └── 20260813T0204-a1b2c3d/
+        ├── acusacoes_brutas.json    <- a lista completa, todas as fontes
+        ├── acusacoes.json           <- promotores -> advogado (as selecionadas)
+        ├── veredictos.json          <- advogado -> juiz
+        ├── parecer.md               <- a saida final
+        ├── custo.json  trace.txt
+        └── artefatos/
+            ├── prova_*.json         <- a prova crua. O juiz le daqui.
+            └── avisos.json          <- degradacao por acusacao. Alimenta a R4.
 ```
 
-`saidas/` é gitignorado (ruído de dev), **menos `saidas/final/`** — a evidência
-da rodada que vai pro palco precisa viajar pro GitHub, porque a máquina que
-apresenta é a outra.
+**Por que carimbo e não caminho fixo:** até 13/08 toda rodada escrevia nos
+mesmos nomes, então cada rodada apagava a anterior — 11 artefatos sobrescritos,
+medido no commit `cfeb64b`, a US$~1,30 a rodada e sem recuperação.
+
+**Por que os artefatos entram junto:** são a evidência. Num produto cuja regra
+central é *"sem artefato não há prova"*, guardar o veredito e perder o artefato
+é guardar exatamente a metade que não vale nada.
+
+**`ULTIMA` é como o juiz avulso se acha.** `python -m veredito.juiz` roda em
+outro processo e não recebe argumento: ele lê o ponteiro. É o que sustenta a
+disciplina nº 2 — ajustar o juiz pela trigésima vez não pode re-executar o
+advogado. Se a pasta apontada não existir mais, `usa_ultima_rodada()` devolve
+`None` e cai no legado, **nunca** numa rodada vazia: rodada vazia imprimiria
+"0 com parecer" e absolvição limpa por acidente de arquivo é o modo de falha que
+este produto existe para impedir.
+
+`saidas/` é gitignorado (dezenas de rodadas de dev por semana), **menos
+`saidas/final/`** — a evidência que vale viaja por cópia deliberada, com um
+`LEIA.md` dizendo o que aquela rodada prova.
 
 ## 6. Dono por arquivo
 
