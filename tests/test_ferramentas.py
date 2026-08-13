@@ -8,7 +8,9 @@ pode quebrar o agente, e uma suite que so passa neste PR falharia a regua.
     pytest tests -q -m "not lento"   # so as unitarias, milissegundos
 """
 
+import re
 import subprocess
+from pathlib import Path
 
 import requests
 
@@ -405,3 +407,51 @@ def test_autoteste_nao_levanta_com_worktree_quebrada(monkeypatch):
     r = f.autoteste(sondar_app=False)
     assert r["ok"] is False
     assert "worktree" in r["ferramentas"]["read_file"]["detalhe"]
+
+
+# -------------------------------- banco descartavel imposto de fora (11/08)
+
+def test_pytest_roda_com_DATABASE_URL_imposta(monkeypatch):
+    """🚨 Reproduz o incidente de 11/08: o advogado apagou o banco da aplicacao
+    (4 usuarios, 5 documentos) rodando a suite do COMMIT BASE, que era anterior
+    ao conserto do proprio autor ("Stop the test suite from wiping the app
+    database").
+
+    O `DROP SCHEMA public CASCADE` existe IGUAL nos dois commits
+    (conftest.py:49). O que o PR acrescentou foi para ONDE ele aponta. Logo:
+    procurar `DROP` no diff nao pegaria nada -- o diff nao tem nenhum.
+
+    A protecao tem que vir de FORA, e e' isto que este teste trava.
+    """
+    capturado = {}
+
+    def falso_run(cmd, **kw):
+        capturado["cmd"] = cmd
+        class R:
+            returncode, stdout, stderr = 0, "1 passed in 0.1s", ""
+        return R()
+
+    monkeypatch.setattr(f.subprocess, "run", falso_run)
+    f._roda_pytest(Path("/qualquer/worktree"))
+
+    cmd = capturado["cmd"]
+    assert "-e" in cmd, "DATABASE_URL nao foi imposta ao container"
+    url = cmd[cmd.index("-e") + 1]
+    assert url.startswith("DATABASE_URL=")
+    assert f.cfg.BANCO_DESCARTAVEL in url
+    # O que nao pode acontecer de jeito nenhum:
+    assert not re.search(r"@[^/]+/kb$", url), "apontou para o banco da APLICACAO"
+
+
+def test_o_banco_descartavel_nao_e_o_da_aplicacao():
+    """Guarda boba de propósito: um typo aqui apagaria dado real."""
+    assert f.cfg.BANCO_DESCARTAVEL not in ("kb", "postgres")
+    assert f.cfg.url_do_banco_descartavel().endswith("/" + f.cfg.BANCO_DESCARTAVEL)
+
+
+def test_criar_o_banco_nunca_derruba_a_rodada(monkeypatch):
+    """Se o banco ja existe, o CREATE devolve erro -- e esta tudo certo."""
+    def explode(*a, **kw):
+        raise RuntimeError("daemon fora")
+    monkeypatch.setattr(f.subprocess, "run", explode)
+    f._garante_banco_descartavel()   # nao pode levantar

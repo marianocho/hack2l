@@ -43,6 +43,38 @@ WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolv
 SAIDAS = RAIZ / "saidas"
 ARTEFATOS = RAIZ / "artefatos"
 
+# --- banco descartavel do agente --------------------------------------------
+#
+# 🚨 Em 11/08 o advogado APAGOU o banco da aplicacao: 4 usuarios e 5 documentos.
+# Nao foi bug, foi o desenho. A prova diferencial roda a suite do repositorio
+# nos DOIS commits, e o commit base era anterior ao conserto do proprio autor
+# ("Stop the test suite from wiping the app database"). O `DROP SCHEMA public
+# CASCADE` existe IGUAL nos dois lados (conftest.py:49); o que o PR acrescentou
+# foi para ONDE ele aponta.
+#
+# Ou seja: o perigo nao estava na mudanca, estava no codigo que a mudanca NAO
+# tocou -- e que so era seguro por causa de uma protecao que ainda nao existia.
+# Procurar `DROP` no diff nao pegaria: o diff nao tem nenhum.
+#
+# A protecao tem que vir de FORA, para nao depender de o repositorio ja ter tido
+# a ideia. E' literalmente a mesma solucao que o autor do desafio adotou, so que
+# imposta pelo agente e valida em qualquer commit, inclusive nos antigos.
+#
+# ⚠️ Isto protege o BANCO. Uma suite que dispare email de verdade ou chame API
+# de pagamento continua fazendo -- banco e' o caso comum, nao blindagem total.
+BANCO_DESCARTAVEL = _s("BANCO_DESCARTAVEL", "kb_veredito")
+
+
+def url_do_banco_descartavel() -> str:
+    """A URL que o agente IMPOE ao rodar teste do repositorio sob revisao.
+
+    `db` e `kb:kb` vem do docker-compose do desafio; num cliente isto viria do
+    `veredito.yml`, e a Action rodando na CI dele ja tem banco descartavel como
+    o normal.
+    """
+    return f"postgresql+psycopg://kb:kb@db:5432/{BANCO_DESCARTAVEL}"
+
+
 # --- contexto do repositorio sob revisao ------------------------------------
 # O que o repositorio documenta sobre si mesmo (PRD, criterios de aceite,
 # convencoes), com arquivo e linha de cada regra. Entra no contexto dos

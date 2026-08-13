@@ -220,6 +220,25 @@ _RESUMO_PYTEST = re.compile(
 )
 
 
+def _garante_banco_descartavel() -> None:
+    """Cria o banco do agente se ele nao existir. Idempotente, e nunca levanta.
+
+    Falhar aqui nao pode derrubar a rodada: se o banco ja existe (o caso comum)
+    o CREATE devolve erro e esta tudo certo. O que importa e' que ele exista
+    ANTES de o pytest do repositorio rodar apontado para ele.
+    """
+    try:
+        subprocess.run(
+            ["docker", "compose", "-f", str(cfg.COMPOSE),
+             "--project-directory", str(cfg.DESAFIO),
+             "exec", "-T", "db", "psql", "-U", "kb", "-d", "postgres",
+             "-c", f'CREATE DATABASE "{cfg.BANCO_DESCARTAVEL}"'],
+            capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
+        )
+    except Exception:
+        pass
+
+
 def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str, bool]:
     """Roda a suite dentro do container, com o codigo do worktree por cima.
 
@@ -228,10 +247,22 @@ def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str, bool]:
     codigo assado na imagem e a prova diferencial da o MESMO resultado nos dois
     lados -- falso negativo silencioso. Provado com canario em 08/08.
     """
+    _garante_banco_descartavel()
     cmd = [
         "docker", "compose", "-f", str(cfg.COMPOSE),
         "--project-directory", str(cfg.DESAFIO),
         "run", "--rm",
+        # 🚨 O ALVO E' IMPOSTO DE FORA, e e' o conserto do incidente de 11/08.
+        #
+        # A suite que roda aqui e' do REPOSITORIO sob revisao, em DOIS commits,
+        # e nao ha nenhuma garantia de que a versao antiga seja segura -- o
+        # commit base do desafio era anterior ao proprio conserto do autor, e
+        # apagou o banco da aplicacao (4 usuarios, 5 documentos).
+        #
+        # Forcando DATABASE_URL aqui, o `DROP SCHEMA` do conftest deles acontece
+        # num banco que existe para ser destruido. Nao depende do repositorio
+        # ter tido a ideia, e vale em qualquer commit.
+        "-e", f"DATABASE_URL={cfg.url_do_banco_descartavel()}",
         "-v", f"{worktree / 'app' / 'api' / 'app'}:/code/app",
         "-v", f"{worktree / 'app' / 'api' / 'tests'}:/code/tests",
         "api", "python", "-m", "pytest", alvo, "-q",
