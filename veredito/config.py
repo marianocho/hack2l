@@ -22,6 +22,11 @@ def _s(nome: str, padrao: str) -> str:
     return os.getenv(nome) or padrao
 
 
+def _b(nome: str, padrao: bool) -> bool:
+    v = (os.getenv(nome) or "").strip().lower()
+    return v in ("1", "true", "sim", "yes") if v else padrao
+
+
 def _i(nome: str, padrao: int) -> int:
     try:
         return int(os.getenv(nome) or padrao)
@@ -63,6 +68,37 @@ ARTEFATOS = RAIZ / "artefatos"
 # ⚠️ Isto protege o BANCO. Uma suite que dispare email de verdade ou chame API
 # de pagamento continua fazendo -- banco e' o caso comum, nao blindagem total.
 BANCO_DESCARTAVEL = _s("BANCO_DESCARTAVEL", "kb_veredito")
+
+
+# --- isolamento de rede no lado BASE ----------------------------------------
+#
+# 🚨 O risco e' ASSIMETRICO, e essa assimetria e' a chave do desenho:
+#
+#   suite do HEAD -- a CI do cliente ja roda isso a cada push. Risco marginal
+#                    nosso: ZERO. Se aquela suite manda email, ela ja manda.
+#   suite do BASE -- ninguem roda mais. A CI dele rodou na epoca, com os
+#                    segredos e os dados DAQUELA epoca. Nos rodamos hoje.
+#
+# Entao a contencao pesada so' vale no base -- e foi exatamente ali que o agente
+# apagou o banco em 11/08.
+#
+# A rede interna (`docker network create --internal`) deixa o banco alcancavel e
+# a internet nao: smtplib, API de pagamento e webhook morrem em rota. O que a
+# suite legitimamente precisa continua funcionando.
+#
+# ⚠️ CUSTO REAL, e ele e' aceito conscientemente: repositorio cujo ARNES de teste
+# precisa de rede externa perde a prova no base -- vira INCONCLUSIVO. Nao vira
+# veredito errado, e o achado perdido e' justamente aquele cuja prova teria
+# externalidade (alguem recebeu o email de verdade).
+#
+# 🚫 E o inconclusivo PRECISA ser rotulado. Inconclusivo em silencio incha a
+# lista e faz o parecer parecer fraco por culpa nossa -- "uma lista de
+# inconclusivos inflada enfraquece o parecer tanto quanto uma vazia".
+REDE_ISOLADA = _s("REDE_ISOLADA", "veredito_isolada")
+
+# A escotilha. Efeito irreversivel se pergunta ANTES, nao se descobre depois --
+# e quem tem contexto para decidir e' o dono do repositorio, nao o agente.
+PERMITIR_REDE_NO_BASE = _b("PERMITIR_REDE_NO_BASE", False)
 
 
 def url_do_banco_descartavel() -> str:

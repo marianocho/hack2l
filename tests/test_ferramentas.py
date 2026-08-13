@@ -455,3 +455,67 @@ def test_criar_o_banco_nunca_derruba_a_rodada(monkeypatch):
         raise RuntimeError("daemon fora")
     monkeypatch.setattr(f.subprocess, "run", explode)
     f._garante_banco_descartavel()   # nao pode levantar
+
+
+# --------------------------- contencao de rede no lado BASE (11/08)
+
+def test_o_base_roda_contido_e_o_head_nao():
+    """O risco e' ASSIMETRICO: a CI do cliente roda o head a cada push, entao
+    risco marginal nosso e' zero. O base ninguem roda mais -- e foi rodando o
+    base que o agente apagou o banco."""
+    # `inspect.getsource` nao serve: as tools sao objetos BetaFunctionTool, nao
+    # funcoes. Le-se o modulo.
+    src = Path(f.__file__).read_text(encoding="utf-8")
+    assert "wt_base, alvo, contido=contido" in src, "o base nao esta rodando contido"
+    assert "_roda_pytest(wt_head, alvo)" in src, "o head nao pode ser contido"
+
+
+def test_reconhece_falha_por_falta_de_rede():
+    """Sem distinguir, o isolamento gera inconclusivo mudo e o parecer parece
+    fraco por culpa nossa, nao do PR."""
+    for saida in (
+        "requests.exceptions.ConnectionError: HTTPSConnectionPool(host='api.stripe.com')",
+        "socket.gaierror: [Errno -3] Temporary failure in name resolution",
+        "OSError: [Errno 101] Network is unreachable",
+        "Max retries exceeded with url: /v1/charges",
+    ):
+        assert f.falhou_por_isolamento(saida), saida[:40]
+
+
+def test_falha_normal_de_teste_nao_e_confundida_com_isolamento():
+    """Um assert que falhou nao pode virar 'a rede bloqueou' -- isso esconderia
+    defeito real atras da nossa propria contencao."""
+    for saida in ("1 failed, 4 passed in 2.1s",
+                  "assert 200 == 404",
+                  "sqlalchemy.exc.ProgrammingError: relation does not exist"):
+        assert not f.falhou_por_isolamento(saida), saida[:40]
+
+
+def test_a_escotilha_existe_e_e_desligada_por_padrao():
+    """Efeito irreversivel se pergunta ANTES. E quem tem contexto para responder
+    e' o dono do repositorio, nao o agente."""
+    assert f.cfg.PERMITIR_REDE_NO_BASE is False
+
+
+def test_rede_isolada_nao_e_a_rede_do_compose():
+    assert f.cfg.REDE_ISOLADA not in ("default", "desafio_default", "bridge", "host")
+
+
+def test_a_rede_isolada_confere_o_alias_do_banco(monkeypatch):
+    """🚨 `docker network connect` e' NO-OP quando ja existe conexao, mesmo sem
+    o alias. Medido: uma execucao anterior conectou sem `--alias db`, e depois
+    disso a rede subia "com sucesso" e o banco ficava INALCANCAVEL -- todo teste
+    do base viraria inconclusivo e a contencao pareceria um desastre.
+
+    Por isso a funcao devolve o resultado da CONFERENCIA, nao do connect.
+    """
+    monkeypatch.setattr(f, "_tem_alias_db", lambda c: False)
+    monkeypatch.setattr(f.subprocess, "run",
+                        lambda *a, **k: type("R", (), {"stdout": "abc123\n", "stderr": "", "returncode": 0})())
+    assert f._garante_rede_isolada() is False, "subiu sem o alias e disse que estava ok"
+
+
+def test_sem_rede_isolada_nao_roda_contido_fingindo_que_esta(monkeypatch):
+    """Rodar sem contencao ACHANDO que esta contido e' pior que nao ter."""
+    src = Path(f.__file__).read_text(encoding="utf-8")
+    assert "if contido and imagem and _garante_rede_isolada():" in src

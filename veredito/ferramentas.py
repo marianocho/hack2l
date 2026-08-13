@@ -239,8 +239,108 @@ def _garante_banco_descartavel() -> None:
         pass
 
 
-def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str, bool]:
+# Sinais de que o teste morreu por FALTA DE REDE, e nao por defeito no codigo.
+# Sem distinguir, o isolamento gera inconclusivo mudo e o parecer parece fraco
+# por culpa nossa.
+_SEM_REDE = re.compile(
+    r"name or service not known|temporary failure in name resolution|"
+    r"nodename nor servname|network is unreachable|no route to host|"
+    r"failed to establish a new connection|max retries exceeded|"
+    r"connectionerror|gaierror|getaddrinfo",
+    re.I,
+)
+
+
+def falhou_por_isolamento(saida: str) -> bool:
+    """A saida do pytest acusa rede indisponivel?
+
+    ⚠️ Nao basta ter o padrao: o banco tambem e' rede, e a suite legitima fala
+    com ele. Mas o banco esta DENTRO da rede isolada, entao um erro de resolucao
+    aqui e' de host EXTERNO -- que e' exatamente o que a contencao bloqueia.
+    """
+    return bool(_SEM_REDE.search(saida or ""))
+
+
+def _tem_alias_db(container: str) -> bool:
+    """O banco responde por `db` DENTRO da rede isolada?
+
+    E' a conferencia que faltava: sem ela a contencao sobe achando que esta
+    certa e todo teste do base morre sem alcancar o banco.
+    """
+    try:
+        r = subprocess.run(
+            ["docker", "inspect", container, "--format",
+             "{{json .NetworkSettings.Networks}}"],
+            capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
+        )
+        redes = json.loads(r.stdout or "{}")
+        return "db" in (redes.get(cfg.REDE_ISOLADA, {}).get("Aliases") or [])
+    except Exception:
+        return False
+
+
+def _garante_rede_isolada() -> bool:
+    """Rede sem saida, com o banco dentro. Idempotente. Nunca levanta.
+
+    `--internal` e' o mecanismo do proprio Docker: "Restrict external access to
+    the network". O container fala com o db e nao alcanca a internet.
+
+    Devolve False se nao conseguiu montar -- e aí o chamador NAO roda contido,
+    porque rodar sem a contencao achando que esta contido e' pior que nao ter.
+    """
+    try:
+        subprocess.run(["docker", "network", "create", "--internal", cfg.REDE_ISOLADA],
+                       capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S)
+        r = subprocess.run(
+            ["docker", "compose", "-f", str(cfg.COMPOSE),
+             "--project-directory", str(cfg.DESAFIO), "ps", "-q", "db"],
+            capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
+        )
+        db = (r.stdout or "").strip().splitlines()
+        if not db:
+            return False
+        # 🚨 `--alias db` NAO e' detalhe. Sem ele o container do banco entra na
+        # rede pelo NOME DELE (`desafio-db-1`), e o `db` que o conftest do
+        # cliente procura nao resolve. Medido: internet bloqueada (certo) e
+        # BANCO INALCANCAVEL (errado) -- todo teste do base viraria inconclusivo
+        # e a contencao pareceria um desastre em vez de uma protecao.
+        #
+        # ⚠️ E `connect` e' no-op quando ja existe conexao, mesmo SEM o alias.
+        # Entao nao basta chamar com --alias: se uma execucao anterior conectou
+        # sem ele, o alias nunca aparece e a falha e' silenciosa. Confere-se o
+        # alias e reconecta se faltar.
+        if not _tem_alias_db(db[0]):
+            subprocess.run(["docker", "network", "disconnect", cfg.REDE_ISOLADA, db[0]],
+                           capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S)
+            subprocess.run(["docker", "network", "connect", "--alias", "db",
+                            cfg.REDE_ISOLADA, db[0]],
+                           capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S)
+        return _tem_alias_db(db[0])
+    except Exception:
+        return False
+
+
+def _imagem_da_api() -> str | None:
+    """A imagem que o `compose run` usaria. Precisamos dela porque `compose run`
+    NAO aceita `--network` -- entao o lado contido vai de `docker run` direto."""
+    try:
+        r = subprocess.run(
+            ["docker", "compose", "-f", str(cfg.COMPOSE),
+             "--project-directory", str(cfg.DESAFIO), "images", "-q", "api"],
+            capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
+        )
+        return (r.stdout or "").strip().splitlines()[0] or None
+    except Exception:
+        return None
+
+
+def _roda_pytest(worktree: Path, alvo: str = "tests",
+                 contido: bool = False) -> tuple[int, str, bool]:
     """Roda a suite dentro do container, com o codigo do worktree por cima.
+
+    `contido=True` prende o container numa rede SEM SAIDA -- usado no lado
+    BASE, onde mora o risco que so' nos criamos (a CI do cliente ja roda o
+    head a cada push; o base ninguem roda mais).
 
     Bind-mount e nao rebuild: o Dockerfile faz COPY do codigo e o compose nao
     monta volume nenhum no servico api, entao sem estes -v o pytest roda o
@@ -248,6 +348,26 @@ def _roda_pytest(worktree: Path, alvo: str = "tests") -> tuple[int, str, bool]:
     lados -- falso negativo silencioso. Provado com canario em 08/08.
     """
     _garante_banco_descartavel()
+    imagem = _imagem_da_api() if contido else None
+    if contido and imagem and _garante_rede_isolada():
+        # `docker run` e nao `compose run`: o compose nao aceita --network, e
+        # sem a rede isolada a contencao seria so' intencao.
+        cmd = [
+            "docker", "run", "--rm", "--network", cfg.REDE_ISOLADA,
+            "-e", f"DATABASE_URL={cfg.url_do_banco_descartavel()}",
+            "-v", f"{worktree / 'app' / 'api' / 'app'}:/code/app",
+            "-v", f"{worktree / 'app' / 'api' / 'tests'}:/code/tests",
+            "-w", "/code",
+            # Teto de recurso: fork bomb e disco cheio nao sao efeito de rede,
+            # mas custam o mesmo barato de barrar aqui.
+            "--memory", "2g", "--pids-limit", "512",
+            imagem, "python", "-m", "pytest", alvo, "-q",
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=cfg.TIMEOUT_PYTEST_S)
+        saida = (r.stdout or "") + (r.stderr or "")
+        return r.returncode, saida, bool(_RESUMO_PYTEST.search(saida))
+
     cmd = [
         "docker", "compose", "-f", str(cfg.COMPOSE),
         "--project-directory", str(cfg.DESAFIO),
@@ -371,12 +491,33 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
             escritos.append(destino)
 
         alvo = f"tests/{nome}"
-        art["exit_base"], art["stdout_base"], rodou_base = _roda_pytest(wt_base, alvo)
+        # O BASE roda CONTIDO: e' o lado onde mora o risco que so' nos criamos.
+        # A CI do cliente roda o head a cada push; o base ninguem roda mais, e
+        # foi rodando o base que o agente apagou o banco em 11/08.
+        contido = not cfg.PERMITIR_REDE_NO_BASE
+        art["base_contido"] = contido
+        art["exit_base"], art["stdout_base"], rodou_base = _roda_pytest(
+            wt_base, alvo, contido=contido)
         art["exit_head"], art["stdout_head"], rodou_head = _roda_pytest(wt_head, alvo)
         art["rodou_base"], art["rodou_head"] = rodou_base, rodou_head
         art["estado"], art["provado"], art["motivo"] = _classifica(
             art["exit_base"], art["exit_head"], rodou_base, rodou_head
         )
+
+        # 🚫 Inconclusivo MUDO por causa nossa e' pior que a doenca: incha a
+        # lista e faz o parecer parecer fraco por culpa da contencao, nao do PR.
+        # Se o base morreu por falta de rede, o motivo diz isso E diz a saida.
+        if (contido and not art["provado"]
+                and falhou_por_isolamento(art.get("stdout_base", ""))):
+            art["estado"], art["provado"] = "INCONCLUSIVO", False
+            art["isolamento_bloqueou"] = True
+            art["motivo"] = (
+                "o arnes de teste deste repositorio precisa de REDE EXTERNA, e o "
+                "lado base roda contido. Isto NAO e' defeito do PR. Rodar o base "
+                "com rede pode disparar efeito irreversivel (email de verdade, "
+                "cobranca, webhook), entao a decisao e' de quem conhece a suite: "
+                "libere com PERMITIR_REDE_NO_BASE=1 se souber que e' seguro."
+            )
 
         # CONFIRMACAO: so para quem seria PROVADO, roda o base DE NOVO, depois
         # do head. Custa ~7s e so nos candidatos a condenacao.
