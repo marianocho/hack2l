@@ -1,0 +1,77 @@
+[
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "docker-compose.yml:87",
+    "hipotese": "NEXTAUTH_URL em langfuse usa variável LANGFUSE_PORT com default 3001, mas se LANGFUSE_PORT for mudado sem rebuild do container langfuse, a URL estará dessincronizada da porta exposta real",
+    "arbitro": null,
+    "provado_se": "Setar LANGFUSE_PORT=4001 em .env e rodar compose without rebuild; tentar acessar Langfuse via browser em localhost:4001; verificar se callbacks de autenticação falham porque NEXTAUTH_URL continua apontando para 3001",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_07",
+    "categoria": "correcao",
+    "local": "docker-compose.yml:48-51",
+    "hipotese": "A variável NEXT_PUBLIC_API_URL é passada como arg ao build do container web e baked in at build time, mas docker compose run não retrigger build; se usuário mudar API_PORT sem fazer docker compose build web, a aplicação continua apontando para a porta antiga",
+    "arbitro": {
+      "regra": "If you change `API_PORT`, change `NEXT_PUBLIC_API_URL` to match and rebuild `web`",
+      "onde": "README.md:32"
+    },
+    "provado_se": "Setar API_PORT=9000 em .env, rodar docker compose up; acessar web em localhost:3000 e tentar fazer requisição para API; verificar se falha porque NEXT_PUBLIC_API_URL continua http://localhost:8000",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/api/tests/conftest.py:11-31",
+    "hipotese": "lógica de redirecionamento de DATABASE_URL para kb_test é implementada em conftest.py em vez de centralizada em módulo de configuração",
+    "arbitro": null,
+    "provado_se": "grep por 'os.environ.get(\"DATABASE_URL\")' em app/api/tests/ retorna apenas conftest.py; verificar se app tem app/config.py ou equivalente que centraliza variáveis de ambiente",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/api/tests/conftest.py:65-75",
+    "hipotese": "verificação defensiva de database name duplica validação que deveria estar uma única vez no ponto de entrada",
+    "arbitro": null,
+    "provado_se": "clean_db fixture verifica if engine.url.database == APP_DATABASE, mas _redirect_to_test_database já redireciona; grep por 'engine.url.database' em conftest.py mostra ambas as implementações",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_03",
+    "categoria": "performance",
+    "local": "app/api/tests/conftest.py:46-57",
+    "hipotese": "_ensure_test_database() cria um engine admin dedicado apenas para verificar existência do banco; conexão é aberta, query simples executada, conexão fechada; com múltiplos imports ou re-execuções, abre-se conexão redundante",
+    "arbitro": null,
+    "provado_se": "cada execução de _ensure_test_database() abre uma nova conexão PostgreSQL e executa SELECT 1 contra pg_database; requer round-trip de rede, mesmo que rápido",
+    "confianca": "media"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/api/tests/conftest.py:17-20",
+    "hipotese": "a função `_redirect_to_test_database()` modifica `DATABASE_URL` antes imports, mas o comentário diz que sem isso testes herdam a URL do serviço api — não fica claro se essa herança acontece antes ou depois deste ponto, ou se a modificação aqui resolve o problema descrito",
+    "arbitro": null,
+    "provado_se": "rodar `docker compose run --rm api python -m pytest tests -q` com DATABASE_URL setada para kb (app database) e verificar se `_ensure_test_database()` realmente recebe kb_test ou se a herança da variável do compose acontece depois deste código",
+    "confianca": "media"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/api/tests/conftest.py:64-71",
+    "hipotese": "o guard `if engine.url.database == APP_DATABASE` no `clean_db` fixture assume que `engine` já foi inicializado com o DATABASE_URL redirecionado, mas se o engine for criado antes de `_redirect_to_test_database()` ser chamado, ele teria a URL original",
+    "arbitro": null,
+    "provado_se": "verificar em que linha exata o engine é criado (imports de `sqlalchemy import create_engine`) em relação ao `_redirect_to_test_database()` e confirmar que ele é criado após a redireção",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_01",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/api/tests/conftest.py:18-20",
+    "hipotese": "A funcao _redirect_to_test_database() reescreve DATABASE_URL antes da importacao do app, mas nao valida se a URL original aponta para um host confiavel; um principal pode injetar DATABASE_URL apontando para banco de terceiro",
+    "arbitro": null,
+    "provado_se": "DATABASE_URL=postgresql://kb:kb@attacker-host:5432/kb_test docker compose run --rm api python -m pytest tests -q cria conexao com host controlado por terceiro",
+    "confianca": "media"
+  }
+]

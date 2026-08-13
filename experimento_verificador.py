@@ -224,7 +224,7 @@ def relatorio(regs: list[dict]) -> None:
     print("\n--- veredito do experimento ---")
     # A leitura honesta, e ela tem TRES saidas possiveis -- nao duas.
     if incon / n > 0.5:
-        print(f"  🚨 {incon/n:.0%} INCONCLUSIVO. A maioria nao valida nada: sem")
+        print(f"  [!!] {incon/n:.0%} INCONCLUSIVO. A maioria nao valida nada: sem")
         print("  executar, o advogado nao consegue decidir em repo de terceiro.")
         print("  Isso NAO e' 'o ruido morreu' -- e' ausencia de observacao, e")
         print("  significa que o produto depende de rodar o app do cliente.")

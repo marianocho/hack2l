@@ -103,7 +103,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
             "WORKTREES e rode `git worktree prune` no repo do desafio."
         )
     if not sonda["ferramentas"].get("http_request", {}).get("ok"):
-        print("  ⚠ app fora do ar: sem prova ponta a ponta, nada passa de MEDIA (R2)")
+        print("  [!] app fora do ar: sem prova ponta a ponta, nada passa de MEDIA (R2)")
 
     # Mede o LLM alvo UMA vez e grava. O juiz roda depois, possivelmente em
     # outro processo, e a decisao dele nao pode depender de sondar o app de novo.
@@ -165,7 +165,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
         # Disciplina no 4: conferir o cache na 1a rodada. Zero aqui e' sinal de
         # timestamp, UUID ou ordem de dicionario variando no prefixo.
         if i == 1 and v["cache_read"] == 0:
-            print("    ⚠ cache_read zero na 1a acusacao -- algo varia no prefixo",
+            print("    [!] cache_read zero na 1a acusacao -- algo varia no prefixo",
                   flush=True)
 
     with rod.etapa("juiz") as et:

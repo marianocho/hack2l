@@ -278,7 +278,7 @@ def relatorio(regs: list[dict]) -> None:
         print(f"  ZERO de {len(todas)} acusacoes citam o vocabulario chumbado do")
         print("  Hack2L (AC1-AC5, R1-R4, C1-C8, INV-*). Era 93 de 94 nos arbitros.")
     else:
-        print(f"  🚨 {len(contaminadas)} de {len(todas)} acusacoes ainda citam")
+        print(f"  [!!] {len(contaminadas)} de {len(todas)} acusacoes ainda citam")
         print("  vocabulario do Hack2L. Se estes PRs sao de terceiros, o conserto")
         print("  de 09/08 regrediu -- ver ACHADO_ARBITRO_CHUMBADO.md.")
         for a in contaminadas[:8]:

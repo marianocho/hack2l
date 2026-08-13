@@ -284,7 +284,7 @@ def _diagnostico(acusacoes: list[dict]) -> None:
               f"(nao contam; regra que ninguem localiza e' opiniao)")
     chumbados = [a for a in acusacoes if arb.parece_chumbado(a.get("arbitro"))]
     if chumbados:
-        print(f"  🚨 {len(chumbados)} arbitro(s) com vocabulario CHUMBADO "
+        print(f"  [!!] {len(chumbados)} arbitro(s) com vocabulario CHUMBADO "
               f"({', '.join(sorted({str(c['arbitro']['regra'])[:24] for c in chumbados}))})"
               f" -- se este repo nao e' o Hack2L, o conserto de 09/08 regrediu")
     # Sem arbitro nao ha chave de dedup, e sem dedup a duplicata queima vaga de
