@@ -320,6 +320,79 @@ def test_base_e_o_pai_do_pr_nao_a_ponta_da_main():
     assert r.returncode == 0, "o base calculado nao e' ancestral do head"
 
 
+def _git_hermetico(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    """git com identidade propria: o teste nao pode depender da config da maquina."""
+    return subprocess.run(
+        ["git", "-c", "user.name=veredito", "-c", "user.email=veredito@test",
+         "-C", str(cwd), *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+
+
+def test_ref_que_so_existe_no_remoto_resolve_por_origin(tmp_path, monkeypatch):
+    """O fallback `origin/<ref>` de `_resolve_ref` tem que resolver de verdade.
+
+    Ele fica MASCARADO no dia a dia: a branch local `pr/document-sharing` existe
+    nesta maquina, entao a primeira tentativa acerta e a segunda nunca roda. Num
+    repo recem-clonado -- que e' o caso do fluxo de PR de terceiro em
+    generaliza.py / experimento_verificador.py -- a branch so existe como
+    `origin/<ref>`, e o fallback vira a unica coisa entre o produto e um
+    RuntimeError. So um clone de verdade exercita esse caminho, entao o teste
+    monta um.
+
+    Basta uma barra invertida em `f"origin/{ref}"` para o fallback nunca casar
+    nada, e a suite inteira continuaria verde sem este teste.
+    """
+    remoto = tmp_path / "remoto"
+    remoto.mkdir()
+    _git_hermetico(remoto, "init", "-q", "-b", "main")
+    (remoto / "a.txt").write_text("base\n", encoding="utf-8")
+    _git_hermetico(remoto, "add", "a.txt")
+    _git_hermetico(remoto, "commit", "-qm", "base")
+
+    _git_hermetico(remoto, "checkout", "-q", "-b", "pr/so-no-remoto")
+    (remoto / "a.txt").write_text("head\n", encoding="utf-8")
+    _git_hermetico(remoto, "commit", "-qam", "head")
+    sha = _git_hermetico(remoto, "rev-parse", "HEAD").stdout.strip()
+    # Sem voltar pra main, o clone herdaria a branch como LOCAL e o teste seria vazio.
+    _git_hermetico(remoto, "checkout", "-q", "main")
+
+    clone = tmp_path / "clone"
+    r = _git_hermetico(tmp_path, "clone", "-q", str(remoto), str(clone))
+    assert r.returncode == 0, f"clone falhou: {r.stderr}"
+    monkeypatch.setattr(f.cfg, "DESAFIO", clone)
+
+    # A premissa: se a branch existisse local, a primeira tentativa resolveria e
+    # o teste passaria com o fallback quebrado -- exatamente a guarda muda que o
+    # CLAUDE.md descreve como o padrao de bug deste projeto.
+    local = _git_hermetico(clone, "rev-parse", "--verify", "--quiet",
+                           "pr/so-no-remoto^{commit}")
+    assert local.returncode != 0, "a branch existe local: o teste nao prova nada"
+
+    assert f._resolve_ref("pr/so-no-remoto") == sha, "o fallback por origin nao resolveu"
+    # A outra metade do contrato do docstring: a forma ja' prefixada tambem vale.
+    assert f._resolve_ref("origin/pr/so-no-remoto") == sha
+
+
+def test_ref_inexistente_levanta_em_vez_de_devolver_vazio(tmp_path, monkeypatch):
+    """Ref que nao existe em lado nenhum e' erro alto, nunca string vazia.
+
+    `rev-parse --quiet` sai com codigo != 0 e stdout vazio; devolver isso adiante
+    poria "" no lugar de um commit e a prova diferencial rodaria contra o
+    worktree errado, em silencio.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git_hermetico(repo, "init", "-q", "-b", "main")
+    (repo / "a.txt").write_text("base\n", encoding="utf-8")
+    _git_hermetico(repo, "add", "a.txt")
+    _git_hermetico(repo, "commit", "-qm", "base")
+    monkeypatch.setattr(f.cfg, "DESAFIO", repo)
+
+    with pytest.raises(RuntimeError, match="nao encontrada"):
+        f._resolve_ref("pr/nao-existe")
+
+
 # --------------------------------------------------------- ponta a ponta, lento
 
 @lento
