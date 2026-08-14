@@ -8,6 +8,7 @@ pode quebrar o agente, e uma suite que so passa neste PR falharia a regua.
     pytest tests -q -m "not lento"   # so as unitarias, milissegundos
 """
 
+import ast
 import re
 import subprocess
 from pathlib import Path
@@ -372,6 +373,113 @@ def test_ref_que_so_existe_no_remoto_resolve_por_origin(tmp_path, monkeypatch):
     assert f._resolve_ref("pr/so-no-remoto") == sha, "o fallback por origin nao resolveu"
     # A outra metade do contrato do docstring: a forma ja' prefixada tambem vale.
     assert f._resolve_ref("origin/pr/so-no-remoto") == sha
+
+
+def _fonte_das_ferramentas() -> str:
+    """O fonte de ferramentas.py, para as travas que varrem codigo.
+
+    ⚠️ `utf-8-sig` e nao `utf-8`: um BOM no arquivo viraria `\\ufeff` no comeco
+    da string e o `ast.parse` morreria com SyntaxError -- a trava falharia pelo
+    motivo errado, dizendo "convencao violada" quando o problema e' codificacao.
+    Guarda que acusa a coisa errada e' quase tao ruim quanto guarda muda.
+    """
+    return Path(f.__file__).read_text(encoding="utf-8-sig")
+
+
+def test_todo_caminho_de_erro_registra_a_falha():
+    """🚨 A trava mecanica do conserto de 13/08. Prosa nao segura convencao.
+
+    O desfecho da ferramenta deixou de ser adivinhado pelo prefixo `ERRO` e
+    passou a ser REGISTRADO por quem falhou. Mas isso vira uma convencao nova
+    -- "chame `_marca_falha`" -- e convencao que ninguem confere regride em
+    silencio, que e' exatamente como o prefixo de string virou divida.
+
+    Entao: todo `return` que entrega um texto comecando com ERRO ao modelo tem
+    que passar por `_marca_falha`. Se alguem acrescentar um caminho de erro
+    novo e esquecer, a R3b volta a ficar muda e este teste falha antes.
+    """
+    fonte = _fonte_das_ferramentas()
+    # `return f"ERRO...` ou `return "ERRO...` sem o _marca_falha em volta.
+    crus = re.findall(r'return\s+f?"ERRO[^"]*"', fonte)
+    assert not crus, (
+        "caminho de erro que nao registra a falha -- a R3b nao vai enxergar:\n  "
+        + "\n  ".join(crus)
+        + "\nEnvolva com _marca_falha(...), que devolve o texto inalterado."
+    )
+
+
+def test_toda_ferramenta_abre_e_fecha_a_chamada():
+    """A outra convencao que o conserto criou, travada mecanicamente.
+
+    Sem `_abre_chamada`, a marca de falha do PRE-VOO -- que chama _read_file e
+    _grep direto, fora de qualquer ferramenta -- vaza para a primeira chamada
+    real e vira erro fantasma. Sem `_fecha_chamada`, os sucessos da ferramenta
+    nunca entram no registro, todas as chamadas dela caem no vao e a R3b
+    dispara INCONCLUSIVO sem motivo. Os dois lados erram, em direcoes opostas.
+
+    Ferramenta nova que esqueca qualquer um dos dois falha aqui, e nao numa
+    rodada de US$1,30.
+    """
+    arvore = ast.parse(_fonte_das_ferramentas())
+    problemas = {}
+    for no in arvore.body:
+        if not isinstance(no, ast.FunctionDef):
+            continue
+        if not any(getattr(d, "id", None) == "beta_tool" for d in no.decorator_list):
+            continue
+        queixas = []
+
+        chamadas = {c.func.id for c in ast.walk(no)
+                    if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+        if "_abre_chamada" not in chamadas:
+            queixas.append("nao chama _abre_chamada")
+
+        # ⚠️ NAO basta `_fecha_chamada` aparecer em algum lugar do corpo. A
+        # primeira versao desta trava conferia so' isso, e ficava MUDA no caso
+        # que mais importa: tirar o registro do caminho de SUCESSO e deixar o do
+        # `except` fazia ela passar. Todo sucesso viraria chamada nao
+        # registrada, cairia no vao contado pelo advogado e seria somado como
+        # erro -- INCONCLUSIVO falso, que incha a lista e enfraquece o parecer.
+        #
+        # O invariante de verdade e' por SAIDA: todo `return` da ferramenta
+        # entrega o que _fecha_chamada devolveu.
+        for r in ast.walk(no):
+            if not isinstance(r, ast.Return):
+                continue
+            v = r.value
+            registrado = (isinstance(v, ast.Call) and isinstance(v.func, ast.Name)
+                          and v.func.id == "_fecha_chamada")
+            if not registrado:
+                queixas.append(f"return na linha {r.lineno} nao passa por _fecha_chamada")
+
+        if queixas:
+            problemas[no.name] = queixas
+    assert not problemas, f"ferramenta sem registro de desfecho: {problemas}"
+
+
+def test_a_varredura_enxerga_as_cinco_ferramentas():
+    """A guarda acima so' vale se ela estiver olhando para alguma coisa.
+
+    Se o decorador mudar de nome ou de forma (`@x.beta_tool`), o filtro para de
+    casar, o laco fica vazio e o teste passa sem conferir nada -- guarda muda,
+    o padrao do CLAUDE.md. Entao se confere que ela achou o conjunto esperado.
+    """
+    arvore = ast.parse(_fonte_das_ferramentas())
+    achadas = {no.name for no in arvore.body
+               if isinstance(no, ast.FunctionDef)
+               and any(getattr(d, "id", None) == "beta_tool" for d in no.decorator_list)}
+    # `@beta_tool` devolve um BetaFunctionTool, nao a funcao: o nome esta em
+    # `.name`, que e' tambem o nome que o modelo ve.
+    assert achadas == {t.name for t in f.TOOLS}, (
+        "a varredura nao esta enxergando as ferramentas de TOOLS")
+
+
+def test_marca_falha_nao_altera_o_texto_que_o_modelo_le():
+    """O registro e' invisivel para o modelo. Se mudasse o texto, o conserto
+    teria efeito colateral no raciocinio do advogado -- que e' a ultima coisa
+    que se quer mexer sem medir."""
+    texto = "ERRO ao ler shares.py: RuntimeError: worktree sumiu"
+    assert f._marca_falha(texto) == texto
 
 
 def test_ref_inexistente_levanta_em_vez_de_devolver_vazio(tmp_path, monkeypatch):

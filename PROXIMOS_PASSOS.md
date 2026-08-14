@@ -62,10 +62,16 @@ que condenar, e absolve com motivo quando não há:
 ### D — Dívida
 
 - **Versionar o `CLAUDE.md`** — mora fora do repo, sem histórico
-- **Artefatos no `.gitignore`** — são saída por rodada e estão versionados
-- **Juiz sem síntese** — `MODEL_JUIZ` está no config e nunca é consumido
-- **`ERRO` como convenção de string** — `_conta_ferramentas` depende do prefixo;
-  resultado estruturado é o conserto. É o **caso vivo** do padrão de bug
+- **Juiz sem síntese** — `MODEL_JUIZ` está no config e nunca é consumido; hoje
+  ele só é consumido pelo `experimento_adaptador.py`, como revisor externo dublê
+- ✅ **Artefatos no `.gitignore`** *(13/08)* — rodada nova grava em
+  `saidas/rodadas/<carimbo>/artefatos/`, que já é ignorado. `artefatos/` na raiz
+  ficou como legado do que está commitado
+- ✅ **`ERRO` como convenção de string** *(13/08)* — era o **caso vivo** do
+  padrão de bug. Quem sabe que falhou passou a ser quem falhou: a ferramenta
+  registra o desfecho, e a string virou só o que o modelo lê. Três travas
+  mecânicas seguram a convenção nova, e as três foram **provadas não-mudas**
+  injetando a violação de propósito
 
 ### E — Capacidade que falta (não é "fazer", é "não sabemos ainda")
 

@@ -318,6 +318,7 @@ def julga(acusacao: dict, diff: str) -> dict:
         ultima = None
         historico: list = []  # espelho da conversa, para o fechamento abaixo
         estourou = False
+        blocos = 0   # resultados devolvidos, inclusive os que nem nos alcancaram
         for turno in runner:
             # Com stream=True cada iteracao entrega um stream, nao a mensagem:
             # get_final_message() da a mensagem acumulada daquela volta.
@@ -330,9 +331,10 @@ def julga(acusacao: dict, diff: str) -> dict:
             resposta_tool = runner.generate_tool_call_response()
             if resposta_tool is not None:
                 historico.append(resposta_tool)
-                ok, erro = _conta_ferramentas(resposta_tool)
-                v["ferramentas_ok"] += ok
-                v["ferramentas_erro"] += erro
+                blocos += _conta_blocos(resposta_tool)
+                # O desfecho e' consolidado DEPOIS do laco, do registro das
+                # ferramentas -- aqui so' se conta quantos resultados voltaram.
+                _consolida_ferramentas(v, id_, blocos)
 
             # stop_reason ANTES de content, sempre. Uma recusa vem como HTTP 200
             # com content vazio, e ler content[0] vira IndexError no meio da
@@ -395,41 +397,42 @@ def julga(acusacao: dict, diff: str) -> dict:
     return v
 
 
-def _texto_do_resultado(bloco) -> str:
-    """O conteudo de um tool_result, que vem string ou lista de blocos."""
-    c = bloco.get("content") if isinstance(bloco, dict) else None
-    if isinstance(c, str):
-        return c
-    if isinstance(c, list):
-        return " ".join(
-            b.get("text", "") if isinstance(b, dict) else str(b) for b in c
-        )
-    return "" if c is None else str(c)
+def _conta_blocos(resposta_tool) -> int:
+    """Quantos resultados de ferramenta voltaram nesta volta. Nunca levanta.
 
+    Isto NAO decide sucesso ou fracasso -- quem decide e' a propria ferramenta,
+    em `ferramentas.desfecho_da_acusacao`, porque ela e' quem sabe se falhou.
+    Ate' 13/08 quem decidia aqui era `texto.startswith("ERRO")`, e uma
+    ferramenta que falhasse sem o prefixo passava batida bem debaixo da R3b.
 
-def _conta_ferramentas(resposta_tool) -> tuple[int, int]:
-    """(sucessos, erros) numa resposta de ferramenta. Nunca levanta.
-
-    ⚠️ A deteccao e' por PREFIXO DE STRING, e isso e' fragil de propósito
-    reconhecido: as ferramentas devolvem `f"ERRO ao ler {caminho}: ..."` em vez
-    de estado estruturado, porque a assinatura que o `@beta_tool` expoe ao
-    modelo e' `-> str`. Uma ferramenta que falhe sem esse prefixo passa batida.
-    O conserto de verdade e' resultado estruturado; fica anotado como item
-    separado, e ate la e' melhor esta guarda que nenhuma.
+    O que este contador existe para pegar e' o VAO do registro: chamada que a
+    API rejeitou antes de chegar ao nosso codigo (input invalido, tool
+    inexistente) devolve bloco e nao gera registro. Bloco a mais que registro =
+    chamada que nao observou nada, e isso conta como erro.
     """
     conteudo = resposta_tool.get("content") if isinstance(resposta_tool, dict) else None
     if not isinstance(conteudo, list):
-        return 0, 0
-    ok = erro = 0
-    for bloco in conteudo:
-        if not isinstance(bloco, dict) or bloco.get("type") != "tool_result":
-            continue
-        texto = _texto_do_resultado(bloco).lstrip()
-        if bloco.get("is_error") or texto.startswith("ERRO"):
-            erro += 1
-        else:
-            ok += 1
-    return ok, erro
+        return 0
+    return sum(1 for b in conteudo
+               if isinstance(b, dict) and b.get("type") == "tool_result")
+
+
+def _consolida_ferramentas(v: dict, id_acusacao: str, blocos: int) -> None:
+    """Fecha a contagem que a R3b le, juntando as duas visoes.
+
+    IDEMPOTENTE de proposito -- ATRIBUI, nunca acumula. E' chamada dentro do
+    laco, entao sair por recusa, timeout ou teto de voltas deixa a contagem
+    correta em qualquer ponto de saida, sem precisar repetir a consolidacao em
+    cada `break`. Guarda que depende de alguem lembrar de chama-la no caminho
+    de erro e' guarda que fica muda no caminho de erro.
+    """
+    ok, erro = ferramentas.desfecho_da_acusacao(id_acusacao)
+    # Bloco devolvido sem registro correspondente = chamada que nao chegou a
+    # executar. Nao observou nada, entao e' erro -- nunca sucesso. O default
+    # tem que cair para o lado de INCONCLUSIVO, que e' o estado honesto.
+    nao_executadas = max(0, blocos - (ok + erro))
+    v["ferramentas_ok"] = ok
+    v["ferramentas_erro"] = erro + nao_executadas
 
 
 def _prompt_da_acusacao(a: dict) -> str:

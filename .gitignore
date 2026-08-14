@@ -31,6 +31,14 @@ artefatos/*selftest*
 artefatos/ambiente.json
 artefatos/*docker_quebrado*
 
+# Registro de desfecho das ferramentas: estado de EXECUCAO, nao evidencia de
+# acusacao -- mesma classe do ambiente.json. Em rodada de verdade ele nasce
+# dentro de saidas/rodadas/<carimbo>/artefatos/ e ja e' ignorado por la; aqui na
+# raiz so' aparece como residuo de suite, porque _fecha_chamada serializa o
+# dicionario inteiro (igual ao avisos.json) e a ultima chamada real de uma
+# rodada de testes despeja junto o que ficou em memoria dos testes anteriores.
+artefatos/chamadas.json
+
 # Medicao POR MAQUINA e POR RODADA -- nunca compartilhada. A maquina do Mariano
 # mediu "duble" e a do Luis "vivo" no mesmo dia, porque a chave da OpenAI e' por
 # maquina. Commitar isto faz o duble de uma sobrescrever o vivo da outra, e a R4

@@ -36,6 +36,11 @@ _ACUSACAO_ATUAL = "sem_id"
 def define_acusacao(id_acusacao: str) -> None:
     global _ACUSACAO_ATUAL
     _ACUSACAO_ATUAL = re.sub(r"[^A-Za-z0-9_.-]", "_", id_acusacao) or "sem_id"
+    # Zera o registro de chamadas DESTA acusacao. `_AVISOS` e' um set e nao
+    # precisa, mas o registro e' lista: sem zerar, julgar a mesma acusacao duas
+    # vezes no mesmo processo somaria as chamadas da tentativa anterior e a R3b
+    # veria observacao que nao houve nesta.
+    _CHAMADAS.pop(_ACUSACAO_ATUAL, None)
 
 
 # Avisos por acusacao, nao por rodada. Global demais e o juiz nao consegue ligar
@@ -57,6 +62,95 @@ def _avisa(codigo: str) -> None:
 
 def avisos_da_acusacao(id_acusacao: str) -> list[str]:
     return sorted(_AVISOS.get(id_acusacao, set()))
+
+
+# --- desfecho estruturado de cada chamada de ferramenta ---------------------
+#
+# 🚨 O QUE ISTO SUBSTITUI, e por que era o "caso vivo" do padrao de bug
+#
+# Ate' 13/08 quem decidia se uma ferramenta tinha falhado era
+# `advogado._conta_ferramentas`, farejando `texto.startswith("ERRO")` na saida.
+# O proprio docstring de la' admitia: "uma ferramenta que falhe sem esse prefixo
+# passa batida".
+#
+# Quem depende disso e' a R3b -- PROVADO/REFUTADO com ZERO ferramenta
+# bem-sucedida vira INCONCLUSIVO. Ela existe porque em 10/08 o advogado devolveu
+# PROVADO com TODAS as chamadas falhando. Um unico caminho de erro sem o prefixo
+# e a R3b fica muda exatamente onde ela e' necessaria, e o resultado e'
+# absolvicao (ou condenacao) falsa. E' o padrao do CLAUDE.md ao pe da letra:
+# guarda condicionada ao mesmo sinal que ela deveria vigiar.
+#
+# Agora quem sabe que falhou e' quem falhou. A ferramenta REGISTRA o desfecho; a
+# string deixou de ser a fonte da verdade e virou so' o que o modelo le.
+#
+# ⚠️ A assinatura `-> str` das tools NAO muda -- e' o que o `@beta_tool` expoe ao
+# modelo, e e' contrato com a outra trilha. O que mudou e' o lado de dentro.
+_CHAMADAS: dict[str, list[dict]] = {}
+
+# Marcado por _marca_falha durante UMA chamada, lido por _fecha_chamada.
+_FALHA_DA_CHAMADA: str | None = None
+
+
+def _marca_falha(texto: str) -> str:
+    """Marca que a chamada em curso falhou e devolve o texto INALTERADO.
+
+    Uma chamada so', para que registro e texto nao possam divergir: nao existe
+    caminho que escreva o `ERRO` para o modelo sem contar a falha para a R3b.
+    """
+    global _FALHA_DA_CHAMADA
+    _FALHA_DA_CHAMADA = texto[:300]
+    return texto
+
+
+def _abre_chamada() -> None:
+    global _FALHA_DA_CHAMADA
+    _FALHA_DA_CHAMADA = None
+
+
+def _fecha_chamada(nome: str, saida: str) -> str:
+    """Registra o desfecho e devolve a saida que o modelo le, sem tocar nela."""
+    global _FALHA_DA_CHAMADA
+    _CHAMADAS.setdefault(_ACUSACAO_ATUAL, []).append({
+        "ferramenta": nome,
+        "ok": _FALHA_DA_CHAMADA is None,
+        "causa": _FALHA_DA_CHAMADA or "",
+    })
+    # Limpa ao registrar, e nao so' no _abre_chamada. `autoteste` chama
+    # `_read_file`/`_grep`/`_http_request` DIRETO, fora de qualquer ferramenta:
+    # uma falha de pre-voo deixa a marca pendurada, e sem esta linha ela so'
+    # some porque a proxima ferramenta lembrou de abrir. Depender de alguem
+    # lembrar e' como o prefixo `ERRO` virou divida -- entao o estado se limpa
+    # nas duas pontas.
+    _FALHA_DA_CHAMADA = None
+    # Grava a cada chamada, nao no fim: rodada que morre no meio nao pode levar
+    # junto a prova de que as ferramentas estavam funcionando. Mesmo motivo do
+    # _avisa acima.
+    try:
+        cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+        (cfg.ARTEFATOS / "chamadas.json").write_text(
+            json.dumps(_CHAMADAS, indent=2, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        # Disco cheio nao pode derrubar a pericia: o registro em memoria e' que
+        # alimenta a R3b nesta rodada, e ele continua de pe.
+        pass
+    return saida
+
+
+def chamadas_da_acusacao(id_acusacao: str) -> list[dict]:
+    return list(_CHAMADAS.get(id_acusacao, []))
+
+
+def desfecho_da_acusacao(id_acusacao: str) -> tuple[int, int]:
+    """(sucessos, erros) das ferramentas que EXECUTARAM nesta acusacao.
+
+    ⚠️ Nao cobre chamada que nem chegou ao nosso codigo -- input invalido que a
+    API rejeita antes de nos chamar nao aparece aqui. Quem fecha esse vao e'
+    `advogado._conta_ferramentas`, contando os blocos que voltaram. Somar os
+    dois e' de proposito: cada um enxerga o que o outro nao ve.
+    """
+    chamadas = _CHAMADAS.get(id_acusacao, [])
+    ok = sum(1 for c in chamadas if c["ok"])
+    return ok, len(chamadas) - ok
 
 
 # Chamadas HTTP por acusacao. Mesma chaveagem dos avisos, e pelo mesmo motivo:
@@ -658,9 +752,10 @@ def _read_file(caminho: str, lado: str = "head") -> str:
     raiz = _worktree_de(lado)
     alvo = _resolve_caminho(raiz, caminho)
     if alvo is None:
-        return f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho)."
+        return _marca_falha(
+            f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho).")
     if raiz.resolve() not in alvo.parents:
-        return f"ERRO: {caminho} sai da raiz do repo."
+        return _marca_falha(f"ERRO: {caminho} sai da raiz do repo.")
     texto = alvo.read_text(encoding="utf-8", errors="replace")
     # numerado, porque a acusacao pede 'arquivo:linha' e chute de linha nao cola
     numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(texto.splitlines(), 1))
@@ -675,7 +770,7 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
     try:
         rx = re.compile(padrao)
     except re.error as e:
-        return f"ERRO: regex invalida: {e}"
+        return _marca_falha(f"ERRO: regex invalida: {e}")
     achados: list[str] = []
     for p in raiz.rglob(glob or "*"):
         if not p.is_file() or _IGNORA & set(p.relative_to(raiz).parts):
@@ -831,7 +926,14 @@ def prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> str:
         codigo_do_teste: o arquivo de teste inteiro, em python.
         nome_do_arquivo: ex. test_vazamento_tenant.py
     """
-    return _formata_prova(_prova_diferencial(codigo_do_teste, nome_do_arquivo))
+    _abre_chamada()
+    art = _prova_diferencial(codigo_do_teste, nome_do_arquivo)
+    saida = _formata_prova(art)
+    # Falha vem do CAMPO do artefato, nao de farejar o texto formatado. O
+    # artefato ja sabe se a execucao quebrou -- e' a mesma fonte que a R3 le.
+    if art.get("erro"):
+        _marca_falha(f"prova_diferencial: {art['erro']}")
+    return _fecha_chamada("prova_diferencial", saida)
 
 
 @beta_tool
@@ -845,18 +947,20 @@ def run_tests(expressao: str = "") -> str:
         expressao: nome de arquivo dentro de tests/, ex. test_documents.py.
             Vazio roda a suite inteira.
     """
+    _abre_chamada()
     try:
         wt = _worktree_de("head")
         alvo = f"tests/{Path(expressao).name}" if expressao.strip() else "tests"
         codigo, saida, rodou = _roda_pytest(wt, alvo)
         if not rodou:
-            return (
+            return _fecha_chamada("run_tests", _marca_falha(
                 f"ERRO DE INFRAESTRUTURA: o pytest nao chegou a rodar. O exit {codigo} "
                 f"veio do docker, nao do teste. Nao conclua nada sobre o codigo.\n{_corta(saida)}"
-            )
-        return f"exit {codigo}\n{_corta(saida)}"
+            ))
+        return _fecha_chamada("run_tests", f"exit {codigo}\n{_corta(saida)}")
     except Exception as e:
-        return f"ERRO ao rodar os testes: {type(e).__name__}: {e}"
+        return _fecha_chamada("run_tests", _marca_falha(
+            f"ERRO ao rodar os testes: {type(e).__name__}: {e}"))
 
 
 @beta_tool
@@ -866,10 +970,12 @@ def read_file(caminho: str) -> str:
     Args:
         caminho: caminho relativo a raiz do repo, ex. app/api/app/rag.py
     """
+    _abre_chamada()
     try:
-        return _read_file(caminho)
+        return _fecha_chamada("read_file", _read_file(caminho))
     except Exception as e:
-        return f"ERRO ao ler {caminho}: {type(e).__name__}: {e}"
+        return _fecha_chamada("read_file", _marca_falha(
+            f"ERRO ao ler {caminho}: {type(e).__name__}: {e}"))
 
 
 @beta_tool
@@ -880,10 +986,12 @@ def grep(padrao: str, glob: str = "") -> str:
         padrao: expressao regular.
         glob: filtro de arquivo, ex. **/*.py. Vazio busca em tudo.
     """
+    _abre_chamada()
     try:
-        return _grep(padrao, glob)
+        return _fecha_chamada("grep", _grep(padrao, glob))
     except Exception as e:
-        return f"ERRO no grep: {type(e).__name__}: {e}"
+        return _fecha_chamada("grep", _marca_falha(
+            f"ERRO no grep: {type(e).__name__}: {e}"))
 
 
 @beta_tool
@@ -901,9 +1009,13 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
         corpo: JSON como string. Vazio para GET.
         como_usuario: demo, alice, bob ou carol. Vazio chama sem autenticacao.
     """
+    _abre_chamada()
     r = _http_request(metodo, caminho, corpo, como_usuario)
     if r["erro"]:
-        return f"ERRO ({r['como']}): {r['erro']}"
+        # De novo o CAMPO, e nao o texto: `_http_request` ja devolve o desfecho
+        # estruturado, entao nao ha o que adivinhar.
+        return _fecha_chamada("http_request", _marca_falha(
+            f"ERRO ({r['como']}): {r['erro']}"))
     saida = f"HTTP {r['status']} (como {r['como']})\n{_corta(r['corpo'], 3000)}"
 
     # Deteccao por SONDA (llm_alvo), nao por comparar com a string enlatada:
@@ -916,7 +1028,10 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
         # Aviso em texto e' conselho, e o modelo pode ignorar. Registrar por
         # acusacao e' o que deixa o juiz aplicar a R3b mecanicamente depois.
         _avisa(cfg.AVISO_SEM_MODELO)
-    return saida + aviso
+    # O app respondeu: a FERRAMENTA funcionou. Que o modelo do alvo seja um
+    # duble e' problema da R4, e nao contagem de ferramenta -- misturar os dois
+    # faria a R3b disparar por um motivo que nao e' o dela.
+    return _fecha_chamada("http_request", saida + aviso)
 
 
 TOOLS = [prova_diferencial, run_tests, read_file, grep, http_request]

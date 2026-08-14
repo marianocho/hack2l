@@ -147,9 +147,16 @@ def test_recusa_sem_stop_details_nao_levanta():
     assert adv._diagnostico_da_recusa(msg).startswith("recusa do classificador")
 
 
-# --------------------------------------- contagem de ferramentas (11/08)
+# ------------------- desfecho das ferramentas (13/08: era prefixo de string)
+#
+# Ate' 13/08 quem decidia se uma ferramenta falhou era `startswith("ERRO")` na
+# saida. Quem depende disso e' a R3b, e o docstring da funcao ja admitia:
+# "uma ferramenta que falhe sem esse prefixo passa batida". Agora quem sabe que
+# falhou e' quem falhou -- a ferramenta registra, e o texto e' so' o que o
+# modelo le.
 
-from veredito.advogado import _conta_ferramentas
+from veredito import ferramentas as f
+from veredito.advogado import _conta_blocos, _consolida_ferramentas
 
 
 def _res(*textos, is_error=None):
@@ -160,29 +167,112 @@ def _res(*textos, is_error=None):
     ]}
 
 
-def test_conta_sucesso_e_erro_pelo_prefixo():
-    ok, erro = _conta_ferramentas(_res("    1 | import os", "ERRO ao ler x.py: RuntimeError"))
-    assert (ok, erro) == (1, 1)
+@pytest.fixture(autouse=True)
+def _artefatos_isolados(tmp_path, monkeypatch):
+    """O registro grava em disco a CADA chamada -- e' o que faz rodada morta no
+    meio nao perder a contagem. Sem isolar, estes testes escreveriam
+    `chamadas.json` no artefatos/ do repo, e teste que suja a arvore acaba em
+    commit acidental."""
+    monkeypatch.setattr(f.cfg, "ARTEFATOS", tmp_path)
+
+
+def _registra(id_acusacao, *desfechos):
+    """Roda o caminho REAL de registro: marca falha e fecha a chamada."""
+    f.define_acusacao(id_acusacao)
+    for ok in desfechos:
+        f._abre_chamada()
+        if not ok:
+            f._marca_falha("qualquer texto")
+        f._fecha_chamada("read_file", "saida")
+
+
+# ------------------------------------------------------------- a regressao
+
+def test_falha_sem_o_prefixo_erro_ainda_conta_como_falha():
+    """🚨 O caso que era INVISIVEL, e o motivo deste conserto existir.
+
+    Ferramenta que falha devolvendo texto sem `ERRO` era contada como SUCESSO.
+    Com isso a R3b -- PROVADO/REFUTADO com zero ferramenta boa -> INCONCLUSIVO
+    -- ficava muda exatamente onde precisava falar, e o resultado e' absolvicao
+    ou condenacao sem observacao nenhuma por tras.
+    """
+    f.define_acusacao("a_sem_prefixo")
+    f._abre_chamada()
+    f._marca_falha("worktree sumiu no meio da leitura")   # sem 'ERRO'
+    f._fecha_chamada("read_file", "conteudo qualquer, tambem sem ERRO")
+
+    v = {}
+    _consolida_ferramentas(v, "a_sem_prefixo", blocos=1)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (0, 1)
 
 
 def test_o_caso_real_todas_falhando():
-    """A rodada de 10/08: worktree corrompida, 5 chamadas, 5 RuntimeError."""
-    ok, erro = _conta_ferramentas(_res(*["ERRO ao ler shares.py: RuntimeError"] * 5))
-    assert (ok, erro) == (0, 5)
+    """A rodada de 10/08: worktree corrompida, 5 chamadas, 5 RuntimeError.
+
+    O advogado devolveu PROVADO com todas falhando. E' a rodada que comprou a
+    R3b, e continua tendo que dar (0, 5).
+    """
+    _registra("a_10ago", False, False, False, False, False)
+    v = {}
+    _consolida_ferramentas(v, "a_10ago", blocos=5)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (0, 5)
 
 
-def test_is_error_do_sdk_tambem_conta():
-    """Se o SDK marcar o bloco, nao depende do nosso prefixo de string."""
-    ok, erro = _conta_ferramentas(_res("qualquer coisa", is_error=True))
-    assert (ok, erro) == (0, 1)
+def test_sucesso_e_falha_misturados():
+    _registra("a_mistura", True, False, True)
+    v = {}
+    _consolida_ferramentas(v, "a_mistura", blocos=3)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (2, 1)
 
 
-def test_conteudo_em_lista_de_blocos():
-    r = {"role": "user", "content": [
-        {"type": "tool_result", "content": [{"type": "text", "text": "ERRO ao ler"}]}]}
-    assert _conta_ferramentas(r) == (0, 1)
+# --------------------------------------------- o vao entre bloco e registro
+
+def test_bloco_sem_registro_conta_como_erro():
+    """Chamada que a API rejeitou antes de chegar ao nosso codigo.
+
+    Ela devolve resultado ao modelo e NAO gera registro -- nosso codigo nunca
+    rodou. Contar como sucesso seria inventar observacao que nao houve; o
+    default tem que cair para o lado do INCONCLUSIVO.
+    """
+    _registra("a_vao", True)
+    v = {}
+    _consolida_ferramentas(v, "a_vao", blocos=3)   # 1 registrada, 3 devolvidas
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (1, 2)
+
+
+def test_registro_a_mais_que_bloco_nao_vira_erro_negativo():
+    _registra("a_negativo", True, True)
+    v = {}
+    _consolida_ferramentas(v, "a_negativo", blocos=0)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (2, 0)
+
+
+def test_consolida_e_idempotente():
+    """Ela roda DENTRO do laco: sair por recusa, timeout ou teto nao pode
+    multiplicar a contagem. Atribui, nunca acumula."""
+    _registra("a_idem", True, False)
+    v = {}
+    for _ in range(4):
+        _consolida_ferramentas(v, "a_idem", blocos=2)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (1, 1)
+
+
+def test_julgar_a_mesma_acusacao_de_novo_nao_soma_a_tentativa_anterior():
+    _registra("a_repetida", True, True, True)
+    _registra("a_repetida", False)      # define_acusacao zera o registro
+    v = {}
+    _consolida_ferramentas(v, "a_repetida", blocos=1)
+    assert (v["ferramentas_ok"], v["ferramentas_erro"]) == (0, 1)
+
+
+# ------------------------------------------------------------ contagem crua
+
+def test_conta_blocos_so_conta_tool_result():
+    assert _conta_blocos(_res("a", "b", "c")) == 3
+    assert _conta_blocos({"role": "user", "content": [
+        {"type": "text", "text": "nao e' resultado de ferramenta"}]}) == 0
 
 
 def test_resposta_sem_ferramenta_nao_conta_nada():
-    assert _conta_ferramentas(None) == (0, 0)
-    assert _conta_ferramentas({"role": "user", "content": "texto"}) == (0, 0)
+    assert _conta_blocos(None) == 0
+    assert _conta_blocos({"role": "user", "content": "texto"}) == 0
