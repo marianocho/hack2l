@@ -20,9 +20,9 @@ rules:
   - id: rota-param-para-sqlalchemy-text
     mode: taint
     message: >-
-      Parametro controlado pelo cliente alcanca sqlalchemy.text() sem
-      parametrizacao. A string vai ao banco praticamente inalterada, entao
-      quem controla o parametro controla o SQL.
+      O parametro $PARAM, controlado pelo cliente na rota $HANDLER, alcanca
+      sqlalchemy.text() sem parametrizacao. A string vai ao banco praticamente
+      inalterada, entao quem controla $PARAM controla o SQL.
     languages: [python]
     severity: ERROR
     metadata:
@@ -44,8 +44,8 @@ rules:
   - id: rota-param-para-execute
     mode: taint
     message: >-
-      Parametro controlado pelo cliente alcanca db.execute() por um caminho
-      que nao passa por bind params.
+      O parametro $PARAM, controlado pelo cliente na rota $HANDLER, alcanca
+      db.execute() por um caminho que nao passa por bind params.
     languages: [python]
     severity: ERROR
     metadata:
@@ -69,8 +69,8 @@ rules:
   - id: rota-param-em-fstring-de-sql
     mode: taint
     message: >-
-      Parametro do cliente e' interpolado numa string que parece SQL antes de
-      chegar ao banco.
+      O parametro $PARAM, do cliente na rota $HANDLER, e' interpolado numa
+      string que parece SQL antes de chegar ao banco.
     languages: [python]
     severity: WARNING
     metadata:
