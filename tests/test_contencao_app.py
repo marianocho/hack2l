@@ -203,6 +203,74 @@ def test_o_override_troca_so_a_database_url(ligada, tmp_path, monkeypatch):
         assert proibido not in texto, f"o override mexe em '{proibido}' sem precisar"
 
 
+# ------------------------------- parte 3: medir o efeito, sempre
+
+def test_retrato_mede_o_banco_de_ORIGEM_por_padrao(monkeypatch):
+    """Mesmo com a contencao ligada. A pergunta e' "a rodada mexeu no dado do
+    cliente?", e com a contencao no ar a resposta tem que ser ZERO -- e' a prova
+    continuada de que ela funciona. Medir o descartavel responderia outra
+    pergunta e daria uma falsa sensacao de cobertura.
+    """
+    vistos = []
+
+    def _psql_dublê(banco, sql, timeout=120):
+        vistos.append(banco)
+        return _res(0, stdout="")
+
+    monkeypatch.setattr(cfg, "APP_EM_BANCO_DESCARTAVEL", True)
+    monkeypatch.setattr(cfg, "BANCO_APP_ORIGEM", "kb")
+    monkeypatch.setattr(ca, "_psql", _psql_dublê)
+    ca.retrato_do_banco()
+    assert vistos and vistos[0] == "kb"
+
+
+def test_delta_separa_criar_de_remover():
+    """Somar os dois num numero so' esconderia o caso grave: criar linha para
+    provar defeito em endpoint de escrita e' esperado, remover nunca e'."""
+    antes = {"banco": "kb", "tabelas": {"users": 4, "documents": 5, "shares": 0}}
+    depois = {"banco": "kb", "tabelas": {"users": 4, "documents": 3, "shares": 3}}
+    d = ca.delta_do_banco(antes, depois)
+    assert d["criadas"] == {"shares": 3}
+    assert d["removidas"] == {"documents": 2}
+    assert d["houve_remocao"] is True
+    assert d["limpo"] is False
+
+
+def test_delta_limpo_quando_nada_mudou():
+    r = {"banco": "kb", "tabelas": {"users": 4, "shares": 3}}
+    d = ca.delta_do_banco(r, r)
+    assert d["limpo"] is True and d["houve_remocao"] is False
+
+
+def test_delta_conta_tabela_que_nasceu_ou_sumiu():
+    """Tabela nova conta como criacao; tabela que sumiu, como remocao. Sem isso
+    um `DROP TABLE` inteiro apareceria como delta vazio."""
+    antes = {"tabelas": {"users": 4, "shares": 2}}
+    depois = {"tabelas": {"users": 4, "nova": 1}}
+    d = ca.delta_do_banco(antes, depois)
+    assert d["criadas"] == {"nova": 1}
+    assert d["removidas"] == {"shares": 2}
+
+
+def test_retrato_que_falha_nao_levanta(monkeypatch):
+    """Medicao nunca pode custar o parecer: os veredictos ja estao provados."""
+    monkeypatch.setattr(ca, "_psql",
+                        lambda b, s, timeout=120: _res(1, stderr="banco fora"))
+    r = ca.retrato_do_banco()
+    assert r["tabelas"] == {} and "erro" in r
+
+
+def test_o_limite_conhecido_esta_declarado():
+    """🚨 Contagem NAO pega UPDATE que troca o dono sem mudar o numero de linhas.
+
+    Declarar isso no proprio dado e' o que impede a metrica de virar cobertura
+    imaginaria -- o erro dos 45% de arbitro, que contavam "preenchido" achando
+    que contavam "valido".
+    """
+    d = ca.delta_do_banco({"tabelas": {}}, {"tabelas": {}})
+    assert "modificada" in d["nao_detecta"]
+
+
 def test_api_que_nao_responde_aborta(ligada, tmp_path, monkeypatch):
     """Subir o container nao e' estar no ar -- a mesma confusao ja custou um
     `compose up` falhando logo depois de eu reportar sucesso (CLAUDE.md)."""

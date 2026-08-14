@@ -475,3 +475,65 @@ def test_sem_corroboracao_externa_a_linha_nao_aparece():
     bloco = juiz._bloco({"severidade": "MEDIA"},
                         {"id": "a1", "categoria": "prd", "local": "x.py:1"}, _art())
     assert "CORROBORADO POR" not in bloco
+
+
+# ------------------------------- o efeito da pericia no banco do app (14/08)
+
+import json                                        # noqa: E402
+from veredito import config as cfg                 # noqa: E402
+
+
+def _grava_delta(tmp_path, monkeypatch, delta):
+    monkeypatch.setattr(cfg, "RODADA", tmp_path)
+    (tmp_path / "efeito_no_banco.json").write_text(
+        json.dumps({"delta": delta}), encoding="utf-8")
+
+
+def test_rodada_que_removeu_linhas_aparece_no_PARECER(tmp_path, monkeypatch):
+    """No arquivo, nao so' no console: o console rola e o arquivo fica.
+
+    Remover linha e' a unica coisa que nunca deveria acontecer. Quem ler o
+    parecer amanha precisa ver isso sem ter que ir procurar em outro lugar.
+    """
+    _grava_delta(tmp_path, monkeypatch, {
+        "banco": "kb", "criadas": {}, "removidas": {"documents": 2},
+        "limpo": False, "houve_remocao": True, "nao_detecta": "UPDATE no lugar"})
+    texto = "\n".join(juiz._secao_efeito_no_banco())
+    assert "REMOVEU" in texto and "documents" in texto
+
+
+def test_linhas_criadas_aparecem_sem_alarme(tmp_path, monkeypatch):
+    """Criar para provar defeito em endpoint de escrita e' esperado -- entra
+    como registro, nao como alarme. Tratar as duas iguais faria o leitor
+    ignorar as duas."""
+    _grava_delta(tmp_path, monkeypatch, {
+        "banco": "kb", "criadas": {"shares": 3}, "removidas": {},
+        "limpo": False, "houve_remocao": False, "nao_detecta": "UPDATE no lugar"})
+    texto = "\n".join(juiz._secao_efeito_no_banco())
+    assert "shares" in texto and "REMOVEU" not in texto
+
+
+def test_o_limite_do_metodo_vai_junto(tmp_path, monkeypatch):
+    """Metrica que nao declara o que NAO cobre vira cobertura imaginaria -- o
+    erro dos 45% de arbitro, que contavam 'preenchido' achando que contavam
+    'valido'."""
+    _grava_delta(tmp_path, monkeypatch, {
+        "banco": "kb", "criadas": {"shares": 1}, "removidas": {},
+        "limpo": False, "houve_remocao": False,
+        "nao_detecta": "linha modificada no lugar"})
+    assert "modificada no lugar" in "\n".join(juiz._secao_efeito_no_banco())
+
+
+def test_banco_intacto_nao_gera_secao(tmp_path, monkeypatch):
+    """Silencio e' proposital: secao sem conteudo em toda rodada treina o leitor
+    a pular, e ai ela nao serve quando importa."""
+    _grava_delta(tmp_path, monkeypatch, {
+        "banco": "kb", "criadas": {}, "removidas": {}, "limpo": True,
+        "houve_remocao": False, "nao_detecta": "x"})
+    assert juiz._secao_efeito_no_banco() == []
+
+
+def test_sem_medicao_o_parecer_sai_igual(tmp_path, monkeypatch):
+    """Rodada antiga, ou medicao que falhou, nao pode quebrar o parecer."""
+    monkeypatch.setattr(cfg, "RODADA", tmp_path)
+    assert juiz._secao_efeito_no_banco() == []

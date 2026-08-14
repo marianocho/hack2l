@@ -407,7 +407,33 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
         rotulo = _CATEGORIA_DO_DESAFIO.get(a.get("categoria"), a.get("categoria", "?"))
         p.append(f"- {rotulo} em {_local(a)}: {v.get('motivo','-')}")
 
+    p += _secao_efeito_no_banco()
     return "\n".join(p) + "\n"
+
+
+def _secao_efeito_no_banco() -> list[str]:
+    """O que a pericia deixou no banco do app.
+
+    No PARECER, e nao so' no console: o console rola e o arquivo fica. Quem le
+    o parecer amanha precisa saber o que aquela rodada mexeu -- e se removeu
+    linha, precisa saber sem ter que procurar.
+
+    Silencio quando nao houve efeito e' proposital: linha a mais no parecer sem
+    conteudo treina o leitor a pular a secao, e ai ela nao serve quando importa.
+    """
+    d = _carrega_json(cfg.RODADA / "efeito_no_banco.json", {}).get("delta") or {}
+    if not d or d.get("limpo"):
+        return []
+    p = ["", "## EFEITO NO BANCO DO APP", ""]
+    if d.get("houve_remocao"):
+        p.append(f"- **A rodada REMOVEU linhas** de `{d.get('banco')}`: "
+                 f"{d['removidas']}. Criar linha para provar defeito em endpoint "
+                 f"de escrita e' esperado; remover nunca e'.")
+    if d.get("criadas"):
+        p.append(f"- criou em `{d.get('banco')}`: {d['criadas']} "
+                 f"(prova de defeito em caminho de escrita)")
+    p.append(f"- nao detectado por este metodo: {d.get('nao_detecta')}")
+    return p
 
 
 # ------------------------------------------------------------------- carga

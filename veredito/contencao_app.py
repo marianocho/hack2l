@@ -129,6 +129,73 @@ def copia_o_banco(destino: Path | None = None) -> None:
             destino.write_text(d.stdout, encoding="utf-8")
 
 
+def retrato_do_banco(banco: str | None = None) -> dict:
+    """Quantas linhas cada tabela tem AGORA. Nunca levanta.
+
+    Sempre no banco de ORIGEM por padrao, mesmo com a contencao ligada: a
+    pergunta e' "a rodada mexeu no dado do cliente?", e com a contencao no ar a
+    resposta tem que ser zero. Medir o descartavel responderia outra pergunta.
+
+    ⚠️ O QUE ISTO NAO PEGA, e esta dito aqui para nao virar metrica que mede a
+    coisa errada: contagem detecta linha CRIADA e linha APAGADA, nao linha
+    MODIFICADA no lugar. Um UPDATE que troca o dono de um documento sem mudar a
+    contagem passa batido. Pegar isso exigiria checksum por tabela, que num
+    banco de cliente pode ser caro -- fica registrado como limite conhecido, e
+    nao como cobertura que nao existe.
+    """
+    banco = banco or cfg.BANCO_APP_ORIGEM
+    r = _psql(banco, "select tablename from pg_tables where schemaname='public' "
+                     "order by tablename")
+    if r.returncode != 0:
+        return {"erro": (r.stderr or "").strip()[:200], "tabelas": {}}
+    tabelas = [t.strip() for t in (r.stdout or "").splitlines() if t.strip()]
+    if not tabelas:
+        return {"banco": banco, "tabelas": {}}
+
+    sql = " union all ".join(
+        f"select '{t}', count(*) from \"{t}\"" for t in tabelas)
+    r = _psql(banco, sql, timeout=300)
+    if r.returncode != 0:
+        return {"banco": banco, "erro": (r.stderr or "").strip()[:200], "tabelas": {}}
+
+    contagem = {}
+    for linha in (r.stdout or "").splitlines():
+        if "|" in linha:
+            nome, _, n = linha.partition("|")
+            try:
+                contagem[nome.strip()] = int(n.strip())
+            except ValueError:
+                pass
+    return {"banco": banco, "tabelas": contagem}
+
+
+def delta_do_banco(antes: dict, depois: dict) -> dict:
+    """O que a rodada mudou, separando o que CRIOU do que REMOVEU.
+
+    A separacao e' o ponto: criar linha e' aceitavel (provar defeito em endpoint
+    de escrita exige), remover nao e' nunca. Somar os dois num numero so'
+    esconderia exatamente o caso grave.
+    """
+    a, d = antes.get("tabelas", {}), depois.get("tabelas", {})
+    criadas, removidas = {}, {}
+    for t in sorted(set(a) | set(d)):
+        antes_n, depois_n = a.get(t, 0), d.get(t, 0)
+        if depois_n > antes_n:
+            criadas[t] = depois_n - antes_n
+        elif depois_n < antes_n:
+            removidas[t] = antes_n - depois_n
+    return {
+        "banco": depois.get("banco") or antes.get("banco"),
+        "criadas": criadas,
+        "removidas": removidas,
+        "limpo": not criadas and not removidas,
+        # 🚨 Remocao e' a unica que nunca deveria acontecer. Fica com nome
+        # proprio para o juiz e o operador nao precisarem interpretar.
+        "houve_remocao": bool(removidas),
+        "nao_detecta": "linha modificada no lugar (UPDATE sem mudar contagem)",
+    }
+
+
 def _api_no_ar(tentativas: int = 30) -> bool:
     import requests
     for _ in range(tentativas):

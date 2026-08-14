@@ -104,6 +104,45 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
     return brutas
 
 
+def _registra_efeito_no_banco(antes: dict) -> dict:
+    """O que a rodada deixou no banco do app. Grava, e diz em voz alta.
+
+    ⚠️ NUNCA derruba a rodada. Os veredictos ja estao provados e gravados; um
+    erro de medicao nao pode custar o parecer. Mas tambem nao pode passar
+    calado: silencio aqui e' exatamente o estado anterior, em que a linha de
+    base deslocava e ninguem via.
+    """
+    try:
+        depois = contencao_app.retrato_do_banco()
+        d = contencao_app.delta_do_banco(antes, depois)
+        (cfg.RODADA / "efeito_no_banco.json").write_text(
+            json.dumps({"antes": antes, "depois": depois, "delta": d},
+                       indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        print(f"  [!] nao consegui medir o efeito no banco: {type(e).__name__}: {e}")
+        return {}
+
+    if d["limpo"]:
+        print(f"\nefeito no banco {d['banco']}: NENHUM"
+              + (" (contencao ligada)" if cfg.APP_EM_BANCO_DESCARTAVEL else ""))
+        return d
+
+    if d["houve_remocao"]:
+        # A unica que nunca deveria acontecer -- em voz alta, e sem emoji: os
+        # cinco prints com emoji do projeto estavam todos em caminho de alarme
+        # e cada um matava o processo em vez de avisar.
+        print(f"\n  [!!] A RODADA REMOVEU LINHAS de {d['banco']}: {d['removidas']}")
+        print("       Criar linha para provar defeito em endpoint de escrita e'"
+              " esperado; REMOVER nunca e'.")
+    if d["criadas"]:
+        print(f"\nefeito no banco {d['banco']}: criou {d['criadas']}")
+        if not cfg.APP_EM_BANCO_DESCARTAVEL:
+            print("       A linha de base deslocou. `APP_EM_BANCO_DESCARTAVEL=1`"
+                  " roda em copia e deixa o banco intacto.")
+    print(f"       (nao detecta: {d['nao_detecta']})")
+    return d
+
+
 def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
          com_scanner: bool = True) -> dict:
     cfg.prepara_pastas()
@@ -176,6 +215,13 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
         print(f"trace desta rodada: {rod.url}\n", flush=True)
 
     veredictos: list[dict] = []
+
+    # Retrato ANTES, sempre -- inclusive com a contencao ligada, e sobretudo com
+    # ela desligada, que e' o padrao. Foi por falta disto que o deslocamento de
+    # 14/08 (shares 0 -> 3) so' apareceu porque um humano desconfiou e anotou o
+    # estado a mao. Medicao nao pode depender de alguem lembrar.
+    antes_do_banco = contencao_app.retrato_do_banco()
+
     # A contencao envolve SO' o laco do advogado: e' ele que tem http_request
     # apontado para o app. O juiz nao toca no app, entao fica de fora e a api
     # ja volta ao banco original antes da sentenca.
@@ -212,6 +258,8 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
             if i == 1 and v["cache_read"] == 0:
                 print("    [!] cache_read zero na 1a acusacao -- algo varia no prefixo",
                       flush=True)
+
+    _registra_efeito_no_banco(antes_do_banco)
 
     with rod.etapa("juiz") as et:
         texto = juiz.sentencia()
