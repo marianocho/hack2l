@@ -155,3 +155,45 @@ def test_o_advogado_proibe_prova_destrutiva():
     s = SISTEMA.lower()
     for proibido in ("drop", "delete", "read-only"):
         assert proibido in s, f"o advogado nao menciona '{proibido}'"
+
+
+def test_a_regra_distingue_criar_de_destruir():
+    """Medido em 14/08: a rodada criou 3 linhas em `shares` provando a injection.
+
+    A regra antiga -- "prove SEMPRE de forma que so LE" -- e' impossivel de
+    cumprir quando o defeito mora num endpoint de escrita: para provar injecao
+    na rota que compartilha documento, tem que chamar a rota que compartilha
+    documento. Nao foi desobediencia do modelo; foi regra que o desenho viola
+    por construcao.
+
+    Isso importa alem deste caso: regra impossivel no mesmo prompt ensina que
+    as regras dali sao aproximadas -- e as outras regras deste prompt sao as que
+    impedem o advogado de apagar o banco do cliente.
+
+    A linha correta e' entre CRIAR e DESTRUIR, e o prompt tem que dizer as duas
+    metades. So' a proibicao, sem a permissao, e' a regra impossivel de novo.
+    """
+    from veredito.advogado import SISTEMA
+    s = SISTEMA.lower()
+    assert "pre-existente" in s or "ja existia" in s, (
+        "o prompt nao diz que o proibido e' mexer no que JA EXISTIA -- sem isso "
+        "a regra volta a ser 'nunca escreva', que o desenho viola sozinho")
+    assert "endpoint documentado" in s or "rota que compartilha" in s, (
+        "o prompt nao reconhece que chamar endpoint de escrita e' legitimo "
+        "quando o defeito mora nele")
+
+
+def test_a_permissao_de_criar_nao_afrouxa_o_payload():
+    """A permissao vale para a CHAMADA, nunca para o payload injetado.
+
+    Sao coisas diferentes e confundi-las desfaz a salvaguarda de 11/08: chamar
+    POST /share e' usar o app como ele foi feito; injetar `'; INSERT` e' fazer o
+    banco executar o que voce escreveu. O segundo continua proibido.
+    """
+    from veredito.advogado import SISTEMA
+    s = SISTEMA.lower()
+    assert "payload" in s and "read-only" in s, (
+        "o prompt nao amarra o read-only ao PAYLOAD especificamente")
+    assert "insert" in s, (
+        "INSERT saiu da lista de SQL proibido -- escrita via SQL injetado nao e' "
+        "a mesma coisa que chamar um endpoint documentado")

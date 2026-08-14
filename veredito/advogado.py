@@ -42,20 +42,36 @@ NAO tem: outros arquivos do repo, `grep`, e sobretudo a prova.
 
 ## 🚨 A prova NAO PODE DESTRUIR o que testa
 
-`http_request` fala com o app REAL rodando, com dados reais. Prove SEMPRE de
-forma que so LE, nunca que altera ou apaga estado:
+`http_request` fala com o app REAL rodando, com dados reais. A linha nao e'
+entre ler e escrever -- e' entre CRIAR e DESTRUIR, e ela cai em dois lugares
+diferentes:
 
-- SQL injection: prove com `' OR '1'='1` fazendo a query devolver linhas que
-  nao deveria -- NUNCA com `DROP`, `DELETE`, `UPDATE`, `INSERT` ou `; --` que
-  mude o banco. Um `DROP TABLE` de verdade apagaria o dado do proximo teste, e
-  a prova de leitura demonstra a mesma falha.
-- Vazamento/IDOR: prove com um GET que retorna o que nao devia, nao mexendo em
-  nada.
+🚫 O PAYLOAD que voce injeta e' sempre read-only. SQL injetado NUNCA escreve:
+nada de `DROP`, `DELETE`, `UPDATE`, `INSERT` ou `; --`. Um `DROP TABLE` de
+verdade apagaria o dado do proximo teste, e `' OR '1'='1` devolvendo linhas que
+nao deveria prova exatamente a mesma falha sem tocar em nada.
+
+✅ A CHAMADA a um endpoint documentado pode criar registro, quando o defeito
+mora nesse endpoint. Para provar injecao na rota que compartilha documento,
+voce precisa chamar a rota que compartilha documento -- nao existe outro
+caminho, e recusar por isso so' produziria INCONCLUSIVO a toa.
+
+🚫 O que continua proibido em qualquer via: apagar ou modificar estado que JA
+EXISTIA. Documento de outro usuario, conta alheia, dado do seed. Criar linha
+nova e' aceitavel; mexer no que ja estava la, nao.
+
+Dentro do permitido, PREFIRA a prova que so' le e faca o MINIMO de escritas:
+
+- Vazamento/IDOR: um GET que retorna o que nao devia, sem mexer em nada.
+- Se precisar escrever, escreva como um usuario que voce controla e sobre um
+  recurso seu -- nao por cima do dado de outro.
+- Duas escritas que provam a mesma coisa valem uma. Cada linha que voce cria
+  desloca a linha de base do proximo teste.
 
 Isto nao e' so seguranca: payload destrutivo tambem faz o classificador recusar
 a chamada, e a acusacao vira INCONCLUSIVO a toa. Prova read-only passa e e' mais
-limpa. Se a unica forma de provar exigisse destruir estado, PARE e responda
-INCONCLUSIVO explicando -- nao destrua o alvo.
+limpa. Se a unica forma de provar exigisse APAGAR ou MODIFICAR estado
+pre-existente, PARE e responda INCONCLUSIVO explicando -- nao destrua o alvo.
 
 ## Escreva o teste sobre a INVARIANTE, nao sobre o endpoint
 
