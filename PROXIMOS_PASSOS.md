@@ -36,27 +36,91 @@ que condenar, e absolve com motivo quando não há:
 | item | tamanho | nota |
 |---|---|---|
 | **Licença** | 10 min | decisão de sócio: MIT/Apache se o alvo é adoção |
+| 🚨 **Contenção do `http_request`** | meio dia | a prova pela API **altera estado do app real**. Medido 14/08. Ver abaixo |
 | **`veredito.yml`** | meio dia | como o app sobe, como autentica, contas de teste, **banco descartável**. Destrava tudo o mais |
 | **Entrada "revise este PR"** | horas | hoje é config apontando para pasta local |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
 
+#### 🚨 A contenção do `http_request` — medido em 14/08
+
+Rodada real de 6 acusações. Banco antes: `users=4, documents=5, **shares=0**`.
+Depois: `users=4, documents=5, **shares=3**`.
+
+Nada foi destruído. Mas o advogado **alterou estado do app real** — para provar
+a injection no endpoint de compartilhamento, ele chamou
+`POST /documents/N/share`, que cria linha. E o `SISTEMA` manda provar *"de forma
+que só LÊ, nunca que altera ou apaga estado"*.
+
+**A regra não se sustenta como está escrita:** provar defeito num endpoint de
+escrita exige chamar o endpoint de escrita. Não é desobediência do modelo; é
+regra impossível de cumprir no caso que mais importa.
+
+**É outra instância do padrão de bug do projeto.** A contenção que funciona —
+banco descartável imposto de fora, rede sem saída — foi aplicada ao caminho da
+`prova_diferencial`. O `http_request` fala com o app **de verdade**, no banco
+`kb` de verdade, e ficou de fora. A guarda existe e está muda exatamente no
+caminho que toca dados vivos.
+
+**E só descobrimos por acidente:** o `shares=0 → 3` apareceu porque tiramos
+retrato do banco à mão antes da rodada. Nada no sistema teria avisado.
+
+O conserto tem três partes, e a ordem importa:
+
+1. **Tornar a regra verdadeira** (30 min). Trocar *"nunca altere estado"* por
+   *"nunca apague nem modifique estado pré-existente; criar estado novo pela API
+   documentada é permitido quando o defeito está num caminho de escrita"*. Regra
+   que o desenho viola por construção ensina o modelo que as regras são
+   aproximadas — e as outras regras do `SISTEMA` são as que impedem ele de
+   apagar banco.
+2. **Impor a fronteira de fora** (meio dia). Retrato do banco antes da rodada e
+   restauração depois, ou app apontado para banco descartável durante a rodada.
+   É literalmente o conserto de 11/08 estendido ao caminho que faltou —
+   **contenção, não predição**.
+3. **Medir sempre** (1 hora). Gravar o delta de estado como artefato da rodada,
+   e o parecer dizer quantas linhas a prova criou. Hoje isso é invisível; foi
+   preciso um humano desconfiar.
+
+⚠️ Enquanto 2 não existir, a linha de base documentada (`demo=3, alice=1, bob=1,
+carol=0, shares=0`) **desloca a cada rodada**, e comparação entre rodadas fica
+suja sem ninguém perceber.
+
 ### B — Memória e custo
 
 | item | tamanho | nota |
 |---|---|---|
-| **Parar de sobrescrever** | 30 min | `saidas/rodadas/<data-commit>/`. Hoje só a última sobrevive |
-| **Cache de ferramenta na rodada** | meio dia | se A leu `shares.py`, B não relê |
+| ✅ **Parar de sobrescrever** *(13/08)* | 30 min | `saidas/rodadas/<data>T<hora>-<commit>/` + ponteiro `ULTIMA` |
+| ✅ **Cache — virou prefixo compartilhado** *(14/08)* | | o desenho original **não economizaria**: memoizar `read_file` corta 0,15s de disco e US$0. Cada acusação é conversa separada, o conteúdo entra no contexto igual. Os arquivos do PR passaram a entrar no bloco **cacheado** junto com o diff |
 | **Fusão por artefato no juiz** | 1 dia | duas acusações com o mesmo artefato **são** o mesmo defeito — fato, não palpite |
 | **Biblioteca de andaimes por repo** | 1–2 dias | corta voltas do laço, que é onde mora o custo |
 | ❌ **Mostrar veredito passado ao advogado** | — | **nunca.** Precedente não é evidência, e código muda |
+
+**O que o prefixo compartilhado rendeu, medido em rodada real de 6 acusações
+(`saidas/rodadas/20260814T1451-1dd2e5c`):**
+
+| | com o bloco | rodada 1440 (6 acusações) |
+|---|---|---|
+| chamadas de `read_file` | **0**, com 11 arquivos entregues | — |
+| tokens novos | 10.530 | 32.360 |
+| tokens de saída | 6.452 | 12.871 |
+| lidos do cache | 295.752 | 242.002 |
+| tempo | 213,9s | 329,6s |
+
+⚠️ **O "3× menos entrada" exagera.** Leitura de cache custa ~10%, não zero.
+Entrada efetiva: ~40.100 contra ~56.600 → **1,41× menos**, não 3×. Saída 1,99×,
+tempo 1,54×. E a comparação **não é controlada** — outras acusações, outro dia.
+
+O que é evidência limpa é o **zero**: 11 arquivos no bloco, nenhuma chamada de
+`read_file` na rodada inteira. Isso não depende de comparação, está no
+`chamadas.json`, e é a alegação central — o advogado deixou de gastar volta
+pedindo arquivo.
 
 ### C — Evidência que falta
 
 | item | custo | o que responde |
 |---|---|---|
 | **PR de terceiro com IA** | US$0,05 | a lente de injection ficou vazia nos 10 PRs porque nenhum tem modelo. Silêncio correto ou lente quebrada? |
-| **`$PARAM` nas regras do semgrep** | 3 linhas | dá ao advogado o nome da variável envenenada, poupando volta de laço |
+| ✅ **`$PARAM` nas regras do semgrep** *(14/08)* | 3 linhas | a mensagem agora nomeia a variável e a rota. Visível no parecer: *"o parametro **email** … na rota **share_document**"* |
 | **Taxa de aceitação** | depende do bot | de cada achado postado, qual fração o autor conserta. É a métrica que prova a tese |
 
 ### D — Dívida
