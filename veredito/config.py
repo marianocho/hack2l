@@ -254,6 +254,38 @@ MODEL_PROMOTOR = _s("MODEL_PROMOTOR", "claude-haiku-4-5-20251001")
 MODEL_ADVOGADO = _s("MODEL_ADVOGADO", "claude-opus-5")
 MODEL_JUIZ = _s("MODEL_JUIZ", "claude-sonnet-5")
 
+# --- contencao do http_request ----------------------------------------------
+#
+# 🚨 MEDIDO EM 14/08, numa rodada real: o banco saiu de shares=0 para shares=3.
+# Provar a injection na rota de compartilhamento exige chamar POST
+# /documents/N/share, que cria linha. Nada foi destruido, mas o advogado
+# ALTEROU estado do app real -- e a linha de base documentada desloca a cada
+# rodada, sujando comparacao entre rodadas sem ninguem perceber.
+#
+# A contencao que ja funcionava (banco descartavel, rede sem saida) cobria o
+# caminho da `prova_diferencial`. O `http_request` fala com o app DE VERDADE, no
+# banco `kb` de verdade, e ficou de fora: a guarda existia e estava muda
+# exatamente no caminho que toca dado vivo.
+#
+# Aqui o app inteiro passa a apontar para uma COPIA descartavel durante a
+# rodada. O banco original e' apenas LIDO (`pg_dump`), nunca escrito.
+#
+# ⚠️ DESLIGADA POR PADRAO, mesmo criterio da PERMITIR_REDE_NO_BASE: ela
+# reinicia o container da api, e quem conhece o ambiente decide.
+#
+# 🚫 O caminho `CREATE DATABASE ... TEMPLATE kb` foi TESTADO e esta proibido:
+# com o app conectado ele DERRUBOU o servidor Postgres ("another server process
+# exited abnormally", banco em modo de recuperacao). pg_dump com o app rodando
+# e' seguro -- 0,6s para 171KB -- e e' o caminho usado aqui.
+APP_EM_BANCO_DESCARTAVEL = _b("APP_EM_BANCO_DESCARTAVEL", False)
+
+# A copia. Nunca pode ser igual a BANCO_APP_ORIGEM -- ha teste para isso, porque
+# uma variavel de ambiente trocada faria a rodada rodar em cima do banco real
+# achando que esta contida, que e' pior do que nao ter contencao nenhuma.
+BANCO_APP = _s("BANCO_APP", "kb_veredito_app")
+BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", "kb")
+
+
 # --- contexto compartilhado no bloco cacheado -------------------------------
 #
 # Os arquivos que o diff toca, inteiros, DENTRO do bloco que ja leva

@@ -20,8 +20,8 @@ import sys
 import time
 from pathlib import Path
 
-from . import (advogado, config as cfg, ferramentas, fontes, juiz,
-               llm_alvo, promotores, tracing)
+from . import (advogado, config as cfg, contencao_app, ferramentas, fontes,
+               juiz, llm_alvo, promotores, tracing)
 
 
 def _carimbo_da_rodada() -> str:
@@ -176,38 +176,42 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
         print(f"trace desta rodada: {rod.url}\n", flush=True)
 
     veredictos: list[dict] = []
-    for i, a in enumerate(acusacoes, 1):
-        print(f"[{i}/{len(acusacoes)}] {a.get('id')} -- {a.get('categoria')}", flush=True)
-        with rod.etapa(f"advogado/{a.get('id')}",
-                       entrada={"categoria": a.get("categoria"),
-                                "arbitro": a.get("arbitro"),
-                                "local": a.get("local")}) as et:
-            v = advogado.julga(a, diff, contexto_arquivos)
-            et.evento("veredito", veredito=v.get("veredito"), voltas=v.get("voltas"),
-                      severidade=v.get("severidade"), cache_read=v.get("cache_read"))
-        veredictos.append(v)
+    # A contencao envolve SO' o laco do advogado: e' ele que tem http_request
+    # apontado para o app. O juiz nao toca no app, entao fica de fora e a api
+    # ja volta ao banco original antes da sentenca.
+    with contencao_app.app_em_banco_descartavel(pasta):
+        for i, a in enumerate(acusacoes, 1):
+            print(f"[{i}/{len(acusacoes)}] {a.get('id')} -- {a.get('categoria')}", flush=True)
+            with rod.etapa(f"advogado/{a.get('id')}",
+                           entrada={"categoria": a.get("categoria"),
+                                    "arbitro": a.get("arbitro"),
+                                    "local": a.get("local")}) as et:
+                v = advogado.julga(a, diff, contexto_arquivos)
+                et.evento("veredito", veredito=v.get("veredito"), voltas=v.get("voltas"),
+                          severidade=v.get("severidade"), cache_read=v.get("cache_read"))
+            veredictos.append(v)
 
-        # Grava a cada acusacao, nao no fim: rodada que morre no meio nao perde
-        # o que ja foi provado.
-        (cfg.RODADA / "veredictos.json").write_text(
-            json.dumps(veredictos, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
-        (cfg.RODADA / "acusacoes.json").write_text(
-            json.dumps(acusacoes, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+            # Grava a cada acusacao, nao no fim: rodada que morre no meio nao
+            # perde o que ja foi provado.
+            (cfg.RODADA / "veredictos.json").write_text(
+                json.dumps(veredictos, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
+            (cfg.RODADA / "acusacoes.json").write_text(
+                json.dumps(acusacoes, indent=2, ensure_ascii=False), encoding="utf-8"
+            )
 
-        print(
-            f"    -> {v['veredito']} em {v['segundos']}s, {v['voltas']} voltas | "
-            f"entrada {v['tokens_entrada']} saida {v['tokens_saida']} "
-            f"cache_read {v['cache_read']}"
-        )
-        if v.get("motivo"):
-            print(f"       {v['motivo'][:150]}")
-        # Disciplina no 4: conferir o cache na 1a rodada. Zero aqui e' sinal de
-        # timestamp, UUID ou ordem de dicionario variando no prefixo.
-        if i == 1 and v["cache_read"] == 0:
-            print("    [!] cache_read zero na 1a acusacao -- algo varia no prefixo",
-                  flush=True)
+            print(
+                f"    -> {v['veredito']} em {v['segundos']}s, {v['voltas']} voltas | "
+                f"entrada {v['tokens_entrada']} saida {v['tokens_saida']} "
+                f"cache_read {v['cache_read']}"
+            )
+            if v.get("motivo"):
+                print(f"       {v['motivo'][:150]}")
+            # Disciplina no 4: conferir o cache na 1a rodada. Zero aqui e' sinal
+            # de timestamp, UUID ou ordem de dicionario variando no prefixo.
+            if i == 1 and v["cache_read"] == 0:
+                print("    [!] cache_read zero na 1a acusacao -- algo varia no prefixo",
+                      flush=True)
 
     with rod.etapa("juiz") as et:
         texto = juiz.sentencia()
