@@ -254,6 +254,33 @@ MODEL_PROMOTOR = _s("MODEL_PROMOTOR", "claude-haiku-4-5-20251001")
 MODEL_ADVOGADO = _s("MODEL_ADVOGADO", "claude-opus-5")
 MODEL_JUIZ = _s("MODEL_JUIZ", "claude-sonnet-5")
 
+# --- contexto compartilhado no bloco cacheado -------------------------------
+#
+# Os arquivos que o diff toca, inteiros, DENTRO do bloco que ja leva
+# `cache_control` junto com o diff. Duas economias, e a segunda e' a grande:
+#
+#   1. o arquivo passa a custar ~10% (leitura de cache) em cada acusacao, em vez
+#      de 100% em cada uma. Cada acusacao e' uma CONVERSA SEPARADA -- de
+#      proposito, para uma nao contaminar a outra -- entao hoje nada e'
+#      reaproveitado entre elas.
+#   2. o advogado nao gasta uma VOLTA DO LACO pedindo para ler, e volta do laco
+#      no modelo caro e' onde o custo mora de verdade.
+#
+# ⚠️ Medido em 14/08, e foi o que derrubou o desenho anterior: memoizar
+# `read_file` em memoria economiza 0,15s de disco e ZERO dolar, porque o
+# conteudo entra no contexto do mesmo jeito. O gargalo nunca foi o disco.
+#
+# 🚨 O prefixo tem que ser BYTE A BYTE IDENTICO nas N acusacoes, senao o cache
+# nao le e todas pagam preco cheio -- ver a disciplina no 4 do CLAUDE.md. Por
+# isso a lista de arquivos e' ORDENADA e o bloco e' montado UMA vez por rodada.
+CONTEXTO_ARQUIVOS = _b("CONTEXTO_ARQUIVOS", True)
+
+# Teto total do bloco. Ele e' lido por TODAS as acusacoes, entao arquivo que
+# ninguem ia abrir custa 10% a toa. Melhor apertado: o que ficar de fora
+# continua alcancavel por `read_file`, e o bloco diz quais ficaram.
+CONTEXTO_MAX_CHARS = _i("CONTEXTO_MAX_CHARS", 40000)
+
+
 # --- parametros do advogado -------------------------------------------------
 TOP_N = _i("TOP_N", 2)
 EFFORT = _s("EFFORT", "high")

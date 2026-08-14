@@ -18,6 +18,7 @@ import anthropic
 from . import arbitro
 from . import config as cfg
 from . import ferramentas
+from . import fontes
 
 # O prompt e' produto, nao configuracao. Cada paragrafo aqui existe por um
 # motivo que custou caro em outro lugar.
@@ -31,6 +32,13 @@ nao opina e nao avalia plausibilidade. Voce testa.
 
 Um artefato que outra pessoa possa rodar e ver o mesmo resultado. Nada mais.
 Codigo que "parece errado" nao e' prova. Raciocinio convincente nao e' prova.
+
+## Os arquivos do PR ja vieram
+
+O bloco "Os arquivos que o PR toca" traz o conteudo integral deles, igual ao que
+`read_file` devolveria. Nao chame `read_file` para esses -- a resposta seria
+identica e voce teria gasto uma volta. Use as ferramentas para o que voce ainda
+NAO tem: outros arquivos do repo, `grep`, e sobretudo a prova.
 
 ## 🚨 A prova NAO PODE DESTRUIR o que testa
 
@@ -264,8 +272,13 @@ def _soma(uso: dict, u) -> None:
         uso[chave] += getattr(u, campo, 0) or 0
 
 
-def julga(acusacao: dict, diff: str) -> dict:
-    """Uma acusacao. Devolve o veredicto que o juiz vai ler."""
+def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
+    """Uma acusacao. Devolve o veredicto que o juiz vai ler.
+
+    `contexto` e' o bloco dos arquivos do PR, montado UMA vez pelo orquestrador
+    e passado igual para todas as acusacoes -- ele entra no prefixo cacheado.
+    Vazio mantem o comportamento anterior, com o advogado lendo por ferramenta.
+    """
     id_ = acusacao.get("id", "sem_id")
     ferramentas.define_acusacao(id_)
     inicio = time.time()
@@ -307,9 +320,13 @@ def julga(acusacao: dict, diff: str) -> dict:
                      "cache_control": {"type": "ephemeral"}}],
             tools=ferramentas.TOOLS,
             messages=[{"role": "user", "content": [
-                # O diff vem ANTES da acusacao: prefixo identico nas N chamadas,
-                # entao o cache le a ~10% em vez de reprocessar tudo.
-                {"type": "text", "text": f"# Diff do PR sob revisao\n\n{diff}",
+                # O diff e os arquivos vem ANTES da acusacao: prefixo identico
+                # nas N chamadas, entao o cache le a ~10% em vez de reprocessar
+                # tudo. `cache_control` marca o FIM do trecho cacheado, por isso
+                # ele fica no ultimo bloco compartilhado -- os arquivos entram
+                # DENTRO da fronteira, e a acusacao (que muda) fica fora.
+                {"type": "text", "text": f"# Diff do PR sob revisao\n\n{diff}"},
+                {"type": "text", "text": contexto or "# (sem bloco de arquivos)",
                  "cache_control": {"type": "ephemeral"}},
                 {"type": "text", "text": _prompt_da_acusacao(acusacao)},
             ]}],
@@ -395,6 +412,63 @@ def julga(acusacao: dict, diff: str) -> dict:
     v.update(uso)
     v["segundos"] = round(time.time() - inicio, 1)
     return v
+
+
+def contexto_dos_arquivos(diff: str) -> str:
+    """Os arquivos tocados pelo diff, para entrar no bloco CACHEADO.
+
+    Montado UMA vez por rodada e reusado nas N acusacoes -- e' o que faz o
+    cache ler. Recalcular por acusacao daria o mesmo texto (a lista e' ordenada
+    e o conteudo vem do disco), mas gastaria N leituras para nada.
+
+    O conteudo e' exatamente o que `read_file` devolveria, `_corta` incluso.
+    Isso e' de proposito: assim "nao peca estes arquivos" e' literalmente
+    verdade, e o advogado nao perde nada por nao chamar a ferramenta.
+    """
+    if not cfg.CONTEXTO_ARQUIVOS:
+        return ""
+    # ORDENADO: a ordem de um set varia entre processos, e prefixo que varia e'
+    # prefixo que nao cacheia -- cache_read viria zero e ninguem perceberia.
+    caminhos = sorted(fontes.arquivos_do_diff(diff))
+    if not caminhos:
+        return ""
+
+    # UMA resolucao de worktree para todos os arquivos: _worktree_de dispara
+    # git a cada chamada, e aqui sao dezenas de arquivos do mesmo lado.
+    try:
+        raiz = ferramentas._worktree_de("head")
+    except Exception:
+        return ""   # sem worktree nao ha bloco; o advogado le por ferramenta
+
+    partes, total, fora = [], 0, []
+    for c in caminhos:
+        ferramentas._abre_chamada()
+        texto = ferramentas._read_file(c, raiz=raiz)
+        if ferramentas.falhou_a_chamada():
+            fora.append(f"{c} (nao abriu)")
+            continue
+        if total + len(texto) > cfg.CONTEXTO_MAX_CHARS:
+            fora.append(f"{c} (fora do teto)")
+            continue
+        partes.append(f"### {c}\n{texto}")
+        total += len(texto)
+    ferramentas._abre_chamada()   # nao deixa marca pendurada para a 1a tool
+    if not partes:
+        return ""
+
+    cabeca = (
+        "# Os arquivos que o PR toca, na integra\n\n"
+        "Ja estao aqui, exatamente como `read_file` os devolveria. NAO chame "
+        "`read_file` para nenhum deles -- voce nao receberia nada novo, e "
+        "gastaria uma volta do laco.\n\n"
+    )
+    rodape = ""
+    if fora:
+        # Dizer o que ficou de fora e' obrigatorio: sem isso o advogado assume
+        # que o que nao esta aqui nao existe, e deixa de ler o que precisava.
+        rodape = ("\n### Fora deste bloco, use `read_file`\n"
+                  + "\n".join(f"- {x}" for x in fora) + "\n")
+    return cabeca + "\n\n".join(partes) + "\n" + rodape
 
 
 def _conta_blocos(resposta_tool) -> int:

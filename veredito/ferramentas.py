@@ -136,6 +136,17 @@ def _fecha_chamada(nome: str, saida: str) -> str:
     return saida
 
 
+def falhou_a_chamada() -> bool:
+    """A ultima leitura falhou? Para quem chama os helpers FORA de uma tool.
+
+    `contexto_dos_arquivos` monta o bloco cacheado chamando `_read_file` direto,
+    e precisa saber se o arquivo abriu. Perguntar aqui em vez de olhar se o
+    texto comeca com ERRO e' o ponto do conserto de 13/08: a fonte da verdade e'
+    o registro, nao a string.
+    """
+    return _FALHA_DA_CHAMADA is not None
+
+
 def chamadas_da_acusacao(id_acusacao: str) -> list[dict]:
     return list(_CHAMADAS.get(id_acusacao, []))
 
@@ -748,8 +759,12 @@ def normaliza_local(local: str) -> str:
     return resultado
 
 
-def _read_file(caminho: str, lado: str = "head") -> str:
-    raiz = _worktree_de(lado)
+def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
+    # `raiz` pronta evita re-resolver o worktree a cada arquivo: _worktree_de
+    # dispara `git rev-parse` e `git worktree` toda vez, e quem monta o bloco
+    # cacheado le dezenas de arquivos do MESMO lado. Sem isso seriam dezenas de
+    # subprocessos git no caminho critico da rodada.
+    raiz = raiz or _worktree_de(lado)
     alvo = _resolve_caminho(raiz, caminho)
     if alvo is None:
         return _marca_falha(

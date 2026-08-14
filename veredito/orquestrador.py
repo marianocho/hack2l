@@ -147,7 +147,12 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     print(f"LLM do app alvo: {estado} -- {detalhe[:90]}")
 
     diff = advogado.diff_do_pr()  # prefixo cacheado; NUNCA imprimir
-    print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)\n")
+    print(f"diff do PR carregado: {len(diff)} caracteres (nao exibido de proposito)")
+
+    # UMA vez por rodada, nao por acusacao: e' o prefixo que as N acusacoes
+    # compartilham, e montar de novo daria o mesmo texto gastando N leituras.
+    contexto_arquivos = advogado.contexto_dos_arquivos(diff)
+    print(f"arquivos do PR no bloco cacheado: {len(contexto_arquivos)} caracteres\n")
 
     brutas = _carrega_acusacoes(manual, reusar, diff, com_scanner, anterior)
     if not brutas:
@@ -177,7 +182,7 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
                        entrada={"categoria": a.get("categoria"),
                                 "arbitro": a.get("arbitro"),
                                 "local": a.get("local")}) as et:
-            v = advogado.julga(a, diff)
+            v = advogado.julga(a, diff, contexto_arquivos)
             et.evento("veredito", veredito=v.get("veredito"), voltas=v.get("voltas"),
                       severidade=v.get("severidade"), cache_read=v.get("cache_read"))
         veredictos.append(v)
