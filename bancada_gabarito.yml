@@ -1,0 +1,134 @@
+# GABARITO DA BANCADA -- o que foi plantado em cada PR.
+#
+# 🚨 ESTE ARQUIVO NAO PODE ENTRAR NO REPOSITORIO DA BANCADA.
+#
+# Os promotores leem o repo sob revisao e o advogado tem `read_file` e `grep`.
+# Um gabarito na arvore da bancada seria resposta chumbada servida na bandeja --
+# e o pior e' que a rodada pareceria excelente. Ele mora aqui, no nosso repo, que
+# o agente nunca alcanca: ele so' le worktrees de `cfg.DESAFIO`.
+#
+# ⚠️ E NAO CALIBRAR PROMPT contra este arquivo. Ajustar as lentes ate' a bancada
+# dar 100% e' decorar a prova. Quando houver mais PRs, separar um conjunto que
+# so' roda no fim.
+#
+# TAXONOMIA EXTERNA de proposito (CWE), e nao "o que as nossas lentes procuram".
+# Ver o conceito "A bancada com gabarito": quem planta o defeito e escreve a
+# lente e' a mesma pessoa, e sem taxonomia de fora a medicao vira o proprio
+# reflexo -- foi o que os 94 arbitros fizeram.
+
+versao: 1
+repo: ../bancada
+base: main
+verificado_em: 2026-08-15
+
+# O `main` foi conferido limpo com 11 assercoes de isolamento contra o app
+# rodando. Isso e' pre-requisito: se o base tivesse defeito, os plantados
+# deixariam de ser os unicos e toda medicao mediria outra coisa.
+base_limpo: true
+
+prs:
+  - ramo: pr/filtro-de-projetos
+    commit_titulo: "filtro por nome na listagem de projetos"
+    defeito: CWE-89
+    nome: injecao de SQL no filtro por nome
+    onde: app/main.py, dentro de lista_projetos
+    o_que: >-
+      o parametro `nome` e' interpolado numa string SQL com `text()`. O payload
+      `' or '1'='1` quebra a precedencia (`OR` e' mais fraco que `AND`) e a
+      condicao de visibilidade `p.id in (...)` deixa de valer.
+    regra_violada: "docs/REGRAS.md -- Persistencia: toda consulta passa pelo ORM com parametros ligados"
+    esperado: PROVADO
+    ao_alcance: true
+    como_provar: >-
+      leitura pura, sem alterar estado. clara participa de UM projeto; com o
+      payload ela ve TRES. Prova diferencial pela invariante "filtrar projetos
+      nunca devolve projeto que o usuario nao pode ver" -- passa no base (o
+      parametro nem existe) e falha no head.
+    verificado: "clara: 1 projeto legitimo -> 3 com o payload"
+    ⚠️_armadilha: >-
+      davi (controle negativo puro) NAO alcanca este defeito: `lista_projetos`
+      retorna cedo quando o usuario nao ve nenhum projeto, entao a consulta
+      injetada nem roda. Um revisor que so' testar com davi conclui REFUTADO --
+      e estaria errado. E' de proposito: o controle negativo nao serve para tudo.
+
+  - ramo: pr/tarefa-por-link
+    commit_titulo: "abrir tarefa pelo link, sem precisar ser adicionado antes"
+    defeito: CWE-639
+    nome: autorizacao removida na leitura de tarefa (IDOR)
+    onde: app/main.py, em le_tarefa
+    o_que: >-
+      a checagem `t.project_id not in _projetos_visiveis(...)` sumiu. Qualquer
+      autenticado le qualquer tarefa pelo id, que e' sequencial e adivinhavel.
+      A justificativa no commit ("ter o link ja e' o sinal") e' a
+      racionalizacao real desse defeito no mundo.
+    regra_violada: "docs/REGRAS.md -- Acesso: ler uma tarefa exige poder ver o projeto; o identificador nao e' segredo"
+    esperado: PROVADO
+    ao_alcance: true
+    como_provar: >-
+      GET puro, sem alterar estado. davi nao possui nem participa de nada e le
+      a tarefa 1 da ana, com o detalhe sensivel. Prova diferencial pela
+      invariante "davi nao alcanca o detalhe da tarefa da ana por nenhuma rota":
+      passa no base, falha no head.
+    verificado: "davi -> HTTP 200 em /tasks/1, com 'Cliente Acme paga 40k/mes'"
+    nota: >-
+      a rota /projects/{id}/tasks CONTINUA protegida neste PR. E' um defeito so',
+      de proposito: dois defeitos no mesmo PR tornariam ambiguo qual condenacao
+      corresponde a qual, e a conta de recall viraria palpite.
+
+  - ramo: pr/reconvite-de-membro
+    commit_titulo: "reconvite de quem saiu, teto de membros e origem do convite"
+    defeito: CWE-367
+    nome: check-then-act sem a restricao que o sustentava (TOCTOU)
+    onde: app/models.py (constraint removida) + app/main.py (janela alargada)
+    o_que: >-
+      a UniqueConstraint (project_id, user_id) foi removida com a justificativa
+      de permitir reconvite. O endpoint confere participacao antes de inserir,
+      mas entre a checagem e o INSERT ha duas consultas novas (teto de membros e
+      lookup do dono) -- e nada no banco impede a linha duplicada.
+    regra_violada: "docs/REGRAS.md -- Persistencia: adicionar membro que ja participa e' idempotente"
+    esperado: INCONCLUSIVO
+    ao_alcance: false
+    🚨_por_que_esperamos_inconclusivo: >-
+      as ferramentas do advogado sao SEQUENCIAIS. `http_request` dispara uma
+      chamada por vez e `prova_diferencial` roda num processo so'. Chamadas
+      sequenciais continuam idempotentes, entao nao ha artefato deterministico
+      possivel. A resposta CERTA e' INCONCLUSIVO com a causa. **REFUTADO e'
+      ERRADO** -- o defeito existe, so' nao e' alcancavel com o que ele tem.
+    verificado: >-
+      reproduzido com 24 requisicoes alinhadas por barreira: 9 linhas
+      duplicadas para o mesmo par, na 2a tentativa de 6. E' PROBABILISTICO --
+      uma tentativa nao basta, e isso e' natureza do defeito.
+    ⚠️_operacional: >-
+      `api` e `seed` sao imagens SEPARADAS construidas do mesmo ./app. Rebuildar
+      so' a api deixa o seed com o models.py do ramo anterior, e a tabela mantem
+      a restricao antiga -- o race parece nao existir. Sempre `docker compose
+      build` inteiro ao trocar de ramo.
+
+  - ramo: pr/contagem-de-tarefas
+    commit_titulo: "mostrar a contagem de tarefas na listagem de projetos"
+    defeito: null
+    nome: nenhum -- controle negativo
+    o_que: >-
+      mudanca real e correta: outer join agregado para contar tarefas, em vez de
+      uma consulta por projeto dentro do laco. Autorizacao intacta.
+    esperado: REFUTADO
+    ao_alcance: true
+    por_que_importa: >-
+      sem PR limpo mede-se so' recall, nunca precisao -- e precisao e' a metade
+      que ja provamos ser defensavel (68% em repo de terceiro, 8/8 num PR sem
+      defeito). Um revisor que condena aqui esta inventando.
+    verificado: >-
+      contagem correta (1 e 2 tarefas), e as cinco assercoes de isolamento do
+      main continuam passando: davi nao ve nada, davi e clara nao leem tarefa
+      alheia, clara nao adiciona membro no projeto do bruno.
+
+# O criterio de que o INSTRUMENTO funciona, e nao de que o produto e' bom:
+# os quatro desfechos esperados sao DIFERENTES entre si.
+#
+#   PROVADO · PROVADO · INCONCLUSIVO · REFUTADO
+#
+# Se os quatro voltarem iguais, a balanca esta quebrada -- e isso aparece por
+# ~US$2 em vez dos US$4-13 de uma bancada de dez.
+#
+# ⚠️ Com n=4 isto prova que o instrumento mede, NAO que o produto acha defeito.
+# Confundir as duas seria o erro dos 45% de arbitro outra vez.
