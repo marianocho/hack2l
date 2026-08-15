@@ -1,0 +1,53 @@
+[
+  {
+    "id": "correcao_02",
+    "veredito": "PROVADO",
+    "severidade": "MEDIA",
+    "prova_ponta_a_ponta": false,
+    "motivo": "O teste diferencial test_unicidade_membro.py passa no base (o banco recusa a segunda linha (project_id,user_id) com IntegrityError) e falha no head (duas participacoes identicas persistem), confirmando que a remocao do UniqueConstraint quebra a invariante de persistencia e deixa a contagem por len(set(...)) mascarar duplicatas; nao consegui demonstrar duplicacao via API sequencial porque o check 'ja' antecede o insert, entao o alcance externo (corrida concorrente) nao foi provado.",
+    "voltas": 3,
+    "erro": null,
+    "ferramentas_ok": 3,
+    "ferramentas_erro": 0,
+    "conserto": "Restaurar __table_args__ = (UniqueConstraint(\"project_id\", \"user_id\"),) em Member (com migracao que limpe duplicatas) e, se a reconvite era o problema, resolver com remocao explicita da linha ou coluna de estado, nao removendo a restricao.",
+    "tokens_entrada": 7344,
+    "tokens_saida": 1635,
+    "cache_read": 20861,
+    "cache_write": 3994,
+    "segundos": 41.5
+  },
+  {
+    "id": "correcao_03",
+    "veredito": "REFUTADO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": false,
+    "motivo": "O cenario do provado_se e' impossivel: a FK projects.dono_id -> users.id rejeita tanto inserir projeto com dono inexistente quanto apagar o dono de um projeto (IntegrityError comprovado), e o endpoint so' chega na linha `dono = ...` depois de exigir p.dono_id == user.id, ou seja, o dono e' o proprio autenticado que acabou de ser carregado do banco; o teste test_dono_ausente_refuta.py passa identico no base e no head, e a primeira tentativa de reproduzir o AttributeError nem conseguiu criar o projeto orfao.",
+    "voltas": 5,
+    "erro": null,
+    "ferramentas_ok": 5,
+    "ferramentas_erro": 0,
+    "conserto": "",
+    "tokens_entrada": 19592,
+    "tokens_saida": 3650,
+    "cache_read": 41425,
+    "cache_write": 0,
+    "segundos": 72.4
+  },
+  {
+    "id": "padroes_01",
+    "veredito": "PROVADO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": false,
+    "motivo": "Teste diferencial (test_contrato_resposta_membros.py) passa no base 93f69d1 e falha no head 2a44231: a resposta 201 de POST /projects/{id}/members passou a conter o campo extra 'convidado_por': 'advdono@bancada.dev', fora do contrato de saida exigido por docs/REGRAS.md (secao Respostas); o impacto e' baixo porque o email exposto e' o do proprio dono chamador, sem vazamento a terceiros.",
+    "voltas": 6,
+    "erro": null,
+    "ferramentas_ok": 6,
+    "ferramentas_erro": 0,
+    "conserto": "Declarar um response_model (ex. MembroOut com project_id, user_id, novo) na rota e nao devolver o email do dono, ou incluir 'convidado_por' explicitamente no modelo se ele fizer parte do contrato acordado.",
+    "tokens_entrada": 15901,
+    "tokens_saida": 3215,
+    "cache_read": 49710,
+    "cache_write": 0,
+    "segundos": 64.6
+  }
+]

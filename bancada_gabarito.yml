@@ -75,10 +75,29 @@ prs:
       de proposito: dois defeitos no mesmo PR tornariam ambiguo qual condenacao
       corresponde a qual, e a conta de recall viraria palpite.
 
+  # 🚨 ESTE PR TEM DOIS DEFEITOS, e o segundo foi PLANTADO SEM QUERER.
+  #
+  # A regra "um defeito por PR" existe porque com dois fica ambiguo qual
+  # condenacao corresponde a qual, e a conta de recall vira palpite. Eu mesmo
+  # quebrei a regra ao alargar a janela do race: acrescentei
+  # `convidado_por: dono.email` na resposta, e isso viola o contrato de saida
+  # que docs/REGRAS.md promete.
+  #
+  # Descoberto em 15/08 pelo proprio Veredito, que provou o segundo com teste
+  # diferencial e arbitro citando as REGRAS. Ele estava certo; o gabarito e' que
+  # estava errado.
   - ramo: pr/reconvite-de-membro
     commit_titulo: "reconvite de quem saiu, teto de membros e origem do convite"
     defeito: CWE-367
     nome: check-then-act sem a restricao que o sustentava (TOCTOU)
+    ⚠️_defeito_acidental:
+      nome: campo fora do contrato de resposta
+      onde: "app/main.py, o `convidado_por` na resposta de adiciona_membro"
+      regra_violada: "docs/REGRAS.md -- todo endpoint devolve apenas os campos do modelo declarado"
+      esperado: PROVADO
+      verificado_em_15_08: >-
+        provado com teste diferencial (passa no base, falha no head) e arbitro
+        com procedencia. O Veredito achou sem ninguem apontar.
     onde: app/models.py (constraint removida) + app/main.py (janela alargada)
     o_que: >-
       a UniqueConstraint (project_id, user_id) foi removida com a justificativa
@@ -88,6 +107,10 @@ prs:
     regra_violada: "docs/REGRAS.md -- Persistencia: adicionar membro que ja participa e' idempotente"
     esperado: INCONCLUSIVO
     ao_alcance: false
+    # Como o runner reconhece que ESTE defeito foi acusado, para distinguir
+    # "nao entrou no TOP_N" de "o veredito divergiu".
+    pistas: ["concorr", "simultan", "race", "toctou", "duplicat", "unicidade",
+             "unique", "constraint", "paralel"]
     🚨_por_que_esperamos_inconclusivo: >-
       as ferramentas do advogado sao SEQUENCIAIS. `http_request` dispara uma
       chamada por vez e `prova_diferencial` roda num processo so'. Chamadas
@@ -103,6 +126,16 @@ prs:
       so' a api deixa o seed com o models.py do ramo anterior, e a tabela mantem
       a restricao antiga -- o race parece nao existir. Sempre `docker compose
       build` inteiro ao trocar de ramo.
+    🚨_top_n_minimo: 8
+    por_que: >-
+      medido em 15/08 com --top-n 3: OITO das 24 acusacoes brutas nomearam o
+      race, uma delas com precisao ("entre a checagem de limite e o INSERT nao
+      ha lock; dois requests simultaneos podem ambos passar"), e NENHUMA entrou
+      no TOP_N. A cobertura funcionou; o ranking nao alcancou.
+
+      Pela escada do CLAUDE.md isso e' falha de RANKING, nao de cobertura, e o
+      conserto e' outro. Rodar este PR com teto baixo NAO mede o que ele existe
+      para medir -- mede a selecao.
 
   - ramo: pr/contagem-de-tarefas
     commit_titulo: "mostrar a contagem de tarefas na listagem de projetos"

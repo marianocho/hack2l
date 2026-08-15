@@ -1,0 +1,47 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:103",
+    "hipotese": "Remoção da verificação de projeto visível permite qualquer usuário autenticado ler qualquer tarefa apenas conhecendo o ID, violando isolamento de projeto",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "Usuário A autenticado mas não membro do Projeto 1 faz GET /tasks/{id_tarefa_projeto1}; endpoint retorna 200 com dados da tarefa em vez de 404",
+    "confianca": "alta",
+    "_duplicatas": [
+      {
+        "id": "performance_01",
+        "categoria": "performance",
+        "confianca": "alta",
+        "hipotese": "removeu verificacao de visibilidade de projeto antes de retornar tarefa — qualquer usuario autenticado acessa qualquer tarefa se souber o id, sem custo de controle de acesso"
+      }
+    ],
+    "_corroborado": true
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:103",
+    "hipotese": "Condição `t is None` deixa passar quando tarefa existe mas projeto foi deletado ou user foi removido do projeto após ter link aberto, criando estado inconsistente",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Quem não é dono nem participante não vê o projeto, nem as tarefas dele.",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "User A membro de Projeto 1 obtém link de /tasks/{id}; admin remove User A de Projeto 1; User A recarrega a mesma URL; endpoint retorna 200 em vez de 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/main.py:104",
+    "hipotese": "remoção da verificação de visibilidade de projeto permite que usuário autenticado acesse tarefa de projeto ao qual não pertence, se adivinhar ou receber o task_id; conteúdo da tarefa (titulo, detalhe) vaza para quem não deveria ver",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "usuário autenticado em projeto A solicita GET /tasks/{task_id} onde task_id pertence a projeto B do qual não participa; resposta contém titulo e detalhe da tarefa em vez de 404",
+    "confianca": "alta"
+  }
+]

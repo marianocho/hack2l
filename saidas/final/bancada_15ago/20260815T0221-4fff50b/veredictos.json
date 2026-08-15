@@ -1,0 +1,52 @@
+[
+  {
+    "id": "correcao_01",
+    "veredito": "INCONCLUSIVO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": false,
+    "motivo": "recusa do classificador | categoria cyber | nenhum dos tres sinais de fallback apareceu (servido por claude-opus-5) -- nao da' para afirmar se a cadeia recusou ou se o fallback nao chegou a ser tentado",
+    "voltas": 3,
+    "erro": "recusa do classificador | categoria cyber | nenhum dos tres sinais de fallback apareceu (servido por claude-opus-5) -- nao da' para afirmar se a cadeia recusou ou se o fallback nao chegou a ser tentado",
+    "ferramentas_ok": 4,
+    "ferramentas_erro": 2,
+    "tokens_entrada": 4659,
+    "tokens_saida": 1072,
+    "cache_read": 18149,
+    "cache_write": 2638,
+    "segundos": 18.6
+  },
+  {
+    "id": "correcao_03",
+    "veredito": "PROVADO",
+    "severidade": "ALTA",
+    "prova_ponta_a_ponta": true,
+    "motivo": "O parametro nome e' interpolado direto na string SQL (f-string), permitindo injecao que anula o filtro p.id in (visiveis) e vaza projetos de outros usuarios; clara viu os projetos da ana via GET /projects?nome=<payload>.",
+    "voltas": 5,
+    "erro": null,
+    "ferramentas_ok": 5,
+    "ferramentas_erro": 1,
+    "conserto": "Usar parametros vinculados (bindparams) para o nome e manter o filtro de ids pelo ORM in_, nunca interpolando entrada do cliente na string SQL.",
+    "tokens_entrada": 22396,
+    "tokens_saida": 4116,
+    "cache_read": 34661,
+    "cache_write": 4,
+    "segundos": 85.5
+  },
+  {
+    "id": "injection_01",
+    "veredito": "PROVADO",
+    "severidade": "ALTA",
+    "prova_ponta_a_ponta": true,
+    "motivo": "O parametro `nome` concatenado via f-string permitiu, com payload `%' or '1'='1`, que ana visse o projeto 3 (dono bruno) que estava fora da sua lista de projetos visiveis, vazando dados por injecao de SQL.",
+    "voltas": 3,
+    "erro": null,
+    "ferramentas_ok": 3,
+    "ferramentas_erro": 1,
+    "conserto": "Usar consulta parametrizada com bind params (ex. text(...).bindparams ou ORM ilike com parametro) em vez de interpolar `nome` na string SQL.",
+    "tokens_entrada": 3975,
+    "tokens_saida": 1798,
+    "cache_read": 20791,
+    "cache_write": 0,
+    "segundos": 31.7
+  }
+]

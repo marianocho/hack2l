@@ -1,0 +1,32 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:73",
+    "hipotese": "group_by omite colunas da projeção que não estão em uma função de agregação; se Project tiver múltiplos campos retornados pela query, banco pode devolver resultado não-determinístico ou erro em modo STRICT",
+    "arbitro": null,
+    "provado_se": "executar a query com PostgreSQL em sql_mode ONLY_FULL_GROUP_BY; Project tem campos além de id (nome, dono_id, etc) que não aparecem no group_by",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:81",
+    "hipotese": "desempacotamento de tupla assume que linhas terão sempre 3 elementos (p, email, n), mas se a query falhar ou retornar estrutura diferente por mudança em banco/ORM, lança ValueError; não há tratamento de exceção",
+    "arbitro": null,
+    "provado_se": "simular schema change que retire Task ou altere tipo de func.count(); ou forçar exception no db.execute e capturar erro de unpacking",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:81",
+    "hipotese": "desempacotamento de tupla na compreensão de lista assume ordem e quantidade de colunas, sem correspondência explícita a atributos de ProjetoOut",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "linha 81: `for p, email, n in linhas` desempacota três valores em ordem, mas nenhuma validação garante que func.count(Task.id) será sempre o terceiro na tupla retornada por db.execute()",
+    "confianca": "media"
+  }
+]

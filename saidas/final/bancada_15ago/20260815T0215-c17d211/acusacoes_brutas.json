@@ -1,0 +1,152 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:103",
+    "hipotese": "Remoção da verificação de projeto visível permite qualquer usuário autenticado ler qualquer tarefa apenas conhecendo o ID, violando isolamento de projeto",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "Usuário A autenticado mas não membro do Projeto 1 faz GET /tasks/{id_tarefa_projeto1}; endpoint retorna 200 com dados da tarefa em vez de 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:89-104",
+    "hipotese": "Docstring assume que task_id nunca aparece em lugar público, mas não há mecanismo no código que garanta isso — IDs sequenciais podem ser adivinháveis e a função não valida se o ID foi legitimamente compartilhado",
+    "arbitro": null,
+    "provado_se": "Verificar se existe na codebase um mecanismo de tokens/shares/links privados que autoriza o acesso; se não existir, o pressuposto da docstring não é garantido no tempo de execução",
+    "confianca": "media"
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:103",
+    "hipotese": "Condição `t is None` deixa passar quando tarefa existe mas projeto foi deletado ou user foi removido do projeto após ter link aberto, criando estado inconsistente",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Quem não é dono nem participante não vê o projeto, nem as tarefas dele.",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "User A membro de Projeto 1 obtém link de /tasks/{id}; admin remove User A de Projeto 1; User A recarrega a mesma URL; endpoint retorna 200 em vez de 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/main.py:104",
+    "hipotese": "remoção da verificação de visibilidade de projeto permite que usuário autenticado acesse tarefa de projeto ao qual não pertence, se adivinhar ou receber o task_id; conteúdo da tarefa (titulo, detalhe) vaza para quem não deveria ver",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "usuário autenticado em projeto A solicita GET /tasks/{task_id} onde task_id pertence a projeto B do qual não participa; resposta contém titulo e detalhe da tarefa em vez de 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:104",
+    "hipotese": "autorização removida do endpoint antes da resposta ser montada, violando padrão de checagem prévia",
+    "arbitro": {
+      "regra": "ler uma tarefa exige poder ver o projeto a que ela pertence",
+      "onde": "docs/REGRAS.md:14"
+    },
+    "provado_se": "grep em app/main.py: linha 104 remove condição `t.project_id not in _projetos_visiveis(db, user)` do teste antes do retorno TarefaOut",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/main.py:104",
+    "hipotese": "resposta 404 devolvida sem validar acesso, enquanto documentação exige que o recurso não possa ser visto para usar 404",
+    "arbitro": {
+      "regra": "recurso que o usuário não pode ver responde 404, e não 403 — a existência do recurso não é revelada a quem não tem acesso",
+      "onde": "docs/REGRAS.md:25"
+    },
+    "provado_se": "read_file em app/main.py:101-105: condição reverte de 'nao existe OU nao pode ver' para apenas 'nao existe', criando caminho onde usuario autenticado ve existencia mesmo sem acesso ao projeto",
+    "confianca": "alta"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/main.py:103",
+    "hipotese": "removeu verificacao de visibilidade de projeto antes de retornar tarefa — qualquer usuario autenticado acessa qualquer tarefa se souber o id, sem custo de controle de acesso",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "usuario autenticado em projeto A pode GET /tasks/{id_de_tarefa_de_projeto_B} e recebe 200 em vez de 404, sem validar project_id",
+    "confianca": "alta"
+  },
+  {
+    "id": "performance_02",
+    "categoria": "performance",
+    "local": "app/main.py:89-103",
+    "hipotese": "carga de uma tarefa nao precarrega ou cacheia projeto para checar visibilidade — cada acesso pode disparar queries extras ou validacoes redundantes se implementadas depois em camada de autorizacao",
+    "arbitro": null,
+    "provado_se": "sem visibilidade do dao completo, nao se pode descartar custo de N queries se a autorizacao for reinserida em funcoes chamadoras",
+    "confianca": "baixa"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/main.py:104",
+    "hipotese": "a verificacao de visibilidade de projeto foi removida, violando a regra de que ler uma tarefa exige poder ver o projeto a que ela pertence",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md (seção Acesso e isolamento)"
+    },
+    "provado_se": "GET /tasks/{task_id} com task_id de um projeto a que o usuario nao pertence retorna 200 com o conteudo da tarefa; deve retornar 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/main.py:90-101",
+    "hipotese": "a docstring afirma que ninguem fora do projeto deveria ter o link, mas a implementacao concede acesso a qualquer usuario autenticado que souber o task_id, divergindo do modelo de isolamento por projeto",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Quem não é dono nem participante não vê o projeto, nem as tarefas dele, nem o conteúdo das tarefas.",
+      "onde": "docs/REGRAS.md (seção Acesso e isolamento)"
+    },
+    "provado_se": "criar dois projetos isolados, cada um com uma tarefa; como usuario A logado, acessar task_id do projeto B via GET /tasks/{task_id} retorna 200; deve retornar 404",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_03",
+    "categoria": "prd",
+    "local": "app/main.py:104",
+    "hipotese": "a mudanca permite revelacao indireta de existencia de tarefa: 404 agora significa 'tarefa nao existe em nenhum projeto' em vez de 'voce nao ve este projeto', quebrando a regra de nao revelar existencia a quem nao tem acesso",
+    "arbitro": {
+      "regra": "Recurso que o usuário não pode ver responde 404, e não 403 — a existência do recurso não é revelada a quem não tem acesso.",
+      "onde": "docs/REGRAS.md (seção Respostas)"
+    },
+    "provado_se": "comparar comportamento: antes, GET /tasks/{task_id} de projeto inacessivel retornava 404 porque projeto era invisivel; apos, retorna 404 porque tarefa nao existe, mas um atacante pode diferenciar tentando task_id inexistente em projeto inacessivel vs existente em projeto inacessivel e obtendo mesmo 404",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_01",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:103",
+    "hipotese": "Remoção da checagem de visibilidade do projeto permite que qualquer usuário autenticado acesse a tarefa pelo ID, mesmo sem participar do projeto que a contém",
+    "arbitro": {
+      "regra": "Ler uma tarefa exige poder ver o projeto a que ela pertence. O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md:14-15"
+    },
+    "provado_se": "GET /tasks/{task_id} onde task_id pertence a um projeto em que o usuário autenticado não é dono nem participante retorna 200 com o corpo da tarefa (deveria retornar 404)",
+    "confianca": "alta"
+  },
+  {
+    "id": "vazamento_02",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:98-111",
+    "hipotese": "A justificativa no docstring ('o id nao aparece em lugar nenhum publico') assume que o ID da tarefa é privado, mas nao há evidência de que task_id nao seja enumeravel ou descobrivel por terceiros",
+    "arbitro": {
+      "regra": "O identificador da tarefa não é segredo: adivinhar o número não pode dar acesso.",
+      "onde": "docs/REGRAS.md:14"
+    },
+    "provado_se": "Enumerar task_id sequencialmente (1, 2, 3...) com usuário autenticado em projeto diferente e confirmar se todos retornam 200 em vez de 404",
+    "confianca": "media"
+  }
+]

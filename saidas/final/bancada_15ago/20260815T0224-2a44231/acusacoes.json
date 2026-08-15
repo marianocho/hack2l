@@ -1,0 +1,35 @@
+[
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:119",
+    "hipotese": "A query usa select(Member.user_id) mas depois faz len(set(atuais)) para contar únicos; se houver duplicatas na tabela (agora permitidas após remover UniqueConstraint), o set mascarará a inconsistência e a contagem será incorreta",
+    "arbitro": {
+      "regra": "Adicionar um membro que já participa é idempotente: repetir a chamada não cria linha duplicada",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "Inserir manualmente duas linhas Member para o mesmo (project_id, user_id); chamar adiciona_membro com esse projeto em capacidade 49/50; set() deduplica e permite inserção, banco fica com 3 linhas para 1 usuário",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:125-127",
+    "hipotese": "Variável dono é consultada mas nunca usada antes de ser inserida na resposta; se a query de User devolver None (dono_id apontando para usuário apagado), AttributeError estoura em dono.email sem tratamento",
+    "arbitro": null,
+    "provado_se": "Definir um project.dono_id para um user_id que não existe; chamar adiciona_membro; db.scalar retorna None, .email() falha com AttributeError antes do commit",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:126",
+    "hipotese": "resposta do endpoint adiciona campo novo 'convidado_por' ao contrato declarado, violando o contrato de saída",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "read_file em app/main.py: return statement adiciona 'convidado_por': dono.email ao dict, campo não declarado em LoginIn ou outro BaseModel da rota",
+    "confianca": "alta"
+  }
+]

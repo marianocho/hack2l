@@ -1,0 +1,140 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:73",
+    "hipotese": "group_by omite colunas da projeção que não estão em uma função de agregação; se Project tiver múltiplos campos retornados pela query, banco pode devolver resultado não-determinístico ou erro em modo STRICT",
+    "arbitro": null,
+    "provado_se": "executar a query com PostgreSQL em sql_mode ONLY_FULL_GROUP_BY; Project tem campos além de id (nome, dono_id, etc) que não aparecem no group_by",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:81",
+    "hipotese": "desempacotamento de tupla assume que linhas terão sempre 3 elementos (p, email, n), mas se a query falhar ou retornar estrutura diferente por mudança em banco/ORM, lança ValueError; não há tratamento de exceção",
+    "arbitro": null,
+    "provado_se": "simular schema change que retire Task ou altere tipo de func.count(); ou forçar exception no db.execute e capturar erro de unpacking",
+    "confianca": "media"
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:29-31",
+    "hipotese": "novo campo tarefas foi adicionado a ProjetoOut com default=0, mas o endpoint agora sempre o popula; se lista_projetos for chamado com user=None ou ids vazio, retorna lista vazia sem nunca executar a query — ProjetoOut nunca é instanciado e default nunca é testado",
+    "arbitro": null,
+    "provado_se": "chamar lista_projetos para usuário que não vê nenhum projeto; verificar que o campo tarefas não aparece na resposta (ou aparece com o default se a serialização mudou)",
+    "confianca": "baixa"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:81",
+    "hipotese": "desempacotamento de tupla na compreensão de lista assume ordem e quantidade de colunas, sem correspondência explícita a atributos de ProjetoOut",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "linha 81: `for p, email, n in linhas` desempacota três valores em ordem, mas nenhuma validação garante que func.count(Task.id) será sempre o terceiro na tupla retornada por db.execute()",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/main.py:72-79",
+    "hipotese": "adição de group_by sem documentação explícita de qual agregação está sendo feita, violando o padrão observado de consultas simples sem junção múltipla em lista_projetos",
+    "arbitro": null,
+    "provado_se": "leitura de lista_projetos original versus alterado: antes usava .join(User) e retornava duas colunas; agora usa .outerjoin(Task) e .group_by(), mudança de padrão agregador não visto em outros endpoints do arquivo",
+    "confianca": "baixa"
+  },
+  {
+    "id": "padroes_03",
+    "categoria": "padroes",
+    "local": "app/main.py:31",
+    "hipotese": "novo campo tarefas adicionado a ProjetoOut com valor padrão 0, mas nenhuma validação garante que o campo sempre receberá valor da query; se desempacotamento falhar, default será usado silenciosamente",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "grep em ProjetoOut: campo tarefas tem default value 0; se query retornar menos de 3 colunas, Pydantic preencherá com default sem erro explícito",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/main.py:75",
+    "hipotese": "group_by sem ordenação explícita pode forçar sort adicional no banco antes da agregação, aumentando custo de I/O",
+    "arbitro": null,
+    "provado_se": "query com group_by(Project.id, User.email) sem índice composto nesses campos força full table scan + sort; observável em EXPLAIN PLAN do banco",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_02",
+    "categoria": "performance",
+    "local": "app/main.py:76",
+    "hipotese": "order_by(Project.id) após group_by de múltiplos campos pode exigir sort redundante em memória se índice não cobrir a ordenação final",
+    "arbitro": null,
+    "provado_se": "listagem de M projetos dispara sort adicional se não há índice em (Project.id, User.email) ou equivalente; visível em tempo de query e trace de I/O",
+    "confianca": "baixa"
+  },
+  {
+    "id": "performance_03",
+    "categoria": "performance",
+    "local": "app/main.py:69-77",
+    "hipotese": "outer join sem restrição de status ou data em Task carrega contagem de todas as tarefas (ativas, deletadas, históricas) se a tabela não filtra por padrão",
+    "arbitro": null,
+    "provado_se": "com 1000 tarefas por projeto, count(Task.id) via outer join traz todas; payload de agregação cresce linear com histórico de tarefas mesmo que muitas estejam inativas",
+    "confianca": "media"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/main.py:68-81",
+    "hipotese": "O campo `tarefas` adicionado a `ProjetoOut` pode vazar informação de tarefas que o usuário não tem permissão para ver, violando o isolamento de acesso.",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Quem não é dono nem participante não vê o projeto, nem as tarefas dele.",
+      "onde": "REGRAS.md:8-9"
+    },
+    "provado_se": "Listar projetos como usuário participante; verificar se o campo `tarefas` conta tarefas criadas por outros participantes ou pelo dono que o usuário listador não tem acesso direto para ler.",
+    "confianca": "media"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/main.py:75-76",
+    "hipotese": "A agregação com `group_by(Project.id, User.email)` pode retornar múltiplas linhas para o mesmo projeto se existirem múltiplos usuários associados, causando duplicação ou comportamento inesperado na serialização.",
+    "arbitro": null,
+    "provado_se": "Verificar estrutura de dados: um projeto com múltiplas relações via `User` pode gerar múltiplas tuplas na query; testar se a list comprehension final produz entradas duplicadas ou se `Project` tem relacionamentos adicionais não evidentes no diff.",
+    "confianca": "baixa"
+  },
+  {
+    "id": "prd_03",
+    "categoria": "prd",
+    "local": "app/main.py:73",
+    "hipotese": "O `group_by` omite possível coluna de agregação necessária; se `Project` tem outras colunas além de `id`, ou se o banco de dados é PostgreSQL com modo `ONLY_FULL_GROUP_BY` ativo, a query falha.",
+    "arbitro": null,
+    "provado_se": "Executar `lista_projetos` em diferentes bancos de dados (PostgreSQL, MySQL com `ONLY_FULL_GROUP_BY`); se falhar com erro de agregação, o `group_by` está incompleto.",
+    "confianca": "baixa"
+  },
+  {
+    "id": "vazamento_01",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:75-82",
+    "hipotese": "A consulta agregada com group_by(Project.id, User.email) pode devolver contagem de tarefas sem verificar se o usuário autenticado tem permissão de visualizar cada tarefa individual",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Ler uma tarefa exige poder ver o projeto a que ela pertence.",
+      "onde": "docs/REGRAS.md:linhas 5-6 e 13-14"
+    },
+    "provado_se": "GET /projects como usuário C que não é dono nem participa de projeto P, observar se o campo 'tarefas' retorna contagem > 0 das tarefas de P (revelando existência de tarefas sem checagem de acesso per-tarefa)",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_02",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:75-82",
+    "hipotese": "O outer join com Task não filtra tarefas por qualquer critério de acesso; se Task tem soft-delete ou campo de visibilidade, tarefas marcadas como deletadas ou privadas podem ser contadas e incluídas no campo 'tarefas' retornado",
+    "arbitro": null,
+    "provado_se": "Criar tarefa em projeto P visível ao usuário, marcar como deletada (ou privada), chamar GET /projects como aquele usuário, verificar se 'tarefas' ainda inclui a contagem da tarefa deletada",
+    "confianca": "baixa"
+  }
+]

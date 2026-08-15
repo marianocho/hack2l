@@ -1,0 +1,53 @@
+[
+  {
+    "id": "correcao_01",
+    "veredito": "REFUTADO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": true,
+    "motivo": "O banco e' PostgreSQL 16 (docker-compose.yml / app/db.py), onde agrupar pela chave primaria (Project.id) satisfaz a dependencia funcional do SQL:1999 e permite projetar todas as colunas de Project sem erro nem indeterminismo; GET /projects como ana devolveu HTTP 200 com dados corretos ([{id:1,...,tarefas:2},{id:2,...,tarefas:1}]) e a suite existente passou (8 passed) contra o head; a premissa de 'sql_mode ONLY_FULL_GROUP_BY' e' do MySQL e nao se aplica.",
+    "voltas": 3,
+    "erro": null,
+    "ferramentas_ok": 3,
+    "ferramentas_erro": 1,
+    "conserto": "",
+    "tokens_entrada": 3090,
+    "tokens_saida": 1078,
+    "cache_read": 18047,
+    "cache_write": 2587,
+    "segundos": 23.0
+  },
+  {
+    "id": "correcao_02",
+    "veredito": "REFUTADO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": true,
+    "motivo": "O `select()` em app/main.py:74 declara exatamente tres colunas (Project, User.email, func.count(Task.id)), entao cada linha tem sempre 3 elementos; na API rodando, GET /projects devolveu HTTP 200 com o campo `tarefas` correto para ana (2 e 1) e para clara (1), e a suite existente passou inteira (8 passed) no head — o ValueError descrito so ocorreria sob uma mudanca hipotetica de schema/ORM que nao existe neste PR e que quebraria a query antes do desempacotamento.",
+    "voltas": 4,
+    "erro": null,
+    "ferramentas_ok": 3,
+    "ferramentas_erro": 2,
+    "conserto": "",
+    "tokens_entrada": 3864,
+    "tokens_saida": 1475,
+    "cache_read": 27512,
+    "cache_write": 0,
+    "segundos": 30.5
+  },
+  {
+    "id": "padroes_01",
+    "veredito": "REFUTADO",
+    "severidade": "BAIXA",
+    "prova_ponta_a_ponta": true,
+    "motivo": "O teste diferencial (projetos com 0, 3 tarefas e projeto de terceiro) passa igual no base e no head: a ordem das colunas em db.execute() segue deterministicamente a ordem declarada em select(Project, User.email, func.count(Task.id)), os valores caem nos campos certos de ProjetoOut (construido com argumentos nomeados e validado pelo response_model), sem duplicacao de linhas pelo outer join; a chamada real GET /projects como ana confirmou {id, nome, dono_email, tarefas} corretos (2 e 1 tarefas) e davi, sem projetos, recebeu [].",
+    "voltas": 7,
+    "erro": null,
+    "ferramentas_ok": 6,
+    "ferramentas_erro": 3,
+    "conserto": "",
+    "tokens_entrada": 20936,
+    "tokens_saida": 3211,
+    "cache_read": 48146,
+    "cache_write": 0,
+    "segundos": 58.1
+  }
+]

@@ -1,0 +1,71 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:79-85",
+    "hipotese": "Concatenação direta de `nome` do cliente na string SQL sem escape ou parametrização, criando SQL injection via LIKE",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "POST /projects?nome=' OR 'a'='a retorna projetos que não deveria; POST /projects?nome=%';DROP TABLE projects;-- testa destructive vector",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true,
+    "_duplicatas": [
+      {
+        "id": "correcao_02",
+        "categoria": "correcao",
+        "confianca": "media",
+        "hipotese": "Construção manual da lista `visiveis` via string join sem quote de SQL, permitindo injeção via id_projeto se ids forem manipuláveis"
+      }
+    ],
+    "_corroborado": false
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:79-88",
+    "hipotese": "Quando `nome` é filtrado, retorna apenas linhas da query raw sem validar se o usuário tem realmente acesso aos projetos encontrados, bypass de _projetos_visiveis",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Listar projetos devolve os projetos que o usuário pode ver.",
+      "onde": "docs/REGRAS.md (Acesso e isolamento)"
+    },
+    "provado_se": "Criar projeto privado (usuário A é dono), logar como usuário B; GET /projects?nome=<nome_do_projeto_A> devolve o projeto quando não deveria",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/main.py:80-86",
+    "hipotese": "parâmetro `nome` controlado pelo cliente é concatenado diretamente em SQL via f-string, violando isolamento de dados",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md:Persistência"
+    },
+    "provado_se": "nome com caractere de SQL (aspas, comentário, OR 1=1) altera a query executada ou a quantidade de resultados retornados, independente do filtro de ACL",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  }
+]

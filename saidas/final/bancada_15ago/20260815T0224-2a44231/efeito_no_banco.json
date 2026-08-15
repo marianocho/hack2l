@@ -1,0 +1,18 @@
+{
+  "antes": {
+    "erro": "psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"kb\" does not exist",
+    "tabelas": {}
+  },
+  "depois": {
+    "erro": "psql: error: connection to server on socket \"/var/run/postgresql/.s.PGSQL.5432\" failed: FATAL:  role \"kb\" does not exist",
+    "tabelas": {}
+  },
+  "delta": {
+    "banco": null,
+    "criadas": {},
+    "removidas": {},
+    "limpo": true,
+    "houve_remocao": false,
+    "nao_detecta": "linha modificada no lugar (UPDATE sem mudar contagem)"
+  }
+}

@@ -1,0 +1,362 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:79-85",
+    "hipotese": "Concatenação direta de `nome` do cliente na string SQL sem escape ou parametrização, criando SQL injection via LIKE",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "POST /projects?nome=' OR 'a'='a retorna projetos que não deveria; POST /projects?nome=%';DROP TABLE projects;-- testa destructive vector",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:79-85",
+    "hipotese": "Construção manual da lista `visiveis` via string join sem quote de SQL, permitindo injeção via id_projeto se ids forem manipuláveis",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "Se ids puderem vir de entrada do usuário, testar lista de ids contendo ' OR '1'='1 na construção do IN clause",
+    "confianca": "media",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:79-88",
+    "hipotese": "Quando `nome` é filtrado, retorna apenas linhas da query raw sem validar se o usuário tem realmente acesso aos projetos encontrados, bypass de _projetos_visiveis",
+    "arbitro": {
+      "regra": "Um usuário vê um projeto se for o dono dele ou se participar dele. Listar projetos devolve os projetos que o usuário pode ver.",
+      "onde": "docs/REGRAS.md (Acesso e isolamento)"
+    },
+    "provado_se": "Criar projeto privado (usuário A é dono), logar como usuário B; GET /projects?nome=<nome_do_projeto_A> devolve o projeto quando não deveria",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "correcao_04",
+    "categoria": "correcao",
+    "local": "app/main.py:77-88",
+    "hipotese": "Campo `ProjetoOut` esperado no retorno pode não corresponder aos campos da query raw (p.id, p.nome, u.email); mismatch de contrato",
+    "arbitro": {
+      "regra": "Todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo.",
+      "onde": "docs/REGRAS.md (Respostas)"
+    },
+    "provado_se": "Inspecionar definição de ProjetoOut; chamar GET /projects?nome=test e validar se resposta combina com modelo declarado no response_model",
+    "confianca": "media"
+  },
+  {
+    "id": "correcao_05",
+    "categoria": "correcao",
+    "local": "app/main.py:75-76",
+    "hipotese": "Parâmetro `nome` vazio ou com espaço em branco entra na branch `if nome:` e executa query raw desnecessariamente quando deveria usar fallback de ORM",
+    "arbitro": null,
+    "provado_se": "GET /projects?nome='' vs GET /projects?nome=' ' vs GET /projects?nome=<nenhum>; verificar se comportamento e performance diferem",
+    "confianca": "baixa"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/main.py:80-86",
+    "hipotese": "parâmetro `nome` controlado pelo cliente é concatenado diretamente em SQL via f-string, violando isolamento de dados",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md:Persistência"
+    },
+    "provado_se": "nome com caractere de SQL (aspas, comentário, OR 1=1) altera a query executada ou a quantidade de resultados retornados, independente do filtro de ACL",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "injection_02",
+    "categoria": "injection",
+    "local": "app/main.py:77",
+    "hipotese": "lista de IDs visíveis é concatenada em SQL sem validação, permitindo injection se a origem de `ids` for comprometida a montante",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md:Persistência"
+    },
+    "provado_se": "mesmo que `ids` venha de `_projetos_visiveis`, sua conversão a string e inserção em SQL sem parametrização cria superfície; se `ids` vier contaminado, a query malformará",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:75",
+    "hipotese": "SQL cru concatenado com valor do cliente em vez de parâmetro ligado",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "read_file em app/main.py:75-78 mostra f-string interpolando `nome` direto na cláusula where: f\"where p.nome ilike '%{nome}%'...\"",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/main.py:73",
+    "hipotese": "Usa db.execute(text()) para consulta de lista enquanto o resto do código usa select() do ORM",
+    "arbitro": {
+      "regra": "padrão observado: linhas 31-34 e 89-93 usam select() e .join() do ORM para operações equivalentes",
+      "onde": "app/main.py:31"
+    },
+    "provado_se": "grep por 'db.execute(select' em app/main.py retorna múltiplas ocorrências; grep por 'db.execute(text' retorna apenas esta linha nova",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_03",
+    "categoria": "padroes",
+    "local": "app/main.py:78",
+    "hipotese": "Devolve resultado de db.execute().all() mapeado manualmente para ProjetoOut, divergindo do padrão de desempacotamento usado no restante da função",
+    "arbitro": null,
+    "provado_se": "read_file em app/main.py:89-93 mostra que a query sem filtro chama ProjetoOut sobre o resultado, mas linhas 78-79 faz o mapeamento inline dentro do list comprehension",
+    "confianca": "baixa"
+  },
+  {
+    "id": "padroes_04",
+    "categoria": "padroes",
+    "local": "app/main.py:66",
+    "hipotese": "Autorização via _projetos_visiveis() é aplicada, mas filtragem por nome ocorre antes de retornar, criando ramo de código que não passa pelo restante da lógica de serialização",
+    "arbitro": {
+      "regra": "padrão observado: as duas linhas finais (linhas 89-93) aplicam a mesma lógica de join e serialização para todos os casos",
+      "onde": "app/main.py:89"
+    },
+    "provado_se": "grep por 'ProjetoOut(' em lista_projetos retorna dois locais distintos (linha 79 e linha 93) com construção diferente",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/main.py:80-82",
+    "hipotese": "SQL injection risk via string concatenation: f-string monta diretamente o valor `nome` na cláusula WHERE, contornando parametrização do ORM",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "Cliente envia nome='%' OR 1=1--%' e a query executa sem escape",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "performance_02",
+    "categoria": "performance",
+    "local": "app/main.py:76-78",
+    "hipotese": "Filtro em memória: lista de IDs é montada em Python e injetada como string na query, ao invés de passar como parâmetro ligado; se IDs tem N elementos, a query concatenada cresce linearmente",
+    "arbitro": null,
+    "provado_se": "Usuário com 10.000 projetos visíveis gera string de 50+ KB inserida na SQL; evolui linear com N projetos",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_03",
+    "categoria": "performance",
+    "local": "app/main.py:66-89",
+    "hipotese": "Ausência de índice em projects(nome) para ILIKE: cláusula WHERE filtra por busca parcial sem índice B-tree ou GIST que a suporte, forçando table scan mesmo após IN(ids)",
+    "arbitro": null,
+    "provado_se": "Query com ILIKE '%{nome}%' em tabela projects com milhares de linhas faz full table scan; latência cresce com tamanho da tabela",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_04",
+    "categoria": "performance",
+    "local": "app/main.py:75-83",
+    "hipotese": "Trabalho redundante: cada chamada com nome recalcula _projetos_visiveis(), mesmo que resultado seja idêntico, antes de filtrar por nome",
+    "arbitro": null,
+    "provado_se": "Usuário faz 10 buscas sucessivas de nomes diferentes; _projetos_visiveis() executa 10 vezes com mesma lista de IDs",
+    "confianca": "baixa",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/main.py:76-85",
+    "hipotese": "Valor de `nome` vindo do cliente é concatenado diretamente em SQL via f-string, violando a regra de parametrização",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "POST /projects?nome=abc' or '1'='1 e verificar se a query retorna projetos que o usuário não deveria ver",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/main.py:76-85",
+    "hipotese": "A construção manual da lista de IDs concatenada em SQL (`in ({visiveis})`) pode quebrar se houver injection no ID ou se a lista visivelfor vazia",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados.",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "Testar com lista `ids` vazia resultando em `in ()` inválido; ou verificar log SQL para confirmar que IDs não estão parametrizados",
+    "confianca": "media",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "prd_03",
+    "categoria": "prd",
+    "local": "app/main.py:80-85",
+    "hipotese": "Filtro por nome com `ilike` não passa pelo ORM; caso o banco retorne colunas ou estrutura diferente, a construção `ProjetoOut(id=i, nome=n, dono_email=e)` pode falhar silenciosamente ou devolver campo errado",
+    "arbitro": {
+      "regra": "Todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo.",
+      "onde": "docs/REGRAS.md (Respostas)"
+    },
+    "provado_se": "Chamar /projects?nome=x e verificar se resposta contém exatamente os campos de ProjetoOut e nenhum outro; ou se há erro de tipo ao desempacotar tupla",
+    "confianca": "media",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "prd_04",
+    "categoria": "prd",
+    "local": "app/main.py:76-93",
+    "hipotese": "O endpoint agora recebe parâmetro `nome` mas caminho sem nome continua retornando todos os projetos; não há especificação de qual comportamento é default e pode haver assimetria entre código comentado e executado",
+    "arbitro": null,
+    "provado_se": "GET /projects (sem nome) e GET /projects?nome= (nome vazio) devem devolver o mesmo resultado; confirmar que a lógica `if nome:` trata string vazia como False",
+    "confianca": "baixa"
+  },
+  {
+    "id": "prd_05",
+    "categoria": "prd",
+    "local": "app/main.py:76-93",
+    "hipotese": "Ramo com filtro por nome (`if nome`) retorna antes do ramo sem filtro, criando duas lógicas diferentes de busca que podem divergir em ordenação, campos ou acesso — violando consistência do endpoint",
+    "arbitro": null,
+    "provado_se": "Comparar resultado de GET /projects?nome=projeto com GET /projects filtrando manualmente pelo mesmo nome; verificar se campos, ordem e conteúdo coincidem",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_01",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:80-87",
+    "hipotese": "SQL injection via concatenação direta de `nome` do usuário na cláusula LIKE, permitindo escape e injeção de predicados que vazem projetos de terceiros",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "GET /projects?nome=x%25%27%20or%20p.id%20in%20(SELECT%20id%20FROM%20projects)%20--%20retorna projetos que o usuário não deveria ver",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "vazamento_02",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:80-87",
+    "hipotese": "A lista `visiveis` é montada corretamente, mas se `_projetos_visiveis()` retornar um conjunto vazio ou se a função for chamada com outro `user`, a injeção SQL pode construir uma consulta que retorna projetos de qualquer usuário",
+    "arbitro": {
+      "regra": "Listar projetos devolve os projetos que o usuário pode ver — os próprios e aqueles em que ele participa — e nunca os de terceiros.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "Se outro usuário conseguir chamar `_projetos_visiveis(db, outro_user)` internamente ou se a função não isolar corretamente, GET /projects?nome=% com um terceiro usuário retorna projetos que não pertencem a ele",
+    "confianca": "media",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "vazamento_03",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:78-88",
+    "hipotese": "O caminho com `nome` retorna dados via SQL raw; o caminho sem `nome` usa ORM. Se o ORM filtro difere da cláusula WHERE manual (p.ex., soft deletes, campos de estado), a listagem filtrada pode devolver projetos que o caminho sem filtro excluiria",
+    "arbitro": null,
+    "provado_se": "GET /projects (sem filtro) e GET /projects?nome=x retornam contagens diferentes de projetos para o mesmo usuário; inspecionar logs de SQL para verificar se a consulta raw executa WHERE diferente do ORM",
+    "confianca": "baixa"
+  },
+  {
+    "id": "vazamento_04",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:84",
+    "hipotese": "A consulta raw busca por `ilike '%{nome}%'` sem escape, permitindo que caracteres especiais LIKE (%, _) sejam usados para pattern matching e alcançar projetos com nomes que casem com padrões injetados",
+    "arbitro": {
+      "regra": "Toda consulta ao banco passa pelo ORM com parâmetros ligados. Valor vindo do cliente nunca é concatenado em SQL.",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "GET /projects?nome=% retorna todos os projetos visiveis (ou mais); GET /projects?nome=_ retorna projetos com nomes de um caractere, potencialmente de terceiros",
+    "confianca": "media",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/main.py:82"
+      }
+    ],
+    "_corroborado_externo": true
+  }
+]
