@@ -242,14 +242,28 @@ REDE_ISOLADA = _s("REDE_ISOLADA", PROJETO.get("rede_isolada") or "veredito_isola
 PERMITIR_REDE_NO_BASE = _b("PERMITIR_REDE_NO_BASE", False)
 
 
+# Credenciais e servico do banco, do veredito.yml. Os padroes sao os do desafio.
+BANCO_SERVICO = _s("BANCO_SERVICO", _banco.get("servico") or "db")
+BANCO_USUARIO = _s("BANCO_USUARIO", _banco.get("usuario") or "kb")
+BANCO_SENHA = _s("BANCO_SENHA", _banco.get("senha") or "kb")
+BANCO_PORTA = _i("BANCO_PORTA", int(_banco.get("porta") or 5432))
+
+
 def url_do_banco_descartavel() -> str:
     """A URL que o agente IMPOE ao rodar teste do repositorio sob revisao.
 
-    `db` e `kb:kb` vem do docker-compose do desafio; num cliente isto viria do
-    `veredito.yml`, e a Action rodando na CI dele ja tem banco descartavel como
-    o normal.
+    🚨 `kb:kb@db` estava CHUMBADO aqui ate' 15/08, e o proprio comentario que
+    ficava nesta linha ja dizia "num cliente isto viria do veredito.yml".
+    Enquanto nao veio, a prova diferencial num projeto com outro usuario de
+    banco morria com `FATAL: password authentication failed` na suite INTEIRA,
+    antes de qualquer query -- e a acusacao virava INCONCLUSIVO por
+    infraestrutura, parecendo limite do produto.
+
+    Foi o quinto chumbado achado ao apontar o Veredito para o segundo projeto.
+    Os quatro primeiros estao no commit anterior.
     """
-    return f"postgresql+psycopg://kb:kb@db:5432/{BANCO_DESCARTAVEL}"
+    return (f"postgresql+psycopg://{BANCO_USUARIO}:{BANCO_SENHA}"
+            f"@{BANCO_SERVICO}:{BANCO_PORTA}/{BANCO_DESCARTAVEL}")
 
 
 # --- contexto do repositorio sob revisao ------------------------------------

@@ -141,6 +141,26 @@ def test_contexto_inexistente_e_denunciado(tmp_path):
     assert any("nao existe" in a and "engano" in a for a in avisos)
 
 
+def test_url_do_banco_descartavel_sai_do_projeto(monkeypatch):
+    """🚨 `kb:kb@db` esteve chumbado ate' 15/08, e o comentário na própria linha
+    já dizia "num cliente isto viria do veredito.yml".
+
+    Enquanto não veio, a prova diferencial num projeto com outro usuário de
+    banco morria com `FATAL: password authentication failed` na suíte inteira —
+    e a acusação virava INCONCLUSIVO por infraestrutura, parecendo limite do
+    produto.
+    """
+    from veredito import config as cfg
+    monkeypatch.setattr(cfg, "BANCO_USUARIO", "bancada")
+    monkeypatch.setattr(cfg, "BANCO_SENHA", "bancada")
+    monkeypatch.setattr(cfg, "BANCO_SERVICO", "db")
+    monkeypatch.setattr(cfg, "BANCO_PORTA", 5432)
+    monkeypatch.setattr(cfg, "BANCO_DESCARTAVEL", "bancada_test")
+    url = cfg.url_do_banco_descartavel()
+    assert url == "postgresql+psycopg://bancada:bancada@db:5432/bancada_test"
+    assert "kb" not in url, "credencial do desafio vazou para outro projeto"
+
+
 def test_env_que_sobrepoe_o_projeto_e_denunciado():
     """🚨 O caso que quase invalidou a primeira medição da bancada (15/08).
 
