@@ -36,8 +36,8 @@ que condenar, e absolve com motivo quando não há:
 | item | tamanho | nota |
 |---|---|---|
 | **Licença** | 10 min | decisão de sócio: MIT/Apache se o alvo é adoção |
-| 🚨 **Contenção do `http_request`** | meio dia | a prova pela API **altera estado do app real**. Medido 14/08. Ver abaixo |
-| **`veredito.yml`** | meio dia | como o app sobe, como autentica, contas de teste, **banco descartável**. Destrava tudo o mais |
+| ✅ **Contenção do `http_request`** *(14/08)* | | três partes, provada sob carga. Ver abaixo |
+| ✅ **`veredito.yml`** *(14–15/08)* | | contas, layout, login, bancos, como o app sobe. **Cinco chumbados saíram do código**, todos achados apontando para o segundo projeto |
 | **Entrada "revise este PR"** | horas | hoje é config apontando para pasta local |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
@@ -169,6 +169,47 @@ a rodada pareceria excelente.
 O gabarito fica **fora**: outro repositório, ou um arquivo que o harness de
 medição lê e o agente nunca alcança. Vale um teste mecânico que falhe se a
 palavra do gabarito aparecer na árvore sob revisão.
+
+### 📍 Estado em 15/08 — a bancada existe, e já se pagou antes de medir
+
+**Pronta:** app de projetos/tarefas rodando, `main` conferido limpo com 11
+asserções de isolamento, os **quatro PRs plantados e verificados exploráveis**,
+gabarito escrito em `bancada_gabarito.yml` (fora da bancada, de propósito).
+
+**Sem medição ainda.** Duas rodadas foram tentadas e as duas morreram em
+configuração nossa, não no modelo. Custaram **264 mil tokens de entrada
+somados** — contra ~7 mil de uma rodada saudável — porque o advogado repetia
+ferramentas quebradas e cada volta reinjeta o contexto. Saldo esgotado.
+
+#### 🚨 O que as duas rodadas compraram: cinco suposições do desafio chumbadas
+
+Nenhuma era encontrável por dentro. **Os 382 testes rodam todos contra o
+desafio**, então tudo que é específico dele é invisível para eles.
+
+| # | estava fixo no código | fora do desafio |
+|---|---|---|
+| 1 | rota `/auth/login`, campos `password`/`access_token` | login 404 — **nenhuma** prova ponta a ponta |
+| 2 | teste gravado em `app/api/tests` | `FileNotFoundError` **depois** de o advogado escrever o teste |
+| 3 | alvo do pytest `tests/` | `file or directory not found` |
+| 4 | `.env` vencendo o `veredito.yml` | revisaria um projeto **conversando com o app do outro**, e o pré-voo diria `health -> 200` |
+| 5 | `kb:kb@db` no banco descartável | suíte inteira com `password authentication failed` |
+
+Mais o `BadRequestError` do bloco `fallback`, que derrubava o **fechamento
+forçado** — justamente a rede que impede o teto de voltas de custar a perícia.
+
+⚠️ O item 4 é a instância mais perigosa: **o pré-voo passava verde**. `read_file`
+e `grep` funcionam em qualquer layout, e `http_request` só testava `/health`,
+que responde sem autenticação. Duas sondas novas (**login** e **destino do
+teste**) teriam abortado no primeiro segundo em vez de gastar US$2.
+
+> **A bancada funcionou como instrumento de diagnóstico antes de funcionar como
+> régua.** Foi a resposta empírica para "vão aparecer bugs novos?", perguntada
+> em 14/08: apareceram cinco, e só apontando o produto para um segundo projeto.
+
+#### Falta
+
+`py -3.12 roda_bancada.py --top-n 3` quando houver saldo. Deve custar bem menos
+que as duas de hoje — o custo veio das ferramentas falhando em cadeia.
 
 ### 🩺 Versão reduzida: QUATRO PRs primeiro
 
