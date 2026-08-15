@@ -22,6 +22,30 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent
 BANCADA = RAIZ.parent / "bancada"
 
+# 🚨 O relatorio da rodada PAGA morreu aqui em 15/08, depois de o orquestrador
+# ter rodado e gasto. `UnicodeEncodeError: 'charmap' codec can't encode
+# character '�'` na linha que imprime a saida do filho.
+#
+# A cadeia, e ela tem duas camadas:
+#
+#   causa     no Windows o stdout de um processo Python ligado a PIPE assume o
+#             encoding da localidade (cp1252), nao UTF-8. Este script decodifica
+#             o filho como UTF-8, entao todo acento que ele emite vira `�`.
+#   sintoma   `print` desse `�` no console, que tambem e' cp1252, levanta.
+#
+# O `errors="replace"` do `subprocess.run` protegia a DECODIFICACAO e nao a
+# impressao -- guarda que existe e fica muda justo onde precisa falar.
+#
+# A causa se conserta no filho (`PYTHONIOENCODING` no env, ver `roda`); esta
+# linha e' a rede embaixo: com `errors="replace"` no stdout do pai, caractere
+# que o console nao representa vira `?` em vez de matar a rodada. Nenhuma
+# rodada paga pode ser perdida por causa de um acento no relatorio.
+for _f in (sys.stdout, sys.stderr):
+    try:
+        _f.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass  # stdout redirecionado para algo que nao aceita: seguir mesmo assim
+
 # Limpo ANTES de importar o config: ele resolve tudo na importacao.
 for k in ("APP_API_URL", "APP_WEB_URL", "APP_SAUDE", "BANCO_APP_ORIGEM",
           "BANCO_DESCARTAVEL", "BANCO_APP", "CONTEXTO_REPO"):
@@ -98,7 +122,10 @@ def roda(ramo: str, top_n: int) -> dict:
     mesmo processo deixaria metade da configuracao do ramo anterior.
     """
     prepara_o_app(ramo)
-    env = dict(os.environ, PR_BRANCH=ramo)
+    # `PYTHONIOENCODING`: o conserto da CAUSA. Sem ele o filho escreve cp1252 no
+    # pipe, nos lemos como UTF-8, e todo acento chega como `�` -- o relatorio
+    # sai ilegivel mesmo quando nao levanta. Ver o bloco no topo do arquivo.
+    env = dict(os.environ, PR_BRANCH=ramo, PYTHONIOENCODING="utf-8")
     r = subprocess.run(
         [sys.executable, "-m", "veredito.orquestrador", "--top-n", str(top_n)],
         cwd=RAIZ, env=env, capture_output=True, text=True,
