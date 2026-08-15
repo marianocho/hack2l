@@ -369,8 +369,70 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = N
     return "\n".join(linhas)
 
 
+def _cabecalho_do_escopo(escopo: dict | None, examinadas: int) -> list[str]:
+    """A primeira linha do parecer, e o que ela deixa de implicar.
+
+    🚨 Ate' 15\\08 ela era so' "3 com parecer, 0 descartados, 0 inconclusivos",
+    numa rodada que partiu de 24 suspeitas. Nenhum numero ali era falso e o
+    conjunto mentia: quem lia via uma rodada completa.
+
+    Duas mudancas, e a segunda importa tanto quanto a primeira:
+
+    1. o total entra, com o teto que o produziu
+    2. as tres contagens passam a ser "das N examinadas" -- assim, mesmo sem
+       escopo gravado, o cabecalho nao afirma mais que N era tudo que havia
+    """
+    if not escopo:
+        return [f"{examinadas} suspeitas examinadas nesta rodada."]
+    levantadas = escopo.get("levantadas", examinadas)
+    teto = escopo.get("teto")
+    linha = f"{levantadas} suspeitas levantadas, {examinadas} testadas"
+    linha += f" dentro do orcamento da rodada (TOP_N={teto})." if teto else "."
+    return [linha]
+
+
+def _secao_nao_testadas(escopo: dict | None) -> list[str]:
+    """As levantadas que ficaram fora do orcamento -- com o motivo de cada uma.
+
+    ⚠️ Elas NAO sao descartes, e a secao diz isso na primeira linha. Um descarte
+    passou pela pericia e voltou com motivo; estas nunca foram olhadas. Junta-las
+    a lista de descartados seria a mesma absolvicao falsa que somar INCONCLUSIVO
+    com REFUTADO -- so' que na entrada do funil em vez da saida.
+    """
+    if not escopo or not escopo.get("nao_testadas"):
+        return []
+    n = escopo["nao_testadas"]
+    fora = escopo.get("fora_do_orcamento") or []
+    p = ["", "## LEVANTADAS E NAO TESTADAS", ""]
+    p.append(
+        f"{n} suspeita(s) nao entraram no orcamento desta rodada. Nao sao "
+        "descartes: nenhuma foi examinada, nenhuma tem veredito. Estao na ordem "
+        "em que a fila as alcancaria com um teto maior."
+    )
+    fundidas = escopo.get("fundidas_por_duplicata")
+    if fundidas:
+        p.append(f"(Outras {fundidas} eram duplicatas e foram fundidas na "
+                 "acusacao equivalente, antes da fila.)")
+    p.append("")
+    if not fora:
+        # Rodada anterior ao registro do escopo. A contagem se reconstroi do
+        # `acusacoes_brutas.json`; o detalhamento, nao. Dizer que nao se sabe e'
+        # o unico desfecho honesto -- calar seria voltar ao bug de origem.
+        p.append("_o detalhamento nao foi gravado nesta rodada; a contagem vem "
+                 "de `acusacoes_brutas.json`, e pode incluir duplicatas._")
+        return p
+    for f in fora:
+        rotulo = _CATEGORIA_DO_DESAFIO.get(f.get("categoria"), f.get("categoria", "?"))
+        hip = str(f.get("hipotese") or "-")
+        if len(hip) > 140:
+            hip = hip[:137] + "..."
+        p.append(f"- {f.get('posicao','?')}o na fila | {rotulo} em "
+                 f"{_local(f)}: {hip} _({f.get('motivo','-')})_")
+    return p
+
+
 def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
-                    http: dict | None = None) -> str:
+                    http: dict | None = None, escopo: dict | None = None) -> str:
     """As duas ultimas listas sao a peca que nenhum outro time vai ter.
 
     Elas precisam ser enquadradas em voz alta no pitch, senao soam como
@@ -380,8 +442,10 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
     p: list[str] = ["# PARECER", ""]
     c, d, i = organizado["condenados"], organizado["descartados"], organizado["inconclusivos"]
 
+    p += _cabecalho_do_escopo(escopo, len(c) + len(d) + len(i))
     p += [
-        f"{len(c)} com parecer, {len(d)} descartados com motivo, {len(i)} inconclusivos com causa.",
+        f"Das examinadas: {len(c)} com parecer, {len(d)} descartados com motivo, "
+        f"{len(i)} inconclusivos com causa.",
         "",
         "## CONDENADOS", "",
     ]
@@ -407,6 +471,7 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
         rotulo = _CATEGORIA_DO_DESAFIO.get(a.get("categoria"), a.get("categoria", "?"))
         p.append(f"- {rotulo} em {_local(a)}: {v.get('motivo','-')}")
 
+    p += _secao_nao_testadas(escopo)
     p += _secao_efeito_no_banco()
     return "\n".join(p) + "\n"
 
@@ -455,7 +520,37 @@ def _por_id(padrao: str) -> dict:
     return artefatos
 
 
-def carrega_do_disco() -> tuple[list[dict], dict, dict, dict, dict]:
+def _escopo_do_disco(examinadas: int) -> dict | None:
+    """O escopo da rodada, e o que sobra quando ele nao foi gravado.
+
+    🚨 Padrao de bug do projeto: a guarda que so' funciona quando o artefato
+    existe fica muda exatamente onde ele falta. Aqui o artefato e' o
+    `escopo.json`, que so' passou a ser gravado em 15\\08 -- entao toda rodada
+    anterior cairia no caso mudo e voltaria a imprimir o cabecalho antigo.
+
+    Por isso a contagem tem uma segunda fonte: `acusacoes_brutas.json`, gravado
+    desde sempre. O detalhamento nao se reconstroi, e o parecer diz isso; a
+    contagem, que e' o que impede o cabecalho de mentir, se reconstroi.
+    """
+    e = _carrega_json(cfg.RODADA / "escopo.json", None)
+    if isinstance(e, dict) and "levantadas" in e:
+        return e
+    brutas = _carrega_json(cfg.RODADA / "acusacoes_brutas.json", None)
+    if not isinstance(brutas, list) or len(brutas) <= examinadas:
+        return None
+    return {
+        "levantadas": len(brutas),
+        "testadas": examinadas,
+        # Sem o escopo gravado, duplicatas fundidas e nao-testadas caem no mesmo
+        # balde. O numero e' um teto do que ficou sem exame, e a secao avisa.
+        "nao_testadas": len(brutas) - examinadas,
+        "fundidas_por_duplicata": None,
+        "teto": None,
+        "fora_do_orcamento": [],
+    }
+
+
+def carrega_do_disco() -> tuple[list[dict], dict, dict, dict, dict, dict | None]:
     """Le o que as outras etapas gravaram.
 
     Ajustar o juiz pela trigesima vez nao pode re-executar o advogado -- meia
@@ -465,13 +560,14 @@ def carrega_do_disco() -> tuple[list[dict], dict, dict, dict, dict]:
     acusacoes = {a["id"]: a for a in _carrega_json(cfg.RODADA / "acusacoes.json", []) if "id" in a}
     avisos = _carrega_json(cfg.ARTEFATOS / "avisos.json", {})
     # prova_* = teste diferencial (causalidade). http_* = app rodando (alcance).
-    return veredictos, acusacoes, _por_id("prova_*.json"), avisos, _por_id("http_*.json")
+    return (veredictos, acusacoes, _por_id("prova_*.json"), avisos,
+            _por_id("http_*.json"), _escopo_do_disco(len(veredictos)))
 
 
 def sentencia() -> str:
-    veredictos, acusacoes, artefatos, avisos, http = carrega_do_disco()
+    veredictos, acusacoes, artefatos, avisos, http, escopo = carrega_do_disco()
     organizado = organiza(veredictos, acusacoes, artefatos, avisos, http)
-    texto = formata_parecer(organizado, acusacoes, artefatos, http)
+    texto = formata_parecer(organizado, acusacoes, artefatos, http, escopo)
     cfg.prepara_pastas()
     (cfg.RODADA / "parecer.md").write_text(texto, encoding="utf-8")
     return texto

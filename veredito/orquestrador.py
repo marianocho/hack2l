@@ -275,7 +275,16 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
         return {}
     teto = top_n if top_n is not None else cfg.TOP_N
     # Por COTA de categoria, nao pelas N primeiras -- ver promotores.seleciona.
-    acusacoes = brutas if manual else promotores.seleciona(brutas, teto)
+    if manual:
+        acusacoes = brutas
+        escopo = promotores.escopo(brutas, brutas, len(brutas))
+    else:
+        acusacoes, escopo = promotores.seleciona_com_escopo(brutas, teto)
+    # Antes do laco caro, nao depois: rodada que morre no meio ainda deixa
+    # registrado de quantas suspeitas ela partiu. E' a mesma razao pela qual
+    # `veredictos.json` e' gravado a cada acusacao.
+    (cfg.RODADA / "escopo.json").write_text(
+        json.dumps(escopo, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\n{len(acusacoes)} de {len(brutas)} acusacoes vao ao advogado "
           f"({cfg.MODEL_ADVOGADO})\n")
 

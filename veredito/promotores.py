@@ -499,6 +499,23 @@ def aglomerados_nao_examinados(brutas: list[dict], julgadas: set[str],
     return fora
 
 
+def fila_completa(acusacoes: list[dict], cotas: dict | None = None,
+                  max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
+    """A fila INTEIRA, na ordem em que o advogado a consumiria, sem teto.
+
+    Existe separada de `seleciona` porque o corte por TOP_N joga fora a unica
+    informacao que responde "o que esta rodada NAO olhou". As tres camadas de
+    teto sao moles de proposito -- excedente vai para o fim, nunca para o lixo
+    -- e ai o `[:teto]` no fim silenciava justamente elas.
+
+    Cada acusacao sai daqui com `_motivo_fila`: por que ela esta nesta posicao.
+    Quem fica abaixo do corte vira a lista de nao-testadas do parecer, com o
+    motivo junto. "Nada e' descartado em silencio" vale para o arquivo que fica,
+    nao so' para o console que rola.
+    """
+    return _seleciona(acusacoes, cotas, max_por_local)
+
+
 def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
               max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
     """Escolhe quem vai ao advogado, por COTA de categoria e nao por ordem.
@@ -515,6 +532,20 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
     para o lixo. Com fila cheia ela nao rouba vaga; com fila curta ela ainda
     entra. "Nada e' descartado em silencio" vale aqui tambem -- um teto duro
     sumiria com acusacao sem ninguem ver.
+
+    ⚠️ O teto do TOP_N, esse, e' DURO -- e por isso quem fica de fora tem que
+    aparecer no parecer. Ver `fila_completa` e `escopo`.
+    """
+    return _seleciona(acusacoes, cotas, max_por_local)[:teto]
+
+
+def _seleciona(acusacoes: list[dict], cotas: dict | None = None,
+               max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
+    """O corpo compartilhado por `seleciona` e `fila_completa`.
+
+    Uma implementacao so': se a fila do parecer fosse recalculada por outro
+    caminho, ela poderia divergir da fila que realmente rodou, e o parecer
+    passaria a descrever uma rodada que nao aconteceu.
     """
     cotas = dict(cotas or COTAS)
     antes = len(acusacoes)
@@ -552,11 +583,13 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
         # Estourou o orcamento da lente: vai para o fim, junto das de local
         # concentrado. Mesmo tratamento, mesma razao -- despriorizar, nao sumir.
         if a.get("_excedente_orcamento"):
+            a["_camada_fila"] = "orcamento_da_lente"
             excedente.append(a)
             continue
         loc = _local_chave(a)
         if loc and por_local[loc] >= max_por_local:
             a["_excedente_no_local"] = por_local[loc] + 1
+            a["_camada_fila"] = "local_concentrado"
             excedente.append(a)
             continue
         b = _bucket(a.get("categoria", "?"))
@@ -564,8 +597,10 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
             cotas[b] -= 1
             if loc:
                 por_local[loc] += 1
+            a["_camada_fila"] = "cota"
             escolhidas.append(a)
         else:
+            a["_camada_fila"] = "curinga"
             sobra.append(a)  # curinga: preenche o que a cota deixou vago
     if excedente:
         quentes = {l: n for l, n in por_local.items() if n >= max_por_local}
@@ -573,4 +608,89 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
               f"em {len(quentes)} local(is) ja com {max_por_local} vaga(s)")
     escolhidas.extend(sobra)
     escolhidas.extend(excedente)   # por ultimo, mas nunca descartado
-    return escolhidas[:teto]
+    return escolhidas
+
+
+# Por que ESTA acusacao ficou de fora, dita do ponto de vista de quem ficou de
+# fora -- e nao do ponto de vista da camada que a moveu.
+#
+# 🚨 A distincao apareceu na primeira execucao sobre dado real: a nona e a
+# decima da fila TINHAM ganhado vaga de cota, e o motivo saia "vaga da cota de
+# padroes" numa lista de nao-testadas. Ler "ganhou vaga" em quem nao foi testado
+# e' o mesmo formato de erro que o projeto persegue -- o campo descrevia a
+# POSICAO e estava sendo lido como a EXCLUSAO. Para quem passou pela cota e
+# ainda assim ficou abaixo do corte, a verdade e' so' o teto.
+#
+# ⚠️ Comparacao por chave estrutural, nunca por substring do texto: foi a licao
+# de 13/08, quando `kb` casou dentro de `kb_veredito_app`.
+_MOTIVO_DE_FORA = {
+    "cota": "abaixo do corte do teto",
+    "curinga": "cota da categoria estava cheia; entrou como curinga, e o teto "
+               "chegou antes",
+    "orcamento_da_lente": "despriorizada: a lente estourou o orcamento dela "
+                          "neste diff",
+    "local_concentrado": "despriorizada: o local ja tinha {max} vaga(s)",
+}
+
+
+def escopo(brutas: list[dict], fila: list[dict], teto: int,
+           max_por_local: int = MAX_POR_LOCAL) -> dict:
+    """O que a rodada olhou, e o que ela levantou e nao olhou.
+
+    🚨 A regra central diz que nada e' descartado em silencio, e ate' 15\\08 o
+    parecer abria com "3 com parecer, 0 descartados, 0 inconclusivos" numa
+    rodada de 24 suspeitas levantadas. As 21 que nao couberam no TOP_N sumiam
+    do arquivo. O console dizia "8 de 25 acusacoes vao ao advogado" -- mas o
+    console rola e o parecer fica, e quem le o parecer amanha lia uma rodada
+    que parecia completa.
+
+    ⚠️ A moldura decide como isto e' lido, com o mesmo numero dos dois lados:
+    "25 levantadas, 8 testadas dentro do orcamento" e' ESCOPO declarado;
+    "17 nao testadas" e' confissao. A primeira e' a verdadeira -- um teto de
+    orcamento e' uma escolha de operacao, nao uma falha da pericia -- e por isso
+    o parecer abre pelo total e diz o teto que o produziu.
+
+    A conta fecha de proposito: levantadas = fundidas + testadas + nao testadas.
+    Se ela nao fechasse, este bloco seria mais uma metrica medindo outra coisa.
+    """
+    testadas = fila[:teto]
+    de_fora = fila[teto:]
+    return {
+        "levantadas": len(brutas),
+        "fundidas_por_duplicata": len(brutas) - len(fila),
+        "testadas": len(testadas),
+        "nao_testadas": len(de_fora),
+        "teto": teto,
+        "fora_do_orcamento": [
+            {
+                "id": a.get("id"),
+                "categoria": a.get("categoria"),
+                "local": a.get("local"),
+                "hipotese": a.get("hipotese"),
+                "confianca": a.get("confianca"),
+                "lentes_concordam": a.get("_lentes_concordam"),
+                # A posicao e' o que diz se ela ficou de fora por pouco. Nona
+                # numa rodada de oito e' uma decisao de orcamento; vigesima
+                # quinta e' outra conversa, e o leitor merece distinguir.
+                "posicao": teto + i,
+                "motivo": _MOTIVO_DE_FORA.get(
+                    a.get("_camada_fila"), "abaixo do corte do teto"
+                ).format(max=max_por_local),
+            }
+            for i, a in enumerate(de_fora, 1)
+        ],
+    }
+
+
+def seleciona_com_escopo(acusacoes: list[dict], teto: int,
+                         cotas: dict | None = None,
+                         max_por_local: int = MAX_POR_LOCAL,
+                         ) -> tuple[list[dict], dict]:
+    """As escolhidas E o retrato do que ficou de fora, da MESMA fila.
+
+    Uma chamada so' de proposito: `seleciona` de novo para montar o escopo
+    reordenaria com as mesmas entradas, mas passaria a existir um segundo
+    caminho capaz de divergir em silencio do primeiro.
+    """
+    fila = _seleciona(acusacoes, cotas, max_por_local)
+    return fila[:teto], escopo(acusacoes, fila, teto, max_por_local)
