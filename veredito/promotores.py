@@ -396,6 +396,67 @@ def _local_chave(a: dict) -> str | None:
     return loc.casefold() or None
 
 
+def consenso(acusacoes: list[dict]) -> dict[str, int]:
+    """{id: quantas LENTES DISTINTAS apontaram o mesmo ponto}.
+
+    🚨 Este numero ja existia e era jogado fora. E' a mesma logica da
+    corroboracao por scanner que o projeto ja valoriza -- fonte independente
+    apontando o mesmo lugar vale mais -- so' que entre as proprias lentes.
+
+    Medido em 15/08, nas quatro rodadas da bancada:
+
+        PR              tema com mais lentes    lentes   e' o defeito?
+        IDOR            autorizacao                6     sim
+        SQLi            injecao                    6     sim
+        race            concorrencia               5     sim
+        race            contrato de resposta       4     sim (o acidental)
+        LIMPO           --                         2     nao ha defeito
+
+    O PR limpo tem 14 acusacoes brutas, MAIS que o do IDOR (13). Nao e' volume:
+    e' convergencia. Nos com defeito, 5 ou 6 lentes apontam o mesmo ponto; no
+    limpo, nunca passa de 2.
+
+    ⚠️ Reusa `fontes._mesmo_ponto`: mesmo arquivo, faixas que se tocam com folga
+    de 2 linhas, e regiao larga NAO corrobora. Aquela tolerancia foi medida --
+    para o mesmo defeito as lentes escreveram `:30`, `:31`, `:32`, `:30-34`.
+    Casamento exato daria zero.
+
+    ⚠️ E CONTA LENTES, nao acusacoes: cinco acusacoes da mesma lente sao uma
+    opiniao repetida, nao cinco opinioes. Contar acusacoes premiaria a lente
+    barulhenta, que e' o erro que as cotas existem para impedir.
+
+    🚨 O QUE ELE **NAO** FAZ -- medido em 15/08, contra a minha previsao.
+
+    Eu propus isto como conserto da SELECAO: com consenso no ranking, o defeito
+    de concorrencia entraria no TOP_N 3. Rodei o contrafactual sobre as
+    acusacoes brutas reais das tres rodadas com defeito:
+
+        PR      vagas para o defeito ANTES    DEPOIS
+        IDOR              2                     2
+        SQLi              1                     1
+        race              1                     1
+
+    NENHUMA MUDANCA. E soltando cota e MAX_POR_LOCAL inteiramente, tambem nao --
+    o defeito pega 1-2 vagas de 3 sob qualquer configuracao.
+
+    O que fez o defeito ser julgado foi ORCAMENTO (`--top-n 8`), nao ordem.
+
+    Entao isto fica como SINAL AUDITAVEL -- gravado em `_lentes_concordam`, para
+    o parecer e para quem decide quanto gastar -- e nao como melhoria de selecao,
+    que a medicao nao sustenta. Vender o contrario seria o documento afirmando o
+    que o codigo nao faz, que e' o defeito que este produto existe para pegar.
+    """
+    from . import fontes                        # import tardio: evita ciclo
+    fora: dict[str, int] = {}
+    for a in acusacoes:
+        lentes = {a.get("categoria")}
+        for b in acusacoes:
+            if b is not a and fontes._mesmo_ponto(a.get("local"), b.get("local")):
+                lentes.add(b.get("categoria"))
+        fora[a.get("id", "")] = len({l for l in lentes if l})
+    return fora
+
+
 def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
               max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
     """Escolhe quem vai ao advogado, por COTA de categoria e nao por ordem.
@@ -419,7 +480,30 @@ def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
     if len(acusacoes) < antes:
         print(f"  dedup: {antes} -> {len(acusacoes)} "
               f"({antes - len(acusacoes)} fundidas em _duplicatas)")
-    ordenadas = sorted(acusacoes, key=lambda a: _PESO.get(a.get("confianca"), 3))
+    # 🚨 CONSENSO ORDENA, NUNCA JULGA -- e a distincao e' o desenho todo.
+    #
+    # Ele decide QUEM VAI ao advogado, e nada mais. O advogado recebe uma
+    # acusacao por vez, ISOLADO, e nunca ve este numero: se visse, cinco lentes
+    # concordando viraria pressao para confirmar, e o produto passaria a medir
+    # opiniao de modelo em vez de exit code. E' o mesmo motivo pelo qual o
+    # scanner roda EM PARALELO e nao em serie -- mostrar o achado dele ao
+    # promotor ancoraria a lente e destruiria o sinal.
+    #
+    # A severidade tambem nao muda: ela segue a FORCA DA PROVA, e cinco lentes
+    # concordando nao sao prova de nada. `tests/test_consenso_nao_contamina.py`
+    # trava as duas coisas.
+    #
+    # ⚠️ E ordena DENTRO da cota, nunca por cima dela. Um achado que so' UMA
+    # lente viu continua tendo a vaga da categoria dele -- senao o consenso
+    # mataria justamente o achado sutil, que e' o oposto do que se quer.
+    con = consenso(acusacoes)
+    ordenadas = sorted(
+        acusacoes,
+        key=lambda a: (-con.get(a.get("id", ""), 1),
+                       _PESO.get(a.get("confianca"), 3)),
+    )
+    for a in ordenadas:
+        a["_lentes_concordam"] = con.get(a.get("id", ""), 1)
     escolhidas, sobra, excedente = [], [], []
     por_local: Counter = Counter()
     for a in ordenadas:
