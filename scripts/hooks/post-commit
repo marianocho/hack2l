@@ -1,0 +1,69 @@
+#!/bin/sh
+# post-commit -- registra o commit na nota do dia, no vault do Obsidian.
+#
+# Escreve SO' FATO: hash, data de autoria e assunto, na secao "Registro
+# automatico" da nota do dia. Nunca toca no que ja' esta' escrito acima dela --
+# a prosa do dia continua sendo trabalho humano (ou pedido ao Claude depois).
+#
+# Silencioso quando nao ha' vault: a outra maquina do projeto nao tem o
+# Obsidian, e hook que reclama em maquina alheia e' hook que alguem desliga.
+#
+# Onde mora o vault (nesta ordem):
+#   git config veredito.vault "/c/caminho/para/o/Vault"
+#   $HOME/OneDrive/Documentos/Obsidian Vault
+#
+# Ligar num repo:  git config core.hooksPath scripts/hooks
+
+set -u
+
+VAULT=$(git config --get veredito.vault 2>/dev/null || true)
+[ -n "$VAULT" ] || VAULT="$HOME/OneDrive/Documentos/Obsidian Vault"
+
+DIARIO="$VAULT/VEREDITO/diário"
+[ -d "$DIARIO" ] || exit 0          # sem vault aqui: nao e' erro, e' outra maquina
+
+DATA=$(git log -1 --date=short --pretty=format:%ad)
+HASH=$(git log -1 --pretty=format:%h)
+ASSUNTO=$(git log -1 --pretty=format:%s)
+
+# O nome do repo vem do git dir COMUM, nao do working tree: dentro de um
+# worktree o basename seria o nome do worktree, e o registro sairia mentindo.
+COMUM=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "")
+if [ -n "$COMUM" ]; then
+    REPO=$(basename "$(dirname "$COMUM")")
+else
+    REPO=$(basename "$(git rev-parse --show-toplevel)")
+fi
+
+NOTA="$DIARIO/$DATA.md"
+MARCA=$(printf '`%s`' "$HASH")
+
+# Idempotente: amend, rebase e cherry-pick disparam o hook de novo. E se o hash
+# ja' foi citado na prosa a' mao, tambem nao duplica.
+if [ -f "$NOTA" ] && grep -qF -- "$MARCA" "$NOTA"; then
+    exit 0
+fi
+
+if [ ! -f "$NOTA" ]; then
+    {
+        printf -- '---\n'
+        printf 'tags: [veredito, diário]\n'
+        printf -- '---\n\n'
+        printf '# %s\n\n' "$DATA"
+        printf '> [!note] Dia ainda sem prosa\n'
+        printf '> Os commits abaixo entraram sozinhos, pelo hook. O resumo do dia\n'
+        printf '> e o que ele comprou em regra continuam sendo escritos a mão.\n\n'
+        printf 'Índice: [[Linha do tempo]]\n\n'
+        printf '## Registro automático\n\n'
+    } > "$NOTA"
+elif ! grep -q '^## Registro automático' "$NOTA"; then
+    printf '\n## Registro automático\n\n' >> "$NOTA"
+fi
+
+if [ "$REPO" = "hack2l" ]; then
+    printf -- '- `%s` %s\n' "$HASH" "$ASSUNTO" >> "$NOTA"
+else
+    printf -- '- `%s` *(%s)* %s\n' "$HASH" "$REPO" "$ASSUNTO" >> "$NOTA"
+fi
+
+exit 0
