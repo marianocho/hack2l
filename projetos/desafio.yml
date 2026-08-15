@@ -69,6 +69,8 @@ codigo:
   # em `app/api/tests` e o pytest o encontra em `tests`.
   testes: tests
   testes_no_repo: app/api/tests
+  # A suite do desafio encontra os dados do seed no banco de teste.
+  banco_de_teste_semeado: true
 
 # Como o app autentica. Sao convencoes DELE, nao do Veredito.
 auth:

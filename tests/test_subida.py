@@ -93,8 +93,23 @@ def test_sobe_e_derruba_no_fim(pedido, docker, monkeypatch):
     _sobe_com_sucesso(monkeypatch)
     with subida.app_no_ar():
         pass
-    assert ("up", "-d") in [tuple(c) for c in docker]
+    assert ("up", "-d", "--build") in [tuple(c) for c in docker]
     assert ("down",) in [tuple(c) for c in docker]
+
+
+def test_sobe_sempre_com_build(pedido, docker, monkeypatch):
+    """🚨 `--build` não é detalhe: o Dockerfile faz COPY do código, então um
+    `up` com imagem existente sobe o código do BUILD ANTERIOR — possivelmente de
+    outro ramo.
+
+    Em 15/08 isso custou uma rodada paga inteira: o app respondia como o commit
+    base, o defeito do PR não existia de fora, e o sintoma parecia o produto não
+    achar nada em vez de ambiente errado."""
+    _sobe_com_sucesso(monkeypatch)
+    with subida.app_no_ar():
+        pass
+    ups = [c for c in docker if c and c[0] == "up"]
+    assert ups and all("--build" in c for c in ups), f"subiu sem build: {ups}"
 
 
 def test_derruba_mesmo_se_a_rodada_explodir(pedido, docker, monkeypatch):

@@ -332,7 +332,7 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
             # Recusa do classificador de ciberseguranca vai para o Opus 4.8
             # sozinha, em vez de derrubar a categoria carro-chefe ao vivo.
             fallbacks="default",
-            system=[{"type": "text", "text": SISTEMA.replace("{teto}", str(cfg.MAX_VOLTAS_LOOP)),
+            system=[{"type": "text", "text": _sistema(),
                      "cache_control": {"type": "ephemeral"}}],
             tools=ferramentas.TOOLS,
             messages=[{"role": "user", "content": [
@@ -402,7 +402,7 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
                     # qualquer forma: o historico contem blocos tool_use, e a
                     # API rejeita historico com tool_use sem as tools declaradas.
                     tools=[t.to_dict() for t in ferramentas.TOOLS],
-                    system=SISTEMA.replace("{teto}", str(cfg.MAX_VOLTAS_LOOP)),
+                    system=_sistema(),
                     messages=[*historico, {"role": "user", "content": FECHAMENTO}],
                 )
                 _soma(uso, getattr(final, "usage", None))
@@ -429,6 +429,32 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
     v.update(uso)
     v["segundos"] = round(time.time() - inicio, 1)
     return v
+
+
+def _sistema() -> str:
+    """O prompt de sistema, com o que depende do PROJETO acrescentado em execucao.
+
+    🚫 Nada disto pode ser chumbado no texto do `SISTEMA`: e' exatamente o erro
+    do arbitro, que levou os criterios da Vindler para dentro de 93 acusacoes em
+    repositorios que nao tinham nada a ver com eles. O que e' do projeto entra
+    pelo `veredito.yml`, na hora.
+    """
+    s = SISTEMA.replace("{teto}", str(cfg.MAX_VOLTAS_LOOP))
+    if not cfg.BANCO_DE_TESTE_SEMEADO:
+        # 🚨 Medido em 15/08: o advogado escreveu a invariante certa, o teste
+        # rodou, e falhou IGUAL nos dois lados porque nao havia dado nenhum. Ele
+        # nao tinha como saber -- nada dizia.
+        s += (
+            "\n\n## O banco de teste comeca VAZIO\n\n"
+            "A suite deste projeto nao encontra dado de seed: cada teste cria o "
+            "que usa. Um teste que assuma usuario, registro ou relacao ja "
+            "existente falha IGUAL nos dois commits, e falha igual nos dois "
+            "lados nao isola nada -- sai inconclusivo sem dizer nada sobre o PR.\n\n"
+            "Entao: leia os modelos ANTES de escrever o teste (os nomes dos "
+            "campos importam e chutar custa uma volta), crie os dados dentro do "
+            "proprio teste, e so' entao exercite a invariante."
+        )
+    return s
 
 
 def sonda_api() -> tuple[bool, str]:

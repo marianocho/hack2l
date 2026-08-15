@@ -381,6 +381,19 @@ CODIGO_TESTES = _s("CODIGO_TESTES", _codigo.get("testes") or "tests")
 CODIGO_TESTES_NO_REPO = _s("CODIGO_TESTES_NO_REPO",
                            _codigo.get("testes_no_repo") or "app/api/tests")
 
+# O banco de teste do projeto ja vem com dados, ou nasce vazio?
+#
+# 🚨 Medido em 15/08: na bancada ele nasce VAZIO (a suite dela semeia por
+# fixture). O advogado escreveu a invariante certa, o teste rodou, e falhou
+# IGUAL nos dois lados por falta de dados -- inconclusivo que parece limite do
+# produto e e' caracteristica do projeto.
+#
+# Ele nao tinha como saber: nada dizia. Agora diz, em execucao, e a instrucao
+# entra pelo `veredito.yml` -- nunca chumbada na lente, que foi o erro do
+# arbitro.
+BANCO_DE_TESTE_SEMEADO = _b("BANCO_DE_TESTE_SEMEADO",
+                            bool(_codigo.get("banco_de_teste_semeado", True)))
+
 # --- como o app autentica ---------------------------------------------------
 #
 # 🚨 Tambem chumbado ate' 15/08: rota `/auth/login`, senha no campo `password`,
@@ -488,7 +501,20 @@ MAX_TOKENS_ADVOGADO = _i("MAX_TOKENS_ADVOGADO", 64000)
 # Minimo da API: 20.000.
 TASK_BUDGET_TOKENS = _i("TASK_BUDGET_TOKENS", 30000)
 
-MAX_VOLTAS_LOOP = _i("MAX_VOLTAS_LOOP", 10)
+_VOLTAS_BASE = _i("MAX_VOLTAS_LOOP", 10)
+
+# ⚠️ Banco de teste vazio custa VOLTAS: o advogado precisa criar usuario,
+# projeto e recurso antes de exercitar a invariante. Em 15/08 ele gastou o teto
+# nisso, chutou o nome de um campo do modelo, errou, e nao sobrou volta para ler
+# `models.py` e corrigir -- disse isso no proprio motivo: "faltaram voltas...
+# com o nome correto do campo o mesmo teste deve fechar".
+#
+# O acrescimo e' amarrado ao MOTIVO, e nao um numero solto que alguem sobe
+# quando incomoda: so' vale onde o projeto declara que o banco nasce vazio.
+VOLTAS_EXTRAS_SEM_SEED = _i("VOLTAS_EXTRAS_SEM_SEED", 5)
+MAX_VOLTAS_LOOP = _VOLTAS_BASE + (0 if BANCO_DE_TESTE_SEMEADO
+                                  else VOLTAS_EXTRAS_SEM_SEED)
+
 TIMEOUT_ACUSACAO_S = _i("TIMEOUT_ACUSACAO_S", 180)
 
 # --- limites ----------------------------------------------------------------

@@ -111,9 +111,16 @@ def app_no_ar():
         yield estado
         return
 
-    r = _compose("up", "-d")
+    # ⚠️ `--build`, e nao so' `up -d`. O Dockerfile faz COPY do codigo, entao um
+    # `up` com imagem existente sobe o codigo do BUILD ANTERIOR -- possivelmente
+    # de outro ramo. Em 15/08 isso custou uma rodada inteira: o app respondia
+    # como o commit base e o defeito do PR simplesmente nao existia de fora.
+    #
+    # Custa segundos quando nada mudou (cache de camada) e evita o falso
+    # negativo mais caro que este produto tem.
+    r = _compose("up", "-d", "--build", timeout=1200)
     if r.returncode != 0:
-        raise SubidaFalhou(f"`compose up -d` falhou: {r.stderr.strip()[:300]}")
+        raise SubidaFalhou(f"`compose up -d --build` falhou: {r.stderr.strip()[:300]}")
     estado["subimos"] = True
 
     if not no_ar(tentativas=cfg.APP_ESPERA_S // 2 or 1):

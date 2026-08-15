@@ -1099,6 +1099,85 @@ TOOLS = [prova_diferencial, run_tests, read_file, grep, http_request]
 # foi assim que 26 das 38 acusacoes de 10/08 foram refutadas.
 ESSENCIAIS = ("read_file", "grep")
 
+# 🚨 Fatal quando o app esta no ar: se ele nao serve o head, `http_request`
+# exercita o commit BASE e o defeito do PR nao existe de fora. Nao e'
+# degradacao -- e' medir a coisa errada achando que se esta medindo a certa, e o
+# parecer sai limpo e mentiroso. Custou uma rodada em 15/08.
+ESSENCIAIS_COM_APP = ("app_serve_o_head",)
+
+
+def _confere_imagem_do_head() -> dict:
+    """O container esta servindo o codigo do HEAD, ou o de um build antigo?
+
+    Compara, para cada arquivo do diff que caia numa montagem declarada, o
+    conteudo do worktree do head com o que esta DENTRO do container. As
+    `montagens` do veredito.yml ja dizem o mapeamento disco->container.
+
+    ⚠️ Compara so' os arquivos QUE O PR TOCOU. Sao eles que distinguem base de
+    head; comparar o resto acusaria diferenca por qualquer detalhe de build.
+    """
+    from . import fontes                       # import tardio: evita ciclo
+    from .advogado import diff_do_pr
+
+    alvos = fontes.arquivos_do_diff(diff_do_pr())
+    if not alvos:
+        return {"ok": True, "detalhe": "diff sem arquivo: nada a conferir"}
+
+    wt = _worktree_de("head")
+    divergentes, conferidos = [], 0
+    for rel in sorted(alvos):
+        origem = wt / rel
+        if not origem.is_file():
+            continue
+        # De qual montagem este arquivo faz parte?
+        dentro = None
+        for par in cfg.CODIGO_MONTAGENS:
+            if isinstance(par, (list, tuple)) and len(par) == 2:
+                base = str(par[0]).strip("/")
+                if rel == base or rel.startswith(base + "/"):
+                    dentro = str(par[1]).rstrip("/") + rel[len(base):]
+                    break
+        if dentro is None:
+            continue
+
+        r = _compose_exec("api", "cat", dentro)
+        if r.returncode != 0:
+            divergentes.append(f"{rel} (nao existe no container)")
+            continue
+        conferidos += 1
+        no_disco = origem.read_text(encoding="utf-8", errors="replace")
+        if no_disco.replace("\r\n", "\n").strip() != (r.stdout or "").replace("\r\n", "\n").strip():
+            divergentes.append(rel)
+
+    if not conferidos:
+        return {"ok": True,
+                "detalhe": "nenhum arquivo do diff cai numa montagem declarada"}
+    if divergentes:
+        # ⚠️ Nao reconstruimos sozinhos, de proposito. O app de pe e' do
+        # operador, e recriar o container dele releria o `.env` inteiro,
+        # aplicando qualquer edicao pendente no meio da rodada -- ja aconteceu
+        # em 14/08. Efeito no ambiente se pergunta antes.
+        #
+        # Entao: aborta com o comando exato. Cinco segundos de conferencia no
+        # lugar de uma rodada paga que mede o commit errado.
+        return {
+            "ok": False,
+            "detalhe": (
+                f"o app no ar NAO serve o head: {divergentes[:3]}. "
+                f"No repo do projeto: git checkout {cfg.BRANCH_PR} && "
+                f"docker compose build && docker compose up -d"),
+        }
+    return {"ok": True, "detalhe": f"{conferidos} arquivo(s) do diff batem com o container"}
+
+
+def _compose_exec(servico: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["docker", "compose", "-f", str(cfg.COMPOSE),
+         "--project-directory", str(cfg.DESAFIO), "exec", "-T", servico, *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=cfg.TIMEOUT_GIT_S,
+    )
+
 
 def autoteste(sondar_app: bool = True) -> dict:
     """Exercita cada ferramenta uma vez, ANTES da rodada.
@@ -1171,6 +1250,23 @@ def autoteste(sondar_app: bool = True) -> dict:
     except Exception as e:
         r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
+    # 🚨 O APP NO AR SERVE O HEAD? -- a sonda que faltava, e a mais cara.
+    #
+    # O README ja avisava: "o app no ar serve o codigo ASSADO NA IMAGEM, nao o
+    # checkout do repo". Mesmo assim, em 15/08 tres rodadas pagas foram gastas e
+    # a terceira morreu por isso: `docker compose up -d` NAO reconstroi, entao o
+    # container continuava com o codigo do ramo anterior. O advogado percebeu
+    # sozinho -- "a instancia no ar ainda responde como o commit base" -- depois
+    # de gastar as voltas todas.
+    #
+    # O sintoma nao parece problema de ambiente: parece o defeito nao existir.
+    if sondar_app:
+        try:
+            r["app_serve_o_head"] = _confere_imagem_do_head()
+        except Exception as e:
+            r["app_serve_o_head"] = {"ok": False,
+                                     "detalhe": f"{type(e).__name__}: {e}"}
+
     if sondar_app:
         try:
             resp = _http_request("GET", "/health")
@@ -1207,4 +1303,8 @@ def autoteste(sondar_app: bool = True) -> dict:
                            "-- confira `auth` no veredito.yml",
             }
 
-    return {"ok": all(r.get(n, {}).get("ok") for n in ESSENCIAIS), "ferramentas": r}
+    # As essenciais sempre; as "com app" so' quando o app foi sondado. App fora
+    # do ar continua sendo DEGRADACAO conhecida (decide por leitura); app no ar
+    # servindo o codigo errado, nao -- aquilo mede a coisa errada em silencio.
+    exigidas = list(ESSENCIAIS) + (list(ESSENCIAIS_COM_APP) if sondar_app else [])
+    return {"ok": all(r.get(n, {}).get("ok") for n in exigidas), "ferramentas": r}
