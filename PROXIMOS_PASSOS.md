@@ -176,10 +176,54 @@ palavra do gabarito aparecer na árvore sob revisão.
 asserções de isolamento, os **quatro PRs plantados e verificados exploráveis**,
 gabarito escrito em `bancada_gabarito.yml` (fora da bancada, de propósito).
 
-**Sem medição ainda.** Duas rodadas foram tentadas e as duas morreram em
-configuração nossa, não no modelo. Custaram **264 mil tokens de entrada
-somados** — contra ~7 mil de uma rodada saudável — porque o advogado repetia
-ferramentas quebradas e cada volta reinjeta o contexto. Saldo esgotado.
+### ✅ MEDIDA em 15/08 — 3 de 4, e o quarto foi gabarito meu errado
+
+| PR | esperado | veio | |
+|---|---|---|---|
+| IDOR (CWE-639) | PROVADO | PROVADO:3 | ✅ |
+| SQLi (CWE-89) | PROVADO | PROVADO:2, INCONCLUSIVO:1 | ✅ |
+| race (CWE-367) | INCONCLUSIVO | PROVADO:4, REFUTADO:4 | ❌ *(ver abaixo)* |
+| limpo | REFUTADO | REFUTADO:3 | ✅ |
+
+**Os quatro desfechos são diferentes entre si** — o critério de instrumento
+calibrado. E os quatro juntos custaram **145 mil tokens de entrada**, menos que
+**uma** das rodadas quebradas.
+
+**No PR limpo: 3 refutados, zero condenações.** Pegou inclusive uma premissa
+alucinada do promotor (*"`ONLY_FULL_GROUP_BY` é do MySQL e não se aplica"*).
+
+#### 🚨 O produto corrigiu o meu gabarito
+
+Escrevi INCONCLUSIVO para o race partindo de *"é impossível provar sem
+concorrência"*. **A premissa era falsa.** Ele provou a **precondição** — que a
+garantia de unicidade sumiu — com teste que passa no base e falha no head, e
+declarou a limitação no motivo: *"não houve prova pela API porque chamadas
+sequenciais não expõem a janela de corrida"*.
+
+É *"escreva o teste sobre a INVARIANTE, não sobre o endpoint"* aplicado a
+concorrência. A R2 rebaixou para MÉDIA sozinha, por não ser ponta a ponta.
+
+⚠️ E o PR 3 tinha **dois** defeitos: eu plantei um segundo sem querer
+(`convidado_por` fora do contrato de resposta) ao alargar a janela do race. O
+Veredito achou os dois. O gabarito diz "um defeito por PR" e fui eu que quebrei.
+
+#### O que a medição ensinou sobre seleção
+
+Com `--top-n 3` o defeito do race **não foi julgado**: 8 das 24 acusações o
+nomearam, nenhuma entrou. Com `--top-n 8`, entrou e foi provado.
+
+Três hipóteses testadas por contrafactual sobre os dados reais, **duas
+erradas**:
+
+| hipótese | medido |
+|---|---|
+| consenso no ranking resolve | **zero efeito**, 3 de 3 PRs |
+| soltar `MAX_POR_LOCAL`/cota resolve | **zero efeito** |
+| expansão por área cega resolve | ✅ alcança o defeito com **1** extra |
+
+O consenso ficou como **sinal auditável** (discrimina defeito de ruído em 4 de
+4: o PR limpo tem 14 acusações brutas, mais que o do IDOR, e nenhum aglomerado
+passa de 2 lentes) — não como entrada de seleção, que a medição não sustenta.
 
 #### 🚨 O que as duas rodadas compraram: cinco suposições do desafio chumbadas
 
@@ -206,10 +250,21 @@ teste**) teriam abortado no primeiro segundo em vez de gastar US$2.
 > régua.** Foi a resposta empírica para "vão aparecer bugs novos?", perguntada
 > em 14/08: apareceram cinco, e só apontando o produto para um segundo projeto.
 
-#### Falta
+#### 🎯 O que falta, e é o topo da fila
 
-`py -3.12 roda_bancada.py --top-n 3` quando houver saldo. Deve custar bem menos
-que as duas de hoje — o custo veio das ferramentas falhando em cadeia.
+**O parecer confessar o escopo** — 30 min. Ele imprime *"3 com parecer, 0
+descartados, 0 inconclusivos"* e **omite que havia 24 suspeitas**. A regra
+central diz que nada é descartado em silêncio, e hoje 21 são.
+
+⚠️ A moldura decide: *"24 levantadas, 8 testadas dentro do orçamento"* é escopo;
+*"16 não testadas"* é confissão. Mesmo dado, leitura oposta.
+
+**Corrigir o gabarito do PR 3** para dois defeitos — já feito em
+`bancada_gabarito.yml`, mas o critério de acerto do `roda_bancada.py` ainda
+conta só um.
+
+**Rodar de novo com a expansão ligada** (~US$1) para ver se ela alcança o race
+sem precisar de `--top-n 8`. O contrafactual diz que sim; falta o dado real.
 
 ### 🩺 Versão reduzida: QUATRO PRs primeiro
 
