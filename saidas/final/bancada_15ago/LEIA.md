@@ -86,13 +86,55 @@ Com 3 vagas o defeito não foi julgado; com 8, foi — e corretamente. **Não ha
 bug: havia orçamento estreito e ranking sem critério.**
 
 ⚠️ Num cliente isso apareceria como o parecer omitindo um achado real **sem
-avisar que omitiu**. A regra central diz que nada é descartado em silêncio, e
-hoje 16 das 24 acusações são descartadas em silêncio.
+avisar que omitiu**. Era o caso naquele dia: 16 das 24 acusações saíam em
+silêncio. ✅ Consertado ainda em 15/08 — o parecer abre declarando quantas foram
+levantadas contra quantas couberam no orçamento, e lista as não testadas com
+posição na fila e motivo.
 
 ⚠️ **n=4 prova que o instrumento mede, não que o produto acha defeito.**
 Confundir as duas seria o erro dos 45% de árbitro outra vez.
 
+## 🚨 Rastreabilidade — os SHAs desta pasta NÃO são os dos ramos publicados
+
+Descoberto em 15/08 por auditoria, depois que a bancada ganhou remoto. **O nome
+de cada pasta aqui carimba o commit medido, e nenhum desses commits estava em
+ramo nenhum** — eram commits soltos, só nesta cópia de trabalho. Os quatro ramos
+haviam sido rebaseados sobre `f3bdd65` (`veredito.yml`, 3 linhas declarando
+`banco_de_teste_semeado: false`), o que gerou SHAs novos.
+
+Sem conserto, o rastro morria de duas formas: `git gc` apagaria os objetos, e
+quem clonasse do GitHub jamais resolveria o SHA da pasta. **Rastreabilidade que
+não resolve é alegação** — o mesmo defeito do árbitro sem procedência.
+
+| pasta de evidência | commit medido | ramo publicado hoje | tag que o preserva |
+|---|---|---|---|
+| `…0215-c17d211` | `c17d211` | `pr/tarefa-por-link` → `61cc0a7` | `medicao-15ago/tarefa-por-link` |
+| `…0221-4fff50b` | `4fff50b` | `pr/filtro-de-projetos` → `c7a6f7c` | `medicao-15ago/filtro-de-projetos` |
+| `…0224-2a44231`, `…0239-2a44231` | `2a44231` | `pr/reconvite-de-membro` → `7df223d` | `medicao-15ago/reconvite-de-membro` |
+| `…0229-559c167` | `559c167` | `pr/contagem-de-tarefas` → `cf3bfcc` | `medicao-15ago/contagem-de-tarefas` |
+| `…0111-1804607` | `1804607` | *(pré-rebase, sem ramo)* | `medicao-15ago/pre-rebase-0111` |
+
+✅ **O código sob revisão é byte-idêntico.** `git diff` entre cada par acusa
+**zero** arquivos diferentes em `app/`, `docs/` e `docker-compose.yml` — a única
+diferença são as 3 linhas do `veredito.yml`, que é a declaração do *nosso*
+harness, não o código medido. O defeito plantado, o diff que os promotores leram
+e o app que o advogado atacou são os mesmos.
+
+⚠️ **Mas a declaração não é inerte.** `banco_de_teste_semeado: false` entrou
+*depois* destas rodadas e diz ao Veredito como tratar a suíte. Reproduzir num
+ramo de hoje não é reproduzir estas rodadas — é rodar com uma configuração que
+elas não tinham. Para reproduzir *estas*, use a tag.
+
 ## Reproduzir
+
+**A medição exata desta pasta** — pelas tags, que são os commits realmente
+medidos:
+
+```bash
+git -C ../bancada checkout medicao-15ago/tarefa-por-link
+```
+
+**A bancada como ela está hoje**, que é o que se usa para medir daqui em diante:
 
 ```bash
 py -3.12 roda_bancada.py --top-n 3            # os quatro
@@ -101,3 +143,6 @@ py -3.12 roda_bancada.py --top-n 8 --so pr/reconvite-de-membro
 
 O runner troca de ramo, reconstrói as imagens, semeia, espera a rota de saúde e
 devolve a bancada ao `main` no fim.
+
+⚠️ O runner anda pelos **ramos**, não pelas tags: ele mede a bancada de hoje. As
+tags existem para auditar o passado, não para rodar o presente.
