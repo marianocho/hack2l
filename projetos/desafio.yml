@@ -52,6 +52,20 @@ app:
   preparar:
     - ["run", "--rm", "seed"]
 
+# Onde o codigo mora dentro do repositorio, para a prova diferencial montar o
+# worktree por cima do codigo assado na imagem.
+#
+# 🚨 Bind-mount e nao rebuild: o Dockerfile faz COPY, entao sem estes -v o
+# pytest rodaria o codigo da IMAGEM e a prova diferencial daria o mesmo
+# resultado nos dois lados -- falso negativo silencioso, provado com canario em
+# 08/08.
+codigo:
+  montagens:
+    - ["app/api/app", "/code/app"]
+    - ["app/api/tests", "/code/tests"]
+  trabalho: /code
+  testes: tests
+
 banco:
   servico: db          # nome do servico no compose
   usuario: kb

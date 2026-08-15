@@ -326,6 +326,31 @@ APP_ESPERA_S = _i("APP_ESPERA_S", int(_app.get("espera_s") or 120))
 # rodar num app que ja estava servindo apagaria dado que nao e' nosso.
 APP_PREPARAR = _app.get("preparar") or []
 
+# --- onde o codigo mora dentro do repositorio -------------------------------
+#
+# 🚨 Descoberto em 14/08 tentando usar o Veredito num SEGUNDO projeto: o
+# `_roda_pytest` chumbava `app/api/app` e `app/api/tests` -- o layout do
+# desafio. Ou seja, a PROVA DIFERENCIAL, que produz a evidencia mais forte do
+# produto, so' funcionava num repositorio.
+#
+# E' a mesma classe das contas chumbadas, uma camada abaixo: tirei os usuarios
+# do codigo e deixei a arvore de diretorios. So' apareceu porque um projeto
+# diferente foi apontado para ele -- que e' exatamente para isso que a bancada
+# existe.
+#
+# `montagens` = [[origem no repo, destino no container], ...]. O bind-mount e'
+# obrigatorio e nao rebuild: o Dockerfile faz COPY do codigo, entao sem os -v o
+# pytest roda o codigo ASSADO NA IMAGEM e a prova diferencial devolve o mesmo
+# resultado nos dois lados -- falso negativo silencioso, provado com canario em
+# 08/08.
+_codigo = PROJETO.get("codigo") or {}
+CODIGO_MONTAGENS = _codigo.get("montagens") or [
+    ["app/api/app", "/code/app"],
+    ["app/api/tests", "/code/tests"],
+]
+CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "/code")
+CODIGO_TESTES = _s("CODIGO_TESTES", _codigo.get("testes") or "tests")
+
 # {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
 # e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e
 # parecer que o produto nao funciona.

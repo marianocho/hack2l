@@ -439,6 +439,28 @@ def _imagem_da_api() -> str | None:
         return None
 
 
+def _montagens(worktree: Path) -> list[str]:
+    """Os `-v` que poem o codigo do WORKTREE por cima do codigo da imagem.
+
+    Vem do `codigo.montagens` do veredito.yml. Ate' 14/08 estavam chumbados no
+    layout do desafio (`app/api/app`), o que fazia a prova diferencial -- a
+    evidencia mais forte do produto -- funcionar num repositorio so'.
+
+    ⚠️ Origem que nao existe no worktree e' PULADA, nao montada vazia: o docker
+    criaria o diretorio, o pytest nao acharia teste nenhum, e o resultado seria
+    "0 testes" -- que `_classifica` trata como inconclusivo. Melhor montar de
+    menos e falhar claro do que montar vazio e parecer que rodou.
+    """
+    fora = []
+    for par in cfg.CODIGO_MONTAGENS:
+        if not isinstance(par, (list, tuple)) or len(par) != 2:
+            continue
+        origem = (worktree / str(par[0])).resolve()
+        if origem.exists():
+            fora += ["-v", f"{origem}:{par[1]}"]
+    return fora
+
+
 def _roda_pytest(worktree: Path, alvo: str = "tests",
                  contido: bool = False) -> tuple[int, str, bool]:
     """Roda a suite dentro do container, com o codigo do worktree por cima.
@@ -460,9 +482,8 @@ def _roda_pytest(worktree: Path, alvo: str = "tests",
         cmd = [
             "docker", "run", "--rm", "--network", cfg.REDE_ISOLADA,
             "-e", f"DATABASE_URL={cfg.url_do_banco_descartavel()}",
-            "-v", f"{worktree / 'app' / 'api' / 'app'}:/code/app",
-            "-v", f"{worktree / 'app' / 'api' / 'tests'}:/code/tests",
-            "-w", "/code",
+            *_montagens(worktree),
+            "-w", cfg.CODIGO_TRABALHO,
             # Teto de recurso: fork bomb e disco cheio nao sao efeito de rede,
             # mas custam o mesmo barato de barrar aqui.
             "--memory", "2g", "--pids-limit", "512",
@@ -488,8 +509,7 @@ def _roda_pytest(worktree: Path, alvo: str = "tests",
         # num banco que existe para ser destruido. Nao depende do repositorio
         # ter tido a ideia, e vale em qualquer commit.
         "-e", f"DATABASE_URL={cfg.url_do_banco_descartavel()}",
-        "-v", f"{worktree / 'app' / 'api' / 'app'}:/code/app",
-        "-v", f"{worktree / 'app' / 'api' / 'tests'}:/code/tests",
+        *_montagens(worktree),
         "api", "python", "-m", "pytest", alvo, "-q",
     ]
     r = subprocess.run(
