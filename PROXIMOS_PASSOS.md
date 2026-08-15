@@ -122,6 +122,83 @@ pedindo arquivo.
 | **PR de terceiro com IA** | US$0,05 | a lente de injection ficou vazia nos 10 PRs porque nenhum tem modelo. Silêncio correto ou lente quebrada? |
 | ✅ **`$PARAM` nas regras do semgrep** *(14/08)* | 3 linhas | a mensagem agora nomeia a variável e a rota. Visível no parecer: *"o parametro **email** … na rota **share_document**"* |
 | **Taxa de aceitação** | depende do bot | de cada achado postado, qual fração o autor conserta. É a métrica que prova a tese |
+| 🎯 **A bancada com gabarito** | 2–3 dias | **destrava a métrica que nunca tivemos.** Ver abaixo |
+
+---
+
+## 🎯 A bancada com gabarito — proposta de 14/08
+
+**O buraco que ela fecha.** Hoje sabemos que o verificador refuta ruído (68% em
+repo de terceiro, 8/8 num PR sem defeito). Não sabemos se os promotores **acham
+defeito real fora do desafio** — e não dá para saber, porque nos 10 PRs reais
+não havia gabarito. Conversão de 10–20% ali pode ser lente ruim ou PR sem
+defeito, e as duas hipóteses explicam o mesmo número.
+
+Um repositório **nosso**, pequeno, rodável, com defeitos plantados que a gente
+conhece, transforma isso em número. E é o mesmo ativo do "repo de demonstração"
+da seção A — uma coisa serve às duas.
+
+### 🚨 A armadilha, e ela é a mesma do árbitro
+
+**Quem planta o defeito e escreve a lente é a mesma pessoa.** O risco é plantar
+exatamente o que as seis lentes já procuram, medir 100%, e ter medido o próprio
+reflexo. Foi o que os 94 árbitros fizeram: mediam contaminação e pareciam rigor.
+
+O `desafio` valeu justamente porque **o Carlos plantou, não nós**.
+
+Quatro defesas, e nenhuma é opcional:
+
+1. **Taxonomia externa.** Os defeitos saem de OWASP/CWE ou de CVE real, não de
+   "o que a nossa lente pega". A lista de defeitos é escrita **antes** de olhar
+   os prompts.
+2. **Um planta, o outro não olha.** Entre Luis e Mariano, quem plantou não roda
+   a medição.
+3. **Defeitos fora do alcance, de propósito.** Race condition, por exemplo — a
+   rodada de 14/08 já produziu um INCONCLUSIVO honesto justamente aí. Sem eles,
+   a bancada mede um mundo onde tudo é provável e a taxa de inconclusivo parece
+   defeito nosso.
+4. **PRs limpos como controle negativo.** Já provamos que isso importa: 8/8
+   refutados num PR sem defeito é metade do valor do produto.
+
+### 🚨 O gabarito NÃO PODE morar no repositório da bancada
+
+Os promotores leem o repo. O advogado tem `read_file` e `grep`. Um arquivo
+`GABARITO.md` na árvore é resposta chumbada servida na bandeja — e o pior é que
+a rodada pareceria excelente.
+
+O gabarito fica **fora**: outro repositório, ou um arquivo que o harness de
+medição lê e o agente nunca alcança. Vale um teste mecânico que falhe se a
+palavra do gabarito aparecer na árvore sob revisão.
+
+### Como seria
+
+| passo | nota |
+|---|---|
+| 1. `veredito.yml` | **pré-requisito duro.** Hoje `config.py:155` chumba os quatro usuários; sem isso a bancada só funciona se ela imitar o desafio, e aí não prova generalização nenhuma |
+| 2. app mínimo rodável | API + banco + suíte. Rodável é obrigatório: sem app no ar só se mede o promotor, e o diferencial é a prova por execução |
+| 3. um defeito por PR | PR com dois defeitos torna ambíguo qual achado corresponde a qual, e a conta de recall vira palpite |
+| 4. PRs limpos no meio | controle negativo, sem avisar qual é qual a quem mede |
+| 5. rodar e contar | recall (dos N plantados, quantos provados), precisão (das M condenações, quantas batem), e a **distribuição dos inconclusivos com causa** |
+
+### O que ela permite dizer, e que hoje é proibido
+
+> *"Provou 4 dos 5 defeitos plantados, com artefato reproduzível."*
+
+Isso hoje é alegação sobre gabarito que não temos — está listado nos 🚫 do
+`CLAUDE.md`. Com a bancada, passa a ser verdade conferível. É a frase que muda
+uma conversa de investidor.
+
+### ⚠️ Custo, que não é desprezível
+
+Cada rodada completa custa US$0,40–1,30. Uma varredura de 10 PRs é **US$4–13**,
+e toda mudança de prompt pede varredura nova. Isso vira o maior item de custo
+recorrente do projeto — e é o preço de parar de andar às cegas.
+
+### 🚫 E a regra que a bancada compra
+
+**Nunca calibrar prompt na bancada inteira.** Ajustar as lentes até a bancada
+dar 100% é decorar a prova. Separar um conjunto de PRs que só é rodado no fim,
+e nunca olhado durante o ajuste.
 
 ### D — Dívida
 
