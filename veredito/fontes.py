@@ -25,9 +25,12 @@ corroboracao, nunca como motor.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import anthropic
@@ -69,14 +72,84 @@ def _relativo(caminho: str, raiz: Path) -> str:
         return Path(caminho).as_posix()
 
 
+# ------------------------------------------------- onde os scanners MORAM
+#
+# 🚨 Ate' 15/08 isto era `["py", "-3.12", "-m", "bandit", ...]` e `["semgrep",
+# ...]`. Os dois chumbavam ambiente dentro do produto, cada um do seu jeito, e
+# os dois falhavam CALADOS -- em formatos diferentes, o que atrasou o
+# diagnostico:
+#
+#   bandit    `py -3.12` so' existe no Windows com o launcher. Onde nao existe,
+#             o subprocess morre, `stdout` vem vazio, a regex nao casa e a
+#             funcao devolvia `[]`. O `acusa` entao imprimia
+#             "bandit 0 achado(s)" -- IDENTICO a "rodou e nao achou nada".
+#   semgrep   executavel nu depende do PATH. Numa maquina onde o `Scripts\` do
+#             Python nao esta no PATH, levanta FileNotFoundError. Barulhento por
+#             acidente, nao por desenho.
+#
+# Medido nesta maquina em 15/08: bandit instalado e semgrep instalado, mas so'
+# o bandit rodava. A rodada teria seguido sem metade da corroboracao externa,
+# anunciando zero achados como se fosse resultado.
+#
+# E' o padrao de bug da casa: a guarda existe, mas fica muda exatamente onde
+# precisa falar. Aqui a resolucao e' explicita e a ausencia LEVANTA.
+_SEM_BANDIT = "bandit nao esta instalado neste interpretador"
+_SEM_SEMGREP = "semgrep nao esta no PATH"
+
+
+def _argv_bandit() -> list[str] | None:
+    """`sys.executable`, nunca `py -3.12`: o scanner roda no MESMO interpretador
+    que nos, entao `pip install bandit` no ambiente certo basta -- e nao ha
+    launcher de plataforma nenhum no caminho."""
+    if importlib.util.find_spec("bandit") is None:
+        return None
+    return [sys.executable, "-m", "bandit"]
+
+
+def _argv_semgrep() -> list[str] | None:
+    """`-m semgrep` esta DEPRECADO desde a 1.38 (avisa e nao roda), entao aqui
+    nao ha simetria possivel com o bandit: e' o executavel ou nada. `which`
+    resolve o caminho completo e tira o PATH da equacao na hora da chamada."""
+    caminho = shutil.which("semgrep")
+    return [caminho] if caminho else None
+
+
+def disponiveis() -> dict[str, dict]:
+    """Quais scanners rodariam AGORA -- no formato do `autoteste`.
+
+    Existe para o pre-voo poder dizer em voz alta que a corroboracao externa
+    nao vai acontecer, ANTES de a rodada gastar. Nao e' essencial: rodada sem
+    scanner e' degradacao conhecida, igual app fora do ar.
+    """
+    fora = {}
+    for nome, resolve, falta in (
+        ("bandit", _argv_bandit, _SEM_BANDIT),
+        ("semgrep", _argv_semgrep, _SEM_SEMGREP),
+    ):
+        argv = resolve()
+        fora[nome] = {
+            "ok": argv is not None,
+            "detalhe": " ".join(argv) if argv else falta,
+        }
+    return fora
+
+
 def _bandit(raiz: Path, alvos: set[str]) -> list[dict]:
+    argv = _argv_bandit()
+    if argv is None:
+        raise RuntimeError(_SEM_BANDIT)
     r = subprocess.run(
-        ["py", "-3.12", "-m", "bandit", "-r", str(raiz), "-f", "json", "-q"],
+        [*argv, "-r", str(raiz), "-f", "json", "-q"],
         capture_output=True, text=True, timeout=600, errors="replace",
     )
     m = re.search(r"\{.*\}", r.stdout, re.DOTALL)
     if not m:
-        return []
+        # Chegou aqui com o bandit instalado = ele rodou e nao produziu JSON.
+        # Isso e' falha de execucao, nao ausencia de achado, e some se virar [].
+        raise RuntimeError(
+            f"bandit nao devolveu JSON (exit {r.returncode}): "
+            f"{(r.stderr or r.stdout or '').strip()[:200]}"
+        )
     fora = []
     for a in json.loads(m.group(0)).get("results", []):
         if not _dentro_do_diff(a["filename"], alvos):
@@ -95,15 +168,23 @@ def _bandit(raiz: Path, alvos: set[str]) -> list[dict]:
 def _semgrep(raiz: Path, alvos: set[str]) -> list[dict]:
     regras = cfg.RAIZ / "regras_semgrep" / "taint.yml"
     if not regras.is_file():
+        # Regra ausente e' escolha de configuracao, nao defeito de ambiente:
+        # sem arquivo de regra nao ha o que rodar, e zero e' a resposta certa.
         return []
+    argv = _argv_semgrep()
+    if argv is None:
+        raise RuntimeError(_SEM_SEMGREP)
     r = subprocess.run(
-        ["semgrep", "--config", str(regras), "--dataflow-traces", "--json",
+        [*argv, "--config", str(regras), "--dataflow-traces", "--json",
          "--quiet", str(raiz)],
         capture_output=True, text=True, timeout=900, errors="replace",
     )
     m = re.search(r"\{.*\}", r.stdout, re.DOTALL)
     if not m:
-        return []
+        raise RuntimeError(
+            f"semgrep nao devolveu JSON (exit {r.returncode}): "
+            f"{(r.stderr or r.stdout or '').strip()[:200]}"
+        )
     fora = []
     for a in json.loads(m.group(0)).get("results", []):
         if not _dentro_do_diff(a["path"], alvos):
@@ -295,7 +376,10 @@ def acusa(diff: str, raiz: Path | None = None) -> list[dict]:
             print(f"  {nome:10} {len(achados)} achado(s) nos arquivos do PR")
             brutos += achados
         except Exception as e:
-            print(f"  {nome:10} FALHOU ({type(e).__name__}) -- seguindo sem ele")
+            # A CAUSA, nao so' o tipo. "FALHOU (RuntimeError)" mandava quem le
+            # o log abrir o codigo para descobrir se faltava binario, PATH ou
+            # regra -- e as tres tem consertos diferentes.
+            print(f"  {nome:10} NAO RODOU -- {e} (seguindo sem ele)")
     if not brutos:
         return []
 

@@ -1250,6 +1250,22 @@ def autoteste(sondar_app: bool = True) -> dict:
     except Exception as e:
         r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
+    # Os scanners externos -- NAO essenciais, mas nao invisiveis.
+    #
+    # 🚨 Ate' 15/08 o pre-voo nao os mencionava. `bandit` ausente devolvia lista
+    # vazia e o log da rodada imprimia "bandit 0 achado(s)", que le exatamente
+    # igual a "rodou e nao achou nada". A corroboracao externa -- a UNICA fonte
+    # que nao e' o mesmo modelo -- podia estar morta a rodada inteira sem que
+    # nada dissesse. Foi assim que esta maquina rodou com semgrep fora do PATH.
+    #
+    # Fora das ESSENCIAIS de proposito: rodada sem scanner e' degradacao
+    # conhecida, igual app fora do ar. O que nao pode e' ser degradacao MUDA.
+    try:
+        from . import fontes
+        r.update(fontes.disponiveis())
+    except Exception as e:
+        r["scanners"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
     # 🚨 O APP NO AR SERVE O HEAD? -- a sonda que faltava, e a mais cara.
     #
     # O README ja avisava: "o app no ar serve o codigo ASSADO NA IMAGEM, nao o

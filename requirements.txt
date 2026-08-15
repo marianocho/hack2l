@@ -14,6 +14,18 @@ langfuse==2.57.0
 # Sem ele a suite nem coleta -- 19 dos 20 modulos morrem no import.
 pyyaml
 
+# As fontes externas (veredito/fontes.py) -- a unica corroboracao que nao vem
+# do mesmo modelo. Mesma historia do pyyaml: estavam instalados nas duas
+# maquinas de dev e ficaram de fora desta lista, entao a maquina nova rodou com
+# semgrep fora do PATH e ninguem viu. Ausentes, a rodada NAO quebra -- ela
+# perde a corroboracao e segue. Por isso entram aqui e no `autoteste`.
+#
+# 🚫 playwright NAO entra: nenhum arquivo do hack2l importa. Ele aparece na
+# lista de pacotes da maquina antiga por causa do starter-kit do desafio, que
+# e' opcional e que nos nao usamos -- nossa via contra o app e' `http_request`.
+bandit
+semgrep
+
 httpx
 requests
 python-dotenv
