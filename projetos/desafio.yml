@@ -64,7 +64,18 @@ codigo:
     - ["app/api/app", "/code/app"]
     - ["app/api/tests", "/code/tests"]
   trabalho: /code
+  # ⚠️ Os dois divergem AQUI, e e' o caso que ensina a diferenca: a montagem
+  # manda `app/api/tests` para `/code/tests`, entao no disco o teste e' escrito
+  # em `app/api/tests` e o pytest o encontra em `tests`.
   testes: tests
+  testes_no_repo: app/api/tests
+
+# Como o app autentica. Sao convencoes DELE, nao do Veredito.
+auth:
+  rota: /auth/login
+  campo_usuario: email
+  campo_senha: password
+  campo_token: access_token
 
 banco:
   servico: db          # nome do servico no compose

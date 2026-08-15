@@ -349,7 +349,35 @@ CODIGO_MONTAGENS = _codigo.get("montagens") or [
     ["app/api/tests", "/code/tests"],
 ]
 CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "/code")
+
+# ⚠️ SAO DOIS CAMINHOS DIFERENTES, e confundi-los custou uma rodada inteira.
+#
+#   testes         alvo do pytest DENTRO do container (depois das montagens)
+#   testes_no_repo onde o arquivo de teste e' ESCRITO, relativo ao worktree
+#
+# No desafio eles divergem: a montagem manda `app/api/tests` para `/code/tests`,
+# entao no disco e' `app/api/tests` e no container e' `tests`. Na bancada a
+# montagem e' rasa e os dois sao `app/tests`.
+#
+# 🚨 Ate' 15/08 o caminho de ESCRITA estava chumbado em `app/api/tests`: a
+# `prova_diferencial` gravava fora do worktree da bancada e morria com
+# FileNotFoundError, e as quatro acusacoes viraram INCONCLUSIVO. A ferramenta
+# que assina PROVADO nao funcionava fora do desafio -- de novo.
 CODIGO_TESTES = _s("CODIGO_TESTES", _codigo.get("testes") or "tests")
+CODIGO_TESTES_NO_REPO = _s("CODIGO_TESTES_NO_REPO",
+                           _codigo.get("testes_no_repo") or "app/api/tests")
+
+# --- como o app autentica ---------------------------------------------------
+#
+# 🚨 Tambem chumbado ate' 15/08: rota `/auth/login`, senha no campo `password`,
+# token em `access_token`. Sao tres convencoes do desafio, e nenhum app do mundo
+# e' obrigado a compartilhar as tres. Na bancada e' `/login`, `senha` e `token`
+# -- o login falhava com 404 e toda prova ponta a ponta morria antes de comecar.
+_auth = PROJETO.get("auth") or {}
+AUTH_ROTA = _s("AUTH_ROTA", _auth.get("rota") or "/auth/login")
+AUTH_CAMPO_USUARIO = _s("AUTH_CAMPO_USUARIO", _auth.get("campo_usuario") or "email")
+AUTH_CAMPO_SENHA = _s("AUTH_CAMPO_SENHA", _auth.get("campo_senha") or "password")
+AUTH_CAMPO_TOKEN = _s("AUTH_CAMPO_TOKEN", _auth.get("campo_token") or "access_token")
 
 # {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
 # e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e

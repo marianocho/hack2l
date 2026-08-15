@@ -141,6 +141,38 @@ def test_contexto_inexistente_e_denunciado(tmp_path):
     assert any("nao existe" in a and "engano" in a for a in avisos)
 
 
+def test_env_que_sobrepoe_o_projeto_e_denunciado():
+    """🚨 O caso que quase invalidou a primeira medição da bancada (15/08).
+
+    O `.env` do Veredito tinha `APP_API_URL=...:8000` do desafio; a bancada
+    declara `:8100`. A rodada revisaria o código da bancada **conversando com o
+    app do desafio** — e o pré-voo diria `health -> 200`, porque o outro app
+    responde. Medição inteira inválida, sem um único sinal.
+    """
+    d = {"app": {"api": "http://127.0.0.1:8100"}}
+    conflitos = projeto.ensombrado_pelo_env(d, {"APP_API_URL": "http://127.0.0.1:8000"})
+    assert len(conflitos) == 1 and "8100" in conflitos[0] and "8000" in conflitos[0]
+
+
+def test_env_igual_ao_projeto_nao_denuncia():
+    """Barra final não é divergência. Aviso à toa treina o operador a ignorar."""
+    d = {"app": {"api": "http://127.0.0.1:8100/"}}
+    assert projeto.ensombrado_pelo_env(d, {"APP_API_URL": "http://127.0.0.1:8100"}) == []
+
+
+def test_env_para_chave_que_o_projeto_nao_declara_nao_denuncia():
+    """Projeto que não declara a URL aceita a do ambiente — é o padrão dele."""
+    assert projeto.ensombrado_pelo_env({"app": {}}, {"APP_API_URL": "http://x"}) == []
+
+
+def test_denuncia_tambem_os_bancos():
+    """Banco sobreposto é pior que URL: a suíte rodaria e daria DROP no banco
+    de outro projeto."""
+    d = {"banco": {"nome": "bancada", "descartavel_testes": "bancada_test"}}
+    c = projeto.ensombrado_pelo_env(d, {"BANCO_DESCARTAVEL": "kb_veredito"})
+    assert len(c) == 1 and "BANCO_DESCARTAVEL" in c[0]
+
+
 def test_contexto_ausente_no_yml_nao_denuncia_caminho(tmp_path):
     """Sem a chave, não há caminho errado -- há projeto sem docs, que é comum e
     honesto. O aviso aqui é outro (árbitro sai null)."""

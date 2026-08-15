@@ -108,6 +108,44 @@ def controle_negativo(d: dict) -> str | None:
     return None
 
 
+def ensombrado_pelo_env(d: dict, ambiente: dict) -> list[str]:
+    """O que o projeto declarou e o nosso `.env` esta sobrepondo.
+
+    🚨 DESCOBERTO EM 15/08, apontando o Veredito para o segundo projeto.
+
+    A precedencia e' `variavel de ambiente > veredito.yml > padrao`, e ela existe
+    para permitir um teste pontual. Mas o `.env` do Veredito e' PERSISTENTE: ele
+    tinha `APP_API_URL=http://127.0.0.1:8000` do desafio, e a bancada declara
+    8100. Resultado: a rodada revisaria o codigo da bancada CONVERSANDO COM O APP
+    DO DESAFIO -- e o pre-voo diria `health -> 200`, porque o outro app responde.
+
+    Medicao inteira invalida, sem um unico sinal de erro.
+
+    ⚠️ `variaveis_ensombradas` do config NAO pega este caso: la' a comparacao e'
+    entre o `.env` e o ambiente, e aqui os dois concordam. O conflito e' entre o
+    `.env` e o ARQUIVO DO PROJETO -- outra fronteira, outra guarda. E' o padrao
+    de bug do projeto de novo: a guarda existe e esta muda na fronteira que
+    ninguem tinha olhado.
+    """
+    fora = []
+    app = d.get("app") or {}
+    banco = d.get("banco") or {}
+    pares = [
+        ("APP_API_URL", app.get("api")),
+        ("APP_WEB_URL", app.get("web")),
+        ("APP_SAUDE", app.get("saude")),
+        ("BANCO_APP_ORIGEM", banco.get("nome")),
+        ("BANCO_DESCARTAVEL", banco.get("descartavel_testes")),
+        ("BANCO_APP", banco.get("descartavel_app")),
+    ]
+    for nome, do_projeto in pares:
+        vigente = ambiente.get(nome)
+        if do_projeto and vigente and str(vigente).rstrip("/") != str(do_projeto).rstrip("/"):
+            fora.append(f"{nome}: o projeto declara {do_projeto!r} e esta valendo "
+                        f"{vigente!r}")
+    return fora
+
+
 def avisos(d: dict, contexto_resolvido: Path | None = None) -> list[str]:
     """O que este projeto NAO vai conseguir provar, dito antes de gastar.
 

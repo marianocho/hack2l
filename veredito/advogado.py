@@ -360,7 +360,8 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
             _soma(uso, getattr(msg, "usage", None))
             ultima = msg
 
-            historico.append({"role": "assistant", "content": msg.content})
+            historico.append({"role": "assistant",
+                              "content": _replicavel(msg.content)})
             resposta_tool = runner.generate_tool_call_response()
             if resposta_tool is not None:
                 historico.append(resposta_tool)
@@ -543,6 +544,34 @@ def _conta_blocos(resposta_tool) -> int:
         return 0
     return sum(1 for b in conteudo
                if isinstance(b, dict) and b.get("type") == "tool_result")
+
+
+# Blocos que a API DEVOLVE mas NAO ACEITA de volta. O `fallback` chega quando o
+# beta de fallback do servidor entra em acao -- ver o CLAUDE.md, "o fallback do
+# Opus".
+#
+# 🚨 Medido em 15/08: o fechamento forcado remontava o historico com ele dentro e
+# a API respondia 400 ("Input tag 'fallback' ... does not match any of the
+# expected tags"). O fechamento e' justamente a rede que impede o teto de voltas
+# de custar a pericia inteira -- ela caiu no caso em que mais importava, e a
+# acusacao virou INCONCLUSIVO com um erro de SDK no lugar do parecer.
+#
+# ⚠️ Lista de PERMISSAO, e nao de bloqueio: bloquear exige conhecer todo tipo
+# novo que a API venha a inventar, e um tipo desconhecido derrubaria o
+# fechamento de novo. O que nao se sabe replicar, nao se replica.
+_REPLICAVEIS = {"text", "tool_use", "thinking", "redacted_thinking"}
+
+
+def _replicavel(conteudo):
+    """Só os blocos que a API aceita receber de volta numa nova chamada."""
+    if not isinstance(conteudo, list):
+        return conteudo
+    fora = [b for b in conteudo
+            if getattr(b, "type", None) in _REPLICAVEIS
+            or (isinstance(b, dict) and b.get("type") in _REPLICAVEIS)]
+    # Conteudo vazio e' rejeitado pela API. Melhor um marcador de texto do que
+    # uma mensagem que nao pode ser enviada.
+    return fora or [{"type": "text", "text": "(volta sem conteudo replicavel)"}]
 
 
 def _consolida_ferramentas(v: dict, id_acusacao: str, blocos: int) -> None:

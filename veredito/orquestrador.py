@@ -196,6 +196,23 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
     # Descobrir no fim que faltava conta e' pagar US$1,30 para aprender uma coisa
     # que o veredito.yml ja sabia.
     print(f"projeto: {cfg.PROJETO_YML or '(sem veredito.yml -- usando os padroes)'}")
+
+    # 🚨 O `.env` do Veredito e' PERSISTENTE e vence o veredito.yml do projeto.
+    # Apontar para um segundo projeto com o `.env` do primeiro faria a rodada
+    # revisar um codigo conversando com o app do OUTRO -- e o pre-voo diria
+    # `health -> 200`, porque o outro app responde. Medicao invalida, sem sinal.
+    #
+    # Fatal, e nao aviso: seguir aqui produz um parecer que parece bom e mede a
+    # coisa errada, que e' pior do que nao rodar.
+    import os as _os
+    conflitos = projeto.ensombrado_pelo_env(cfg.PROJETO, _os.environ)
+    if conflitos:
+        raise SystemExit(
+            "o .env esta sobrepondo o que o projeto declara:\n  "
+            + "\n  ".join(conflitos)
+            + "\n\nApague essas linhas do .env, ou passe o valor certo na linha "
+              "de comando. O veredito.yml do projeto e' quem deveria mandar aqui."
+        )
     if estado_do_app.get("subimos"):
         print(f"  app: subimos nesta rodada"
               + (f", preparacao: {estado_do_app['preparacao']}"

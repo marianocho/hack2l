@@ -611,11 +611,18 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         wt_head = _garante_worktree(head, "head")
 
         for wt in (wt_base, wt_head):
-            destino = wt / "app" / "api" / "tests" / nome
+            # Caminho de ESCRITA (disco), que nao e' o alvo do pytest (container).
+            # Ver o comentario em config.CODIGO_TESTES_NO_REPO.
+            destino = wt / cfg.CODIGO_TESTES_NO_REPO / nome
+            if not destino.parent.is_dir():
+                art["erro"] = (
+                    f"{cfg.CODIGO_TESTES_NO_REPO} nao existe em {wt.name}. "
+                    "Ajuste `codigo.testes_no_repo` no veredito.yml do projeto.")
+                return art
             destino.write_text(codigo_do_teste, encoding="utf-8")
             escritos.append(destino)
 
-        alvo = f"tests/{nome}"
+        alvo = f"{cfg.CODIGO_TESTES}/{nome}"
         # O BASE roda CONTIDO: e' o lado onde mora o risco que so' nos criamos.
         # A CI do cliente roda o head a cada push; o base ninguem roda mais, e
         # foi rodando o base que o agente apagou o banco em 11/08.
@@ -858,14 +865,25 @@ def _token(usuario: str) -> str:
     if usuario not in cfg.USUARIOS:
         raise RuntimeError(f"usuario desconhecido: {usuario}. Use: {', '.join(cfg.USUARIOS)}")
     email, senha = cfg.USUARIOS[usuario]
+    # ⚠️ Rota, nomes dos campos e nome do token vem do veredito.yml. Ate' 15/08
+    # os quatro estavam chumbados no formato do desafio (`/auth/login`,
+    # `password`, `access_token`), e num app com outra convencao o login dava
+    # 404 -- toda prova ponta a ponta morria antes de comecar, e as acusacoes
+    # viravam INCONCLUSIVO por infraestrutura.
+    #
     # login e' idempotente na pratica: nao cria recurso, so devolve token.
     r = _com_retry("GET", lambda: requests.post(
-        f"{cfg.APP_API_URL}/auth/login",
-        json={"email": email, "password": senha},
+        f"{cfg.APP_API_URL}{cfg.AUTH_ROTA}",
+        json={cfg.AUTH_CAMPO_USUARIO: email, cfg.AUTH_CAMPO_SENHA: senha},
         timeout=cfg.TIMEOUT_HTTP_S,
     ))
     r.raise_for_status()
-    tok = r.json()["access_token"]
+    corpo = r.json()
+    if cfg.AUTH_CAMPO_TOKEN not in corpo:
+        raise RuntimeError(
+            f"o login respondeu sem o campo {cfg.AUTH_CAMPO_TOKEN!r} "
+            f"(veio: {sorted(corpo)}). Ajuste `auth.campo_token` no veredito.yml.")
+    tok = corpo[cfg.AUTH_CAMPO_TOKEN]
     _TOKENS[usuario] = tok
     return tok
 
@@ -985,7 +1003,8 @@ def run_tests(expressao: str = "") -> str:
     _abre_chamada()
     try:
         wt = _worktree_de("head")
-        alvo = f"tests/{Path(expressao).name}" if expressao.strip() else "tests"
+        alvo = (f"{cfg.CODIGO_TESTES}/{Path(expressao).name}"
+                if expressao.strip() else cfg.CODIGO_TESTES)
         codigo, saida, rodou = _roda_pytest(wt, alvo)
         if not rodou:
             return _fecha_chamada("run_tests", _marca_falha(
@@ -1130,6 +1149,28 @@ def autoteste(sondar_app: bool = True) -> dict:
     except Exception as e:
         r["grep"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
+    # 🚨 ONDE O TESTE SERA ESCRITO -- sonda de 15/08.
+    #
+    # A `prova_diferencial` grava o arquivo de teste dentro do worktree antes de
+    # rodar. Ate' agora esse caminho era chumbado no layout do desafio, e num
+    # projeto com outra arvore ela morria com FileNotFoundError DEPOIS de o
+    # advogado ter escrito o teste -- quatro acusacoes viraram INCONCLUSIVO, e a
+    # unica ferramenta que assina PROVADO nao funcionava.
+    #
+    # Conferir a pasta e' de graca e responde antes de a rodada comecar.
+    try:
+        faltando = [lado for lado in ("base", "head")
+                    if not (cfg.WORKTREES / lado / cfg.CODIGO_TESTES_NO_REPO).is_dir()]
+        r["destino_do_teste"] = {
+            "ok": not faltando,
+            "detalhe": (f"{cfg.CODIGO_TESTES_NO_REPO} existe nos dois lados"
+                        if not faltando else
+                        f"{cfg.CODIGO_TESTES_NO_REPO} nao existe em {faltando} -- "
+                        "ajuste `codigo.testes_no_repo` no veredito.yml"),
+        }
+    except Exception as e:
+        r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
     if sondar_app:
         try:
             resp = _http_request("GET", "/health")
@@ -1141,5 +1182,29 @@ def autoteste(sondar_app: bool = True) -> dict:
             }
         except Exception as e:
             r["http_request"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
+        # 🚨 LOGIN, e nao so' /health -- a outra sonda de 15/08.
+        #
+        # `/health` responde sem autenticacao nenhuma, entao o pre-voo passava
+        # VERDE com a rota de login apontando para o lugar errado. Pior: como o
+        # `.env` fixava a URL do outro projeto, quem respondia era o app errado.
+        # Sem login nao ha prova ponta a ponta, que e' a via que sustenta
+        # severidade alta -- e' cara demais para descobrir no meio da rodada.
+        try:
+            quem = next(iter(cfg.USUARIOS), None)
+            if quem is None:
+                r["login"] = {"ok": False, "detalhe": "nenhuma conta no veredito.yml"}
+            else:
+                _TOKENS.pop(quem, None)      # sem reaproveitar token de antes
+                tok = _token(quem)
+                r["login"] = {"ok": bool(tok),
+                              "detalhe": f"{cfg.AUTH_ROTA} como {quem}: token de "
+                                         f"{len(tok)} chars"}
+        except Exception as e:
+            r["login"] = {
+                "ok": False,
+                "detalhe": f"{cfg.AUTH_ROTA}: {type(e).__name__}: {str(e)[:120]} "
+                           "-- confira `auth` no veredito.yml",
+            }
 
     return {"ok": all(r.get(n, {}).get("ok") for n in ESSENCIAIS), "ferramentas": r}
