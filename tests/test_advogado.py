@@ -267,6 +267,61 @@ def test_julgar_a_mesma_acusacao_de_novo_nao_soma_a_tentativa_anterior():
 
 # ------------------------------------------------------------ contagem crua
 
+# ------------------------------------------- pre-voo da API (14/08)
+
+def _erro_api(mensagem):
+    def _explode(*a, **k):
+        raise RuntimeError(mensagem)
+    return _explode
+
+
+def test_sonda_distingue_chave_de_saldo(monkeypatch):
+    """Consertos DIFERENTES: chave rejeitada se resolve gerando outra; saldo
+    esgotado, nao. A mensagem crua da API nao ajuda quem esta com pressa."""
+    monkeypatch.setattr(adv, "_cliente", _erro_api(
+        "Error code: 401 - {'type': 'authentication_error'}"))
+    ok, detalhe = adv.sonda_api()
+    assert ok is False and "CHAVE" in detalhe
+
+    monkeypatch.setattr(adv, "_cliente", _erro_api(
+        "Error code: 400 - your credit balance is too low"))
+    ok, detalhe = adv.sonda_api()
+    assert ok is False and "SALDO" in detalhe
+
+
+def test_sonda_nao_levanta_em_erro_desconhecido(monkeypatch):
+    """Quem decide abortar e' o orquestrador. A sonda so' informa."""
+    monkeypatch.setattr(adv, "_cliente", _erro_api("coisa que nunca vimos"))
+    ok, detalhe = adv.sonda_api()
+    assert ok is False and detalhe
+
+
+def test_sonda_sem_chave_nem_tenta_a_rede(monkeypatch):
+    monkeypatch.setattr(adv.cfg, "ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr(adv, "_cliente", _erro_api("nao devia ter sido chamado"))
+    ok, detalhe = adv.sonda_api()
+    assert ok is False and "ausente" in detalhe
+
+
+def test_sonda_gasta_um_token_so(monkeypatch):
+    """Ela roda em TODA rodada. Se custasse, seria imposto sobre o pre-voo --
+    que existe justamente para nao gastar."""
+    pedidos = {}
+
+    class _Fake:
+        class messages:
+            @staticmethod
+            def create(**kw):
+                pedidos.update(kw)
+                return SimpleNamespace(usage=SimpleNamespace(input_tokens=9))
+
+    monkeypatch.setattr(adv, "_cliente", lambda: _Fake())
+    ok, _ = adv.sonda_api()
+    assert ok is True
+    assert pedidos["max_tokens"] == 1
+    assert pedidos["model"] == adv.cfg.MODEL_PROMOTOR, "use o modelo barato"
+
+
 def test_conta_blocos_so_conta_tool_result():
     assert _conta_blocos(_res("a", "b", "c")) == 3
     assert _conta_blocos({"role": "user", "content": [

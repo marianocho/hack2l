@@ -430,6 +430,44 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
     return v
 
 
+def sonda_api() -> tuple[bool, str]:
+    """A API da Anthropic responde? Uma chamada de 1 token, antes de gastar.
+
+    Mora AQUI e nao em `ferramentas.autoteste` de proposito: `ferramentas.py`
+    tem regra de ZERO chamada de LLM, e ela e' arquitetural -- e' o que faz a
+    pericia inteira ser conferivel com pytest. Quem fala com a API e' o
+    advogado, entao a sonda e' dele.
+
+    🚨 Medido em 14/08: a chave expirou entre uma rodada e outra. O pre-voo
+    conferia read_file, grep e http_request -- tudo que NAO custa -- e deixava
+    passar a unica coisa que custa. A rodada montou contencao, copiou banco,
+    gastou 30s e produziu seis INCONCLUSIVOs de autenticacao. Uma chamada de 1
+    token teria dito "chave invalida" no primeiro segundo.
+
+    Devolve (ok, detalhe). Nunca levanta: quem decide abortar e' o orquestrador.
+    """
+    if not cfg.ANTHROPIC_API_KEY:
+        return False, "ANTHROPIC_API_KEY ausente"
+    try:
+        r = _cliente().messages.create(
+            model=cfg.MODEL_PROMOTOR, max_tokens=1,
+            messages=[{"role": "user", "content": "ok"}])
+        return True, f"{cfg.MODEL_PROMOTOR} respondeu ({r.usage.input_tokens} tokens)"
+    except Exception as e:
+        msg = str(e)
+        baixo = msg.lower()
+        # Chave e saldo tem consertos DIFERENTES, e a mensagem crua nao ajuda
+        # quem esta com pressa. Distinguir aqui custa tres linhas.
+        if "authentication_error" in baixo or "invalid_api_key" in baixo:
+            return False, ("a CHAVE foi rejeitada (invalida ou revogada) -- "
+                           "gere outra e troque em hack2l/.env")
+        if "credit balance" in baixo or "insufficient" in baixo:
+            return False, "SALDO esgotado na conta -- a chave esta ok"
+        if "rate_limit" in baixo:
+            return False, "limite de taxa: nao e' chave nem saldo, tente daqui a pouco"
+        return False, f"{type(e).__name__}: {msg[:200]}"
+
+
 def contexto_dos_arquivos(diff: str) -> str:
     """Os arquivos tocados pelo diff, para entrar no bloco CACHEADO.
 

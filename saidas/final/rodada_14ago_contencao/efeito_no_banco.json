@@ -1,0 +1,32 @@
+{
+  "antes": {
+    "banco": "kb",
+    "tabelas": {
+      "chunks": 5,
+      "conversations": 347,
+      "documents": 5,
+      "messages": 694,
+      "shares": 3,
+      "users": 4
+    }
+  },
+  "depois": {
+    "banco": "kb",
+    "tabelas": {
+      "chunks": 5,
+      "conversations": 347,
+      "documents": 5,
+      "messages": 694,
+      "shares": 3,
+      "users": 4
+    }
+  },
+  "delta": {
+    "banco": "kb",
+    "criadas": {},
+    "removidas": {},
+    "limpo": true,
+    "houve_remocao": false,
+    "nao_detecta": "linha modificada no lugar (UPDATE sem mudar contagem)"
+  }
+}

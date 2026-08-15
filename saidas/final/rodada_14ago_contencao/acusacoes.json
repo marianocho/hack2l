@@ -1,0 +1,119 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:31",
+    "hipotese": "SQL injection no lookup de email: string não é escapada, permite extrair ou modificar dados via email = 'admin@x.com' OR '1'='1",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "POST /documents/1/share com email='x@x.com' OR '1'='1; a query devolve o primeiro usuário (qualquer um) em vez do específico",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/api/app/routers/shares.py:31"
+      },
+      {
+        "ferramenta": "semgrep (analise de fluxo / taint)",
+        "texto": "O parametro email, controlado pelo cliente na rota share_document, alcanca db.execute() por um caminho que nao passa por bind params.",
+        "local": "app/api/app/routers/shares.py:31"
+      },
+      {
+        "ferramenta": "semgrep (analise de fluxo / taint)",
+        "texto": "O parametro email, controlado pelo cliente na rota share_document, alcanca sqlalchemy.text() sem parametrizacao. A string vai ao banco praticamente inalterada, entao quem controla email controla o SQL.",
+        "local": "app/api/app/routers/shares.py:31"
+      }
+    ],
+    "_corroborado_externo": true,
+    "_duplicatas": [
+      {
+        "id": "padroes_01",
+        "categoria": "padroes",
+        "confianca": "alta",
+        "hipotese": "SQL cru em texto simples violando convenção de persistência via ORM"
+      },
+      {
+        "id": "vazamento_03",
+        "categoria": "vazamento_de_contexto",
+        "confianca": "alta",
+        "hipotese": "Busca do destinatário por email usa string interpolation SQL cru ao invés de parâmetros, permitindo SQL injection"
+      }
+    ],
+    "_corroborado": true
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/api/app/routers/shares.py:36-40",
+    "hipotese": "Verificação de duplicação usa raw SQL e não impede race condition: duas requisições simultâneas passam ambas pelo COUNT(*)==0 antes de qualquer uma inserir",
+    "arbitro": null,
+    "provado_se": "POST /documents/1/share com email=x@x.com duas vezes em paralelo; SELECT count(*) em shares para (doc_id=1, user=x) devolve 2, deveria ser 1",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_01",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:30",
+    "hipotese": "email do usuário é concatenado diretamente em SQL cru sem parametrização; usuário malicioso pode injetar SQL no campo email",
+    "arbitro": {
+      "regra": "Persistência passa pelos modelos do ORM; não há SQL cru no app",
+      "onde": "docs/REFERENCE_GUIDE.md:70"
+    },
+    "provado_se": "email contendo ' OR '1'='1 é enviado para share; a query executa injeção SQL e retorna usuários não pretendidos",
+    "confianca": "alta",
+    "_scanner": [
+      {
+        "ferramenta": "bandit (analise estatica de seguranca)",
+        "texto": "Possible SQL injection vector through string-based query construction.",
+        "local": "app/api/app/routers/shares.py:31"
+      },
+      {
+        "ferramenta": "semgrep (analise de fluxo / taint)",
+        "texto": "O parametro email, controlado pelo cliente na rota share_document, alcanca db.execute() por um caminho que nao passa por bind params.",
+        "local": "app/api/app/routers/shares.py:31"
+      },
+      {
+        "ferramenta": "semgrep (analise de fluxo / taint)",
+        "texto": "O parametro email, controlado pelo cliente na rota share_document, alcanca sqlalchemy.text() sem parametrizacao. A string vai ao banco praticamente inalterada, entao quem controla email controla o SQL.",
+        "local": "app/api/app/routers/shares.py:31"
+      }
+    ],
+    "_corroborado_externo": true
+  },
+  {
+    "id": "injection_02",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:54-60",
+    "hipotese": "documento título e owner email são recuperados do banco e retornados ao usuário sem validação de que o documento foi realmente compartilhado com ele; lógica de autorização está quebrada neste endpoint",
+    "arbitro": null,
+    "provado_se": "usuário C tenta GET /shared-with-me; query retorna documentos que ele não foi adicionado à tabela share; resposta contém título e email de documentos não compartilhados com C",
+    "confianca": "alta"
+  },
+  {
+    "id": "injection_03",
+    "categoria": "injection",
+    "local": "app/api/app/routers/shares.py:84-95",
+    "hipotese": "endpoint GET /shared/{doc_id} valida apenas se um share existe para qualquer usuário do documento, não se o share é para o usuário atual; terceiro usuário C consegue ler documento compartilhado entre A e B",
+    "arbitro": {
+      "regra": "Um usuário pode ler um documento compartilhado com ele. Quem não é dono nem destinatário não pode ler",
+      "onde": "docs/REVIEW_TASK.md:43"
+    },
+    "provado_se": "A compartilha doc D com B; C tenta GET /shared/{D}; resposta contém title e content de D mesmo que C não esteja em nenhum share de D",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/api/app/routers/shares.py:17",
+    "hipotese": "endpoint novo não devolve schema Pydantic declarado em schemas.py",
+    "arbitro": {
+      "regra": "Todo endpoint devolve um schema Pydantic de schemas.py",
+      "onde": "docs/REFERENCE_GUIDE.md:71"
+    },
+    "provado_se": "grep por 'response_model' no endpoint POST /documents/{doc_id}/share ausente; retorna dict literal {'document_id': ..., 'shared_with_user_id': ...} em vez de usar schema declarado em schemas.py como fazem os endpoints existentes",
+    "confianca": "alta"
+  }
+]

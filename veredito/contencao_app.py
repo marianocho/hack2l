@@ -228,6 +228,19 @@ def banco_em_uso_pela_api() -> str | None:
 
 
 def aponta_api_para(banco: str, override: Path) -> None:
+    """⚠️ RECRIAR O CONTAINER RELE O AMBIENTE INTEIRO, nao so' a DATABASE_URL.
+
+    Medido em 14/08, e custou meia hora de diagnostico: o `.env` do repositorio
+    alvo tinha sido editado depois de o app subir, com uma chave errada no
+    OPENAI_API_KEY. O app rodava bem porque containers so' releem `.env` quando
+    sao recriados. A contencao recriou -- e a edicao pendente entrou em vigor no
+    meio da rodada.
+
+    Ou seja: a contencao pode ATIVAR mudanca de configuracao que estava parada,
+    e o sintoma aparece depois, longe da causa. Nao ha o que consertar aqui (e'
+    como o compose funciona), mas quem for depurar "o app quebrou durante a
+    rodada" tem que olhar o `.env` do alvo antes de olhar a contencao.
+    """
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(_OVERRIDE.format(banco=banco), encoding="utf-8")
     r = _compose_com_override(override, "up", "-d", "--force-recreate", "api",

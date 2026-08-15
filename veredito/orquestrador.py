@@ -74,8 +74,21 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
         # Afinar o advogado nao pode custar outra rodada de promotores.
         print(f"reusando {caminho.name} (--reusar)")
         try:
-            return [a for a in json.loads(caminho.read_text(encoding="utf-8"))
-                    if isinstance(a, dict)]
+            brutas = [a for a in json.loads(caminho.read_text(encoding="utf-8"))
+                      if isinstance(a, dict)]
+            # 🚨 Grava a propria copia, e nao so' consome a da anterior.
+            #
+            # Medido em 14/08: a rodada que morreu na chave de API tinha reusado,
+            # entao nao gravou nada -- e a rodada SEGUINTE, tambem com --reusar,
+            # olhou so' para ela, nao achou lista, e rodou os promotores de novo
+            # em silencio. Uma rodada falha no meio quebrava a corrente.
+            #
+            # E o motivo maior: pasta de rodada tem que ser autossuficiente. Sem
+            # isto, quem abre a pasta de uma rodada reusada nao consegue saber
+            # de que acusacoes ela partiu sem adivinhar de quem ela herdou.
+            (cfg.RODADA / "acusacoes_brutas.json").write_text(
+                json.dumps(brutas, indent=2, ensure_ascii=False), encoding="utf-8")
+            return brutas
         except (OSError, json.JSONDecodeError) as e:
             print(f"  ilegivel ({e}), rodando os promotores", file=sys.stderr)
     # O contexto do repo entra aqui, em tempo de execucao, e nao chumbado nas
@@ -166,6 +179,19 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     # rodada condenada. Em 10/08 a worktree estava corrompida e o advogado
     # devolveu PROVADO com TODAS as chamadas falhando -- infraestrutura podre
     # virando veredito positivo. A R3b do juiz pega depois; isto pega antes.
+    # A API primeiro: e' a unica coisa do pre-voo que CUSTA, e por isso a
+    # primeira que tem que responder. Ate' 14/08 ela era a unica que nao era
+    # conferida -- e foi exatamente ela que caiu.
+    api_ok, api_detalhe = advogado.sonda_api()
+    print(f"  {'ok ' if api_ok else 'FALHOU'} {'api anthropic':16} {api_detalhe[:90]}")
+    if not api_ok:
+        raise SystemExit(
+            f"pre-voo falhou na API da Anthropic: {api_detalhe}\n"
+            "A rodada nao comeca: sem modelo nao ha promotor nem advogado, e "
+            "seguir produziria uma lista de INCONCLUSIVOs de autenticacao que "
+            "nao diz nada sobre o codigo."
+        )
+
     sonda = ferramentas.autoteste()
     for nome, res in sonda["ferramentas"].items():
         print(f"  {'ok ' if res['ok'] else 'FALHOU'} {nome:16} {res['detalhe'][:90]}")
