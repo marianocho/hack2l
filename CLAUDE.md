@@ -57,9 +57,11 @@ Mariano estiver por perto; a URL antiga redireciona.
 
 ⚠️ **Os quatro PRs são ramos, e um `clone` raso ou de um ramo só não os traz.**
 Sem eles não há o que medir — é `git clone` normal, ou `git fetch origin
-'+refs/heads/*:refs/remotes/origin/*'` se já existir uma cópia parcial. Mesmas invariantes de isolamento, substantivos diferentes: se
-tivesse a forma do desafio, os defeitos plantados cairiam exatamente onde as
-lentes já sabem olhar, e a medição seria o nosso próprio reflexo.
+'+refs/heads/*:refs/remotes/origin/*'` se já existir uma cópia parcial.
+
+Mesmas invariantes de isolamento do desafio, substantivos diferentes: se tivesse
+a forma dele, os defeitos plantados cairiam exatamente onde as lentes já sabem
+olhar, e a medição seria o nosso próprio reflexo.
 
 O ramo `main` está **conferido limpo** (11 asserções de isolamento contra o app
 rodando). Isso é pré-requisito: se o `main` tivesse defeito, os plantados nos
