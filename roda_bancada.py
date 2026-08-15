@@ -127,6 +127,47 @@ def roda(ramo: str, top_n: int) -> dict:
     }
 
 
+def _texto(a: dict) -> str:
+    """Os campos SEMANTICOS de uma acusacao -- `id` e `categoria` de fora.
+
+    🚨 A versao anterior casava as pistas contra `str(a)`, o dicionario inteiro.
+    Ali dentro vao `"id": "injection_01"` e `"categoria": "injection"`, entao
+    qualquer pista parecida com um nome de lente casaria com TODA acusacao
+    daquela lente, em qualquer PR. A pista mediria de qual promotor a acusacao
+    veio, nao do que ela fala -- o primo do padrao de bug, metrica medindo outra
+    coisa, dentro do proprio instrumento de medicao.
+    """
+    arb = a.get("arbitro") or {}
+    return " ".join(str(x) for x in (
+        a.get("hipotese"), a.get("local"), a.get("provado_se"),
+        arb.get("regra") if isinstance(arb, dict) else arb))
+
+
+def alvos_do(pr: dict) -> list[dict]:
+    """Os defeitos plantados NESTE PR. Normalmente um; o do race tem dois.
+
+    🚨 O PR 3 tem um defeito acidental (`convidado_por` fora do contrato de
+    resposta) que eu plantei sem querer ao alargar a janela do race, e que o
+    Veredito achou sozinho em 15/08. O gabarito registrou os dois; este runner
+    contava um so'. Com "houve algum PROVADO" como criterio, o PR passava tendo
+    achado metade -- e passaria igual se tivesse achado a metade errada.
+
+    A chave e' procurada pelo SUFIXO porque no YAML ela vem com um emoji na
+    frente, e depender do prefixo exato e' checagem por convencao de string.
+    """
+    alvos = []
+    if pr.get("defeito"):
+        alvos.append({"nome": pr.get("nome"), "esperado": pr["esperado"],
+                      "pistas": pr.get("pistas") or []})
+    acidental = next((v for k, v in pr.items()
+                      if k.endswith("defeito_acidental") and isinstance(v, dict)), None)
+    if acidental:
+        alvos.append({"nome": acidental.get("nome"),
+                      "esperado": acidental.get("esperado") or pr["esperado"],
+                      "pistas": acidental.get("pistas") or []})
+    return alvos
+
+
 def confronta(pr: dict, saida: dict) -> dict:
     """O que o Veredito disse contra o que o gabarito diz.
 
@@ -139,30 +180,61 @@ def confronta(pr: dict, saida: dict) -> dict:
     Medido em 15/08 no PR do race: oito acusacoes brutas nomearam o defeito e
     nenhuma entrou no TOP_N=3. Relatar aquilo como "o produto errou" seria
     [[metrica que mede a coisa errada]] -- ele nunca chegou a opinar.
+
+    🚨 E o criterio de ACERTO era generoso do mesmo jeito. Ele era "existe pelo
+    menos um PROVADO nesta rodada" -- que e' verdade tambem quando o PROVADO
+    fala de outra coisa. As pistas, que sabem apontar o defeito plantado, so'
+    eram consultadas no ramo do FRACASSO: a guarda existia e ficava muda
+    exatamente no caso perigoso, o falso ACERTO. E' o padrao de bug do projeto
+    dentro da regua que deveria medi-lo.
+
+    Agora cada defeito plantado precisa de um veredito com o desfecho esperado
+    SOBRE UMA ACUSACAO QUE FALA DELE. Criterio mais duro, e o unico que sustenta
+    a frase que a bancada existe para permitir.
     """
-    vs = saida.get("veredictos") or []
-    contagem = {}
-    for v in vs:
-        contagem[v["veredito"]] = contagem.get(v["veredito"], 0) + 1
-
-    esperado = pr["esperado"]
-    if esperado == "REFUTADO":
-        bateu = contagem.get("PROVADO", 0) == 0
-    else:
-        bateu = contagem.get(esperado, 0) > 0
-
-    # O defeito plantado chegou a ser acusado? E chegou a ser JULGADO?
     import re
-    pistas = pr.get("pistas") or []
+    from collections import Counter
+
+    vs = saida.get("veredictos") or []
+    contagem = dict(Counter(v["veredito"] for v in vs))
     brutas = saida.get("brutas") or []
     escolhidas = {a.get("id") for a in (saida.get("acusacoes") or [])}
-    acusaram = [a for a in brutas
-                if pistas and re.search("|".join(pistas), str(a), re.I)]
-    julgaram = [a for a in acusaram if a.get("id") in escolhidas]
+    por_id = {v.get("id"): v for v in vs}
 
-    return {"ramo": pr["ramo"], "esperado": esperado, "contagem": contagem,
+    achados = []
+    for alvo in alvos_do(pr):
+        if not alvo["pistas"]:
+            # Sem pistas nao da' para saber se o PROVADO fala DESTE defeito, e
+            # cair no criterio antigo aqui devolveria o falso acerto pela porta
+            # dos fundos. Ausencia de gabarito e' erro de operador, nao licenca.
+            raise SystemExit(
+                f"{pr['ramo']}: o defeito {alvo['nome']!r} nao tem `pistas` no "
+                "bancada_gabarito.yml. Sem elas nao da' para distinguir 'achou "
+                "o defeito plantado' de 'produziu algum PROVADO'."
+            )
+        rx = re.compile("|".join(alvo["pistas"]), re.I)
+        acusaram = [a for a in brutas if rx.search(_texto(a))]
+        julgaram = [a for a in acusaram if a.get("id") in escolhidas]
+        bateram = [a for a in julgaram
+                   if (por_id.get(a.get("id")) or {}).get("veredito") == alvo["esperado"]]
+        achados.append({
+            "nome": alvo["nome"], "esperado": alvo["esperado"],
+            "acusaram": len(acusaram), "julgaram": len(julgaram),
+            "bateu": bool(bateram),
+        })
+
+    if not achados:
+        # Controle negativo: nao ha defeito a apontar, entao o criterio e' a
+        # AUSENCIA de condenacao. Inalterado -- e' a metade ja defensavel.
+        bateu = contagem.get("PROVADO", 0) == 0
+    else:
+        bateu = all(x["bateu"] for x in achados)
+
+    return {"ramo": pr["ramo"], "esperado": pr["esperado"], "contagem": contagem,
             "bateu": bateu, "acusacoes_brutas": len(brutas),
-            "acusaram_o_alvo": len(acusaram), "julgaram_o_alvo": len(julgaram),
+            "achados": achados,
+            "acusaram_o_alvo": sum(x["acusaram"] for x in achados),
+            "julgaram_o_alvo": sum(x["julgaram"] for x in achados),
             "custo": saida.get("custo", {})}
 
 
@@ -184,15 +256,22 @@ def main() -> int:
         veio = ", ".join(f"{k}:{v}" for k, v in sorted(l["contagem"].items())) or "(nada)"
         print(f"{l['ramo']:28} {l['esperado']:14} {veio:34} "
               f"{'ok' if l['bateu'] else 'NAO'}")
-        # A distincao que importa quando NAO bate.
-        if not l["bateu"] and l.get("acusaram_o_alvo"):
-            if not l.get("julgaram_o_alvo"):
-                print(f"{'':28} [!] o defeito foi ACUSADO "
-                      f"{l['acusaram_o_alvo']}x e NAO entrou no TOP_N -- falha "
-                      f"de RANKING, nao do veredito. Suba --top-n.")
+        # Um PR com dois defeitos precisa dizer O QUE achou, nao so' quantos:
+        # "1 de 2" com a linha resumida esconde qual metade ficou de fora.
+        for x in l.get("achados", []):
+            print(f"{'':28} {'ok ' if x['bateu'] else 'NAO'} {x['nome']}")
+            # A distincao que importa quando NAO bate, agora por defeito.
+            if x["bateu"]:
+                continue
+            if x["acusaram"] and not x["julgaram"]:
+                print(f"{'':32} [!] ACUSADO {x['acusaram']}x e nao entrou no "
+                      f"TOP_N -- falha de RANKING, nao do veredito. Suba --top-n.")
+            elif x["julgaram"]:
+                print(f"{'':32} [!] julgado {x['julgaram']}x e o veredito "
+                      f"divergiu de {x['esperado']} -- sinal sobre o produto.")
             else:
-                print(f"{'':28} [!] o defeito foi julgado e o veredito divergiu "
-                      f"-- este e' sinal sobre o produto.")
+                print(f"{'':32} [!] NENHUMA acusacao bruta falou dele -- falha "
+                      f"de COBERTURA, e o conserto e' outro (ver a escada).")
 
     entrada = sum(l["custo"].get("tokens_entrada", 0) for l in linhas)
     saida_t = sum(l["custo"].get("tokens_saida", 0) for l in linhas)

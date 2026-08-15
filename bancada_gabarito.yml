@@ -39,6 +39,10 @@ prs:
     regra_violada: "docs/REGRAS.md -- Persistencia: toda consulta passa pelo ORM com parametros ligados"
     esperado: PROVADO
     ao_alcance: true
+    # Como o runner reconhece que ESTE defeito foi acusado e julgado. Validadas
+    # em 15/08 contra as acusacoes reais das quatro rodadas: 15 de 24 aqui,
+    # ZERO nos outros tres PRs.
+    pistas: ["interpola", "concatena", "parametriz", "escape", "raw", "'1'="]
     como_provar: >-
       leitura pura, sem alterar estado. clara participa de UM projeto; com o
       payload ela ve TRES. Prova diferencial pela invariante "filtrar projetos
@@ -64,6 +68,14 @@ prs:
     regra_violada: "docs/REGRAS.md -- Acesso: ler uma tarefa exige poder ver o projeto; o identificador nao e' segredo"
     esperado: PROVADO
     ao_alcance: true
+    # Validadas em 15/08: 5 de 13 aqui, e as CINCO falam da verificacao de
+    # visibilidade removida. Zero no PR limpo e zero no do race.
+    #
+    # ⚠️ Casam 5 vezes tambem no PR do SQLi, onde `_projetos_visiveis` aparece
+    # por outro motivo. Nao contamina a conta -- as pistas de um PR so' rodam
+    # contra as acusacoes DELE -- mas fica registrado em vez de parecer exato.
+    pistas: ["le_tarefa", "projetos_visiveis", "qualquer tarefa", "ler qualquer",
+             "tarefa de projeto", "visibilidade de projeto", "sem ser membro"]
     como_provar: >-
       GET puro, sem alterar estado. davi nao possui nem participa de nada e le
       a tarefa 1 da ana, com o detalhe sensivel. Prova diferencial pela
@@ -95,6 +107,10 @@ prs:
       onde: "app/main.py, o `convidado_por` na resposta de adiciona_membro"
       regra_violada: "docs/REGRAS.md -- todo endpoint devolve apenas os campos do modelo declarado"
       esperado: PROVADO
+      # Sem pistas PROPRIAS este defeito seria invisivel para o runner: as do
+      # race nao casam com ele, e "houve algum PROVADO" daria o PR por acertado
+      # tendo achado so' metade. Validadas: 5 de 25 aqui, zero nos outros tres.
+      pistas: ["convidado_por", "contrato de resposta", "campo.{0,20}resposta"]
       verificado_em_15_08: >-
         provado com teste diferencial (passa no base, falha no head) e arbitro
         com procedencia. O Veredito achou sem ninguem apontar.
@@ -122,8 +138,12 @@ prs:
     ao_alcance: parcial               # a consequencia sim; o race em si, nao
     # Como o runner reconhece que ESTE defeito foi acusado, para distinguir
     # "nao entrou no TOP_N" de "o veredito divergiu".
-    pistas: ["concorr", "simultan", "race", "toctou", "duplicat", "unicidade",
-             "unique", "constraint", "paralel"]
+    #
+    # ⚠️ `race` leva borda de palavra: solto, ele casa dentro de "trace", e era
+    # exatamente o unico falso positivo no PR limpo quando as pistas foram
+    # medidas em 15/08. Com a borda: 10 de 25 aqui, zero nos outros tres.
+    pistas: ['\bconcorr', '\bsimultan', '\brace\b', "toctou", "duplicat",
+             "unicidade", "unique", "constraint", '\bparalel']
     o_que_ele_fez_em_15_08: >-
       PROVADO em MEDIA, com a limitacao declarada no proprio motivo: "no commit
       base o banco recusa uma segunda linha identica com IntegrityError, e no

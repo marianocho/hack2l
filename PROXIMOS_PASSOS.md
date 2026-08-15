@@ -252,19 +252,42 @@ teste**) teriam abortado no primeiro segundo em vez de gastar US$2.
 
 #### 🎯 O que falta, e é o topo da fila
 
-**O parecer confessar o escopo** — 30 min. Ele imprime *"3 com parecer, 0
-descartados, 0 inconclusivos"* e **omite que havia 24 suspeitas**. A regra
-central diz que nada é descartado em silêncio, e hoje 21 são.
+✅ **O parecer confessa o escopo** *(15/08)*. Abre com *"25 suspeitas
+levantadas, 8 testadas dentro do orçamento da rodada (TOP_N=8)"*, e a seção
+`LEVANTADAS E NÃO TESTADAS` lista cada uma com posição na fila e motivo.
+`escopo.json` é gravado **antes** do laço caro; as contagens viraram *"das
+examinadas"*, então o cabeçalho parou de implicar completude mesmo sem escopo em
+disco (rodadas anteriores reconstroem a contagem pelas brutas e **dizem** o que
+não dá para reconstruir).
 
-⚠️ A moldura decide: *"24 levantadas, 8 testadas dentro do orçamento"* é escopo;
-*"16 não testadas"* é confissão. Mesmo dado, leitura oposta.
+> ⚠️ E o dado real corrigiu a redação: a 9ª e a 10ª da fila **ganharam** vaga de
+> cota e o teto chegou antes, mas o motivo saía *"vaga da cota"* dentro da lista
+> de não-testadas — o campo descrevia a posição e era lido como a exclusão.
 
-**Corrigir o gabarito do PR 3** para dois defeitos — já feito em
-`bancada_gabarito.yml`, mas o critério de acerto do `roda_bancada.py` ainda
-conta só um.
+✅ **O critério da bancada conta os dois defeitos do PR 3** *(15/08)*. E o
+conserto era maior do que "contar dois": o critério era `bateu = existe algum
+PROVADO`, que é verdade também quando o PROVADO fala de outra coisa. **As
+`pistas` existiam e só eram consultadas no ramo do fracasso** — a guarda ficava
+muda exatamente no falso ACERTO. É o padrão de bug do projeto **dentro da régua
+que deveria medi-lo**.
+
+Agora cada defeito plantado exige um veredito com o desfecho esperado *sobre uma
+acusação que fala dele*; defeito sem `pistas` **levanta** em vez de pontuar
+generoso; e o casamento é contra os campos semânticos, não contra `str(a)` — ali
+dentro vão `"id": "injection_01"` e `"categoria": "injection"`, e a pista mediria
+de qual promotor a acusação veio.
+
+**Reaplicado offline às quatro rodadas de 15/08: 4 de 4**, com o PR 3 confirmando
+os dois defeitos separadamente. ⚠️ Não é medição nova — são as mesmas rodadas
+repontuadas pelo critério novo, sem gastar.
+
+As pistas foram **validadas contra as acusações reais** das quatro rodadas, e o
+PR limpo dá **zero em todas as quatro** — o controle negativo que importa. (A
+pista `race` solta casava dentro de *"trace"*; levou borda de palavra.)
 
 **Rodar de novo com a expansão ligada** (~US$1) para ver se ela alcança o race
 sem precisar de `--top-n 8`. O contrafactual diz que sim; falta o dado real.
+**É o topo da fila agora.**
 
 ### 🩺 Versão reduzida: QUATRO PRs primeiro
 
