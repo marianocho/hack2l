@@ -31,9 +31,33 @@ git.
 
 ### A `bancada\` é o segundo projeto, e existe para medir
 
-Repositório git próprio, local, sem remoto ainda. App de **projetos, tarefas e
-membros** — domínio deliberadamente diferente do desafio, que é documentos
-compartilhados. Mesmas invariantes de isolamento, substantivos diferentes: se
+Repositório git próprio em **`github.com/luisfelp07/bancada`**, **privado**
+*(criado em 15/08)*. App de **projetos, tarefas e membros** — domínio
+deliberadamente diferente do desafio, que é documentos compartilhados.
+
+```bash
+git clone https://github.com/luisfelp07/bancada.git
+git clone --branch pr/reconvite-de-membro ...   # os 4 PRs são RAMOS, não tags
+```
+
+🚨 **Sendo privado, quem não é colaborador não enxerga — e o erro mente.** O
+GitHub responde **404**, não 403, para repositório privado sem acesso: a
+mensagem diz *"repository not found"*, que se lê como "não existe" e manda
+procurar no lugar errado. Hoje o único colaborador é `luisfelp07`. Para dar
+acesso a alguém:
+
+```bash
+gh api -X PUT repos/luisfelp07/bancada/collaborators/<usuario>
+```
+
+⚠️ Fica sob `luisfelp07` e não sob `marianocho` porque **conta pessoal não
+aceita repositório criado por terceiro** — nem colaborador do `hack2l` pode. A
+transferência (Settings → General → Transfer ownership) é o caminho quando o
+Mariano estiver por perto; a URL antiga redireciona.
+
+⚠️ **Os quatro PRs são ramos, e um `clone` raso ou de um ramo só não os traz.**
+Sem eles não há o que medir — é `git clone` normal, ou `git fetch origin
+'+refs/heads/*:refs/remotes/origin/*'` se já existir uma cópia parcial. Mesmas invariantes de isolamento, substantivos diferentes: se
 tivesse a forma do desafio, os defeitos plantados cairiam exatamente onde as
 lentes já sabem olhar, e a medição seria o nosso próprio reflexo.
 
