@@ -457,6 +457,48 @@ def consenso(acusacoes: list[dict]) -> dict[str, int]:
     return fora
 
 
+def aglomerados_nao_examinados(brutas: list[dict], julgadas: set[str],
+                               minimo_de_lentes: int = 3) -> list[dict]:
+    """Pontos que VARIAS lentes apontaram e que ninguem chegou a julgar.
+
+    🚨 E' o sinal para gastar mais uma acusacao -- e o unico que sobreviveu a
+    medicao de 15/08.
+
+    O sinal ERRADO seria a taxa de acerto: "7 das 8 provaram, deve haver mais".
+    No PR do race, OITO acusacoes eram o MESMO defeito visto por cinco lentes.
+    Expandir por taxa de acerto gastaria reprovando o que ja se sabe -- e' o
+    motivo de existir o dedup e o MAX_POR_LOCAL.
+
+    O sinal CERTO e' ausencia de exame: um ponto que cinco lentes viram e que
+    nenhuma acusacao julgada tocou e' area cega, nao repeticao.
+
+    ⚠️ Um aglomerado ja julgado NAO conta, mesmo com consenso altissimo. Julgar
+    de novo o mesmo ponto e' exatamente o gasto que isto existe para evitar.
+    """
+    from . import fontes                        # import tardio: evita ciclo
+    con = consenso(brutas)
+    por_id = {a.get("id"): a for a in brutas}
+
+    fora: list[dict] = []
+    for a in brutas:
+        if a.get("id") in julgadas:
+            continue
+        if con.get(a.get("id", ""), 1) < minimo_de_lentes:
+            continue
+        # Alguma JULGADA ja tocou este ponto? Entao nao e' area cega.
+        tocado = any(fontes._mesmo_ponto(a.get("local"), por_id[j].get("local"))
+                     for j in julgadas if j in por_id)
+        if tocado:
+            continue
+        # Um representante por aglomerado: os vizinhos sao a mesma coisa.
+        if any(fontes._mesmo_ponto(a.get("local"), j.get("local")) for j in fora):
+            continue
+        fora.append(a)
+
+    fora.sort(key=lambda a: -con.get(a.get("id", ""), 1))
+    return fora
+
+
 def seleciona(acusacoes: list[dict], teto: int, cotas: dict | None = None,
               max_por_local: int = MAX_POR_LOCAL) -> list[dict]:
     """Escolhe quem vai ao advogado, por COTA de categoria e nao por ordem.

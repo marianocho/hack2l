@@ -336,6 +336,38 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
                 print("    [!] cache_read zero na 1a acusacao -- algo varia no prefixo",
                       flush=True)
 
+        # 🚨 EXPANSAO GUIADA POR AREA CEGA -- dentro da contencao, porque estas
+        # tambem exercitam o app.
+        #
+        # O gatilho e' um ponto que VARIAS lentes apontaram e que NENHUMA
+        # acusacao julgada tocou. Nao e' taxa de acerto: no PR do race de 15/08,
+        # oito acusacoes eram o MESMO defeito visto por cinco lentes, e expandir
+        # por "muitas provaram" gastaria reprovando o que ja se sabe.
+        extras = promotores.aglomerados_nao_examinados(
+            brutas, {v["id"] for v in veredictos}, cfg.EXPANSAO_MIN_LENTES
+        )[:cfg.EXPANSAO_MAX] if cfg.EXPANSAO_MAX > 0 else []
+
+        for i, a in enumerate(extras, 1):
+            print(f"[extra {i}/{len(extras)}] {a.get('id')} -- "
+                  f"{a.get('_lentes_concordam', '?')} lentes viram este ponto e "
+                  f"ninguem julgou", flush=True)
+            with rod.etapa(f"advogado/{a.get('id')}",
+                           entrada={"categoria": a.get("categoria"),
+                                    "arbitro": a.get("arbitro"),
+                                    "local": a.get("local"),
+                                    "_expansao": True}) as et:
+                v = advogado.julga(a, diff, contexto_arquivos)
+                v["_por_expansao"] = True      # rastro: nao veio da cota
+                et.evento("veredito", veredito=v.get("veredito"),
+                          voltas=v.get("voltas"))
+            veredictos.append(v)
+            acusacoes.append(a)
+            (cfg.RODADA / "veredictos.json").write_text(
+                json.dumps(veredictos, indent=2, ensure_ascii=False), encoding="utf-8")
+            (cfg.RODADA / "acusacoes.json").write_text(
+                json.dumps(acusacoes, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"    -> {v['veredito']} em {v['segundos']}s, {v['voltas']} voltas")
+
     _registra_efeito_no_banco(antes_do_banco)
 
     with rod.etapa("juiz") as et:

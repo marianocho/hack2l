@@ -517,6 +517,21 @@ MAX_VOLTAS_LOOP = _VOLTAS_BASE + (0 if BANCO_DE_TESTE_SEMEADO
 
 TIMEOUT_ACUSACAO_S = _i("TIMEOUT_ACUSACAO_S", 180)
 
+# --- expansao guiada por area cega ------------------------------------------
+#
+# Quantas acusacoes EXTRAS a rodada pode gastar num ponto que varias lentes
+# apontaram e que ninguem julgou. Zero desliga.
+#
+# 🚨 O gatilho e' AUSENCIA DE EXAME, nunca taxa de acerto. Medido em 15/08: no
+# PR do race, OITO acusacoes eram o MESMO defeito visto por cinco lentes.
+# Expandir porque "muitas provaram" gastaria reprovando o que ja se sabe.
+#
+# ⚠️ Teto DURO e uma passada so'. Sem isso o mecanismo que decide gastar e' o
+# mesmo que gasta, e uma lente barulhenta faria a rodada crescer sozinha -- o
+# projeto ja topou com isso e foi por isso que nasceu o orcamento por lente.
+EXPANSAO_MAX = _i("EXPANSAO_MAX", 3)
+EXPANSAO_MIN_LENTES = _i("EXPANSAO_MIN_LENTES", 3)
+
 # --- limites ----------------------------------------------------------------
 TIMEOUT_PYTEST_S = _i("TIMEOUT_PYTEST_S", 180)
 TIMEOUT_GIT_S = _i("TIMEOUT_GIT_S", 60)
