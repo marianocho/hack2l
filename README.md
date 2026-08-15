@@ -316,6 +316,35 @@ R2 rebaixa. O sintoma não parece problema de ambiente, parece o produto não
 funcionando. Ela compara os routers do worktree do head com os de dentro do
 container e diz o comando do conserto.
 
+### 🚨 O `.env` é a única fonte — não duplique a chave no sistema
+
+`load_dotenv` roda **sem** `override=True`, então **variável de ambiente já
+definida vence o `.env`**. Isso é de propósito: é o que faz
+`APP_EM_BANCO_DESCARTAVEL=1 python -m veredito.orquestrador` funcionar para uma
+rodada só.
+
+O preço é que uma chave duplicada no sistema **ganha em silêncio**. Medido em
+14/08: a `ANTHROPIC_API_KEY` estava no `.env` **e** na variável de usuário do
+Windows (via `setx`). Ela expirou, trocamos no `.env`, e o 401 continuou
+**idêntico** — porque a do Windows é que valia. Custou quatro tentativas, e o
+sintoma parecia problema de conta.
+
+O pré-voo agora denuncia (só os nomes, nunca os valores):
+
+```
+[!] o .env NAO esta valendo para: ANTHROPIC_API_KEY
+```
+
+Se aparecer e não foi de propósito, apague a duplicata do sistema:
+
+```powershell
+[Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", $null, "User")
+```
+
+Feche e reabra o terminal depois — processo já aberto continua com o valor
+antigo. E confira antes que a chave boa está no `.env`, porque este comando
+apaga a outra cópia.
+
 O benchmark precisa estar no ar para `http_request`:
 
 ```bash

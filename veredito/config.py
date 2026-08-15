@@ -12,10 +12,41 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 RAIZ = Path(__file__).resolve().parents[1]
+
+# ⚠️ SEM override=True, de proposito. O padrao do dotenv e' NAO sobrescrever
+# variavel de ambiente que ja existe -- e e' isso que faz `APP_EM_BANCO_
+# DESCARTAVEL=1 py -3.12 ...` funcionar na linha de comando. Ligar o override
+# mataria essa forma de rodar.
+#
+# O preco e' que uma variavel do sistema VENCE o .env, em silencio. Quem paga
+# esse preco tem que ser avisado: `variaveis_ensombradas` abaixo.
 load_dotenv(RAIZ / ".env")
+
+
+def variaveis_ensombradas() -> list[str]:
+    """Nomes cujo valor no .env NAO e' o que esta valendo.
+
+    🚨 Custou quatro tentativas em 14/08. A chave da Anthropic estava na
+    variavel de ambiente do Windows (via `setx`) E no .env. A do Windows vencia.
+    Trocar o .env nao mudava nada, o erro continuava IDENTICO, e nada apontava
+    para a causa -- o unico sinal era um 401 que parecia problema de conta.
+
+    Devolve so' os NOMES. Valor de variavel ensombrada e' quase sempre segredo,
+    e imprimir os dois lados para comparar seria vazar a chave no log da rodada.
+    """
+    try:
+        do_arquivo = dotenv_values(RAIZ / ".env") or {}
+    except OSError:
+        return []
+    return sorted(
+        nome for nome, valor in do_arquivo.items()
+        if valor is not None
+        and os.environ.get(nome) is not None
+        and os.environ[nome] != valor
+    )
 
 
 def _s(nome: str, padrao: str) -> str:

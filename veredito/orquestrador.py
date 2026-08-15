@@ -179,6 +179,17 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     # rodada condenada. Em 10/08 a worktree estava corrompida e o advogado
     # devolveu PROVADO com TODAS as chamadas falhando -- infraestrutura podre
     # virando veredito positivo. A R3b do juiz pega depois; isto pega antes.
+    # Antes de tudo: alguem esta valendo em vez do .env? Nao e' fatal (rodar com
+    # `APP_EM_BANCO_DESCARTAVEL=1` na linha de comando e' legitimo e cai aqui),
+    # mas quando e' a chave da API isso custa horas -- trocar o .env nao muda
+    # nada e o erro continua identico.
+    ensombradas = cfg.variaveis_ensombradas()
+    if ensombradas:
+        print(f"  [!] o .env NAO esta valendo para: {', '.join(ensombradas)}")
+        print("      uma variavel de ambiente ja definida vence o .env "
+              "(load_dotenv nao sobrescreve). Se nao foi de proposito, apague a "
+              "do sistema -- veja o README.")
+
     # A API primeiro: e' a unica coisa do pre-voo que CUSTA, e por isso a
     # primeira que tem que responder. Ate' 14/08 ela era a unica que nao era
     # conferida -- e foi exatamente ela que caiu.
