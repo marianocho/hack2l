@@ -34,6 +34,24 @@ app:
   # depois de reiniciar o container -- "subiu" nao e' "no ar".
   saude: /health
 
+  # O Veredito levanta o app se ele nao estiver no ar.
+  #
+  # Ligar e' seguro mesmo com o app ja rodando: nesse caso vira no-op completo
+  # -- nao sobe, nao prepara, nao derruba. E ele NUNCA derruba o que nao subiu:
+  # app de pe e' do operador, talvez com o navegador aberto nele.
+  #
+  # Na CI isto e' obrigatorio -- la' ninguem sobe nada a mao.
+  subir: true
+
+  # Teto de espera pela rota de saude. A api do desafio tem warm-up de ~30s.
+  espera_s: 120
+
+  # Rodado DEPOIS de subir, e SO' se nos subimos. O seed do desafio recria os
+  # quatro usuarios e os cinco documentos -- rodar isso num app que ja estava
+  # servindo apagaria dado que nao e' nosso.
+  preparar:
+    - ["run", "--rm", "seed"]
+
 banco:
   servico: db          # nome do servico no compose
   usuario: kb

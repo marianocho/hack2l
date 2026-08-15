@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from . import (advogado, config as cfg, contencao_app, ferramentas, fontes,
-               juiz, llm_alvo, projeto, promotores, tracing)
+               juiz, llm_alvo, projeto, promotores, subida, tracing)
 
 
 def _carimbo_da_rodada() -> str:
@@ -158,6 +158,15 @@ def _registra_efeito_no_banco(antes: dict) -> dict:
 
 def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
          com_scanner: bool = True) -> dict:
+    # O app de pe envolve a rodada INTEIRA -- o pre-voo ja sonda `http_request`,
+    # entao levantar depois dele seria abortar por uma coisa que a gente mesmo
+    # ia consertar duas linhas adiante.
+    with subida.app_no_ar() as estado_do_app:
+        return _roda(manual, top_n, reusar, com_scanner, estado_do_app)
+
+
+def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
+          estado_do_app: dict) -> dict:
     cfg.prepara_pastas()
     if not cfg.ANTHROPIC_API_KEY:
         raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
@@ -187,6 +196,13 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     # Descobrir no fim que faltava conta e' pagar US$1,30 para aprender uma coisa
     # que o veredito.yml ja sabia.
     print(f"projeto: {cfg.PROJETO_YML or '(sem veredito.yml -- usando os padroes)'}")
+    if estado_do_app.get("subimos"):
+        print(f"  app: subimos nesta rodada"
+              + (f", preparacao: {estado_do_app['preparacao']}"
+                 if estado_do_app.get("preparacao") else "")
+              + " -- sera' derrubado no fim")
+    elif estado_do_app.get("pedido"):
+        print("  app: ja estava no ar, nao tocamos (nao derrubamos o que nao subimos)")
     for aviso in projeto.avisos(cfg.PROJETO, cfg.CONTEXTO):
         print(f"  [!] {aviso}")
 

@@ -303,6 +303,29 @@ APP_API_URL = _s("APP_API_URL", _app.get("api") or "http://127.0.0.1:8000").rstr
 APP_WEB_URL = _s("APP_WEB_URL", _app.get("web") or "http://127.0.0.1:3000").rstrip("/")
 APP_SAUDE = _s("APP_SAUDE", _app.get("saude") or "/health")
 
+# --- levantar o app, quando ele nao esta no ar ------------------------------
+#
+# Padrao FALSO quando o yml nao diz nada: e' o comportamento de hoje, em que o
+# app e' responsabilidade de fora. Projeto que quer o contrario declara.
+#
+# Ligar e' seguro mesmo com o app ja rodando: `subida.app_no_ar` vira no-op
+# completo nesse caso -- nao sobe, nao prepara, nao derruba. Ver as duas regras
+# no cabecalho daquele modulo.
+APP_SUBIR = _b("APP_SUBIR", bool(_app.get("subir")))
+
+# Segundos de espera pela rota de saude. Container subindo nao e' app no ar, e a
+# diferenca no desafio e' o warm-up de ~30s da api.
+APP_ESPERA_S = _i("APP_ESPERA_S", int(_app.get("espera_s") or 120))
+
+# Comandos de compose rodados DEPOIS de subir -- seed, migration. Lista de
+# listas de argumentos, nunca string com shell: vem de arquivo do projeto
+# revisado, e passar por shell seria executar texto de terceiro com as nossas
+# permissoes.
+#
+# 🚨 So' roda se NOS levantamos os containers. Seed costuma RESETAR o banco;
+# rodar num app que ja estava servindo apagaria dado que nao e' nosso.
+APP_PREPARAR = _app.get("preparar") or []
+
 # {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
 # e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e
 # parecer que o produto nao funciona.
