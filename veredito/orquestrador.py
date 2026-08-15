@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from . import (advogado, config as cfg, contencao_app, ferramentas, fontes,
-               juiz, llm_alvo, promotores, tracing)
+               juiz, llm_alvo, projeto, promotores, tracing)
 
 
 def _carimbo_da_rodada() -> str:
@@ -183,6 +183,13 @@ def roda(manual: bool = False, top_n: int | None = None, reusar: bool = False,
     # `APP_EM_BANCO_DESCARTAVEL=1` na linha de comando e' legitimo e cai aqui),
     # mas quando e' a chave da API isso custa horas -- trocar o .env nao muda
     # nada e o erro continua identico.
+    # O que ESTE projeto nao vai conseguir provar, dito antes de gastar.
+    # Descobrir no fim que faltava conta e' pagar US$1,30 para aprender uma coisa
+    # que o veredito.yml ja sabia.
+    print(f"projeto: {cfg.PROJETO_YML or '(sem veredito.yml -- usando os padroes)'}")
+    for aviso in projeto.avisos(cfg.PROJETO, cfg.CONTEXTO):
+        print(f"  [!] {aviso}")
+
     ensombradas = cfg.variaveis_ensombradas()
     if ensombradas:
         print(f"  [!] o .env NAO esta valendo para: {', '.join(ensombradas)}")

@@ -14,6 +14,8 @@ from pathlib import Path
 
 from dotenv import dotenv_values, load_dotenv
 
+from . import projeto
+
 RAIZ = Path(__file__).resolve().parents[1]
 
 # ⚠️ SEM override=True, de proposito. O padrao do dotenv e' NAO sobrescrever
@@ -67,9 +69,31 @@ def _i(nome: str, padrao: int) -> int:
 
 # --- repo sob revisao -------------------------------------------------------
 DESAFIO = (RAIZ / _s("CHALLENGE_REPO", "../hack2l-challenge")).resolve()
-COMPOSE = DESAFIO / "docker-compose.yml"
 BRANCH_PR = _s("PR_BRANCH", "pr/document-sharing")
 BRANCH_BASE = _s("BASE_BRANCH", "main")
+
+# --- o projeto sob revisao, descrito por ele mesmo --------------------------
+#
+# 🚨 Ate' 14/08 as contas de teste estavam CHUMBADAS neste arquivo, e era o que
+# fazia metade do produto so' funcionar no desafio: a prova ponta a ponta --
+# unica via que sustenta CRITICA junto com o arbitro -- dependia de quatro
+# emails escritos no NOSSO codigo.
+#
+# A divisao: `veredito.yml` descreve o PROJETO (como sobe, como autentica, onde
+# e' seguro escrever); o `.env` descreve como NOS operamos (modelo, orcamento,
+# TOP_N, timeouts). O primeiro muda a cada cliente, o segundo nao.
+#
+# Precedencia: variavel de ambiente > veredito.yml > padrao daqui. Assim
+# `APP_API_URL=... py -3.12 ...` continua servindo para um teste pontual.
+#
+# Carregado AQUI, logo depois de DESAFIO, porque quase tudo abaixo consome.
+PROJETO_YML = projeto.caminho(DESAFIO, _s("VEREDITO_YML", ""))
+PROJETO = projeto.carrega(PROJETO_YML)
+
+_app = PROJETO.get("app") or {}
+_banco = PROJETO.get("banco") or {}
+
+COMPOSE = DESAFIO / (_app.get("compose") or "docker-compose.yml")
 
 # Worktrees ficam FORA dos dois repos: dentro do nosso virariam commit, dentro
 # do deles sujariam a arvore que o app esta servindo.
@@ -183,7 +207,8 @@ usa_ultima_rodada()
 #
 # ⚠️ Isto protege o BANCO. Uma suite que dispare email de verdade ou chame API
 # de pagamento continua fazendo -- banco e' o caso comum, nao blindagem total.
-BANCO_DESCARTAVEL = _s("BANCO_DESCARTAVEL", "kb_veredito")
+BANCO_DESCARTAVEL = _s("BANCO_DESCARTAVEL",
+                       _banco.get("descartavel_testes") or "kb_veredito")
 
 
 # --- isolamento de rede no lado BASE ----------------------------------------
@@ -210,7 +235,7 @@ BANCO_DESCARTAVEL = _s("BANCO_DESCARTAVEL", "kb_veredito")
 # 🚫 E o inconclusivo PRECISA ser rotulado. Inconclusivo em silencio incha a
 # lista e faz o parecer parecer fraco por culpa nossa -- "uma lista de
 # inconclusivos inflada enfraquece o parecer tanto quanto uma vazia".
-REDE_ISOLADA = _s("REDE_ISOLADA", "veredito_isolada")
+REDE_ISOLADA = _s("REDE_ISOLADA", PROJETO.get("rede_isolada") or "veredito_isolada")
 
 # A escotilha. Efeito irreversivel se pergunta ANTES, nao se descobre depois --
 # e quem tem contexto para decidir e' o dono do repositorio, nao o agente.
@@ -240,7 +265,16 @@ def url_do_banco_descartavel() -> str:
 # Por isso ele e' um ARQUIVO, e por isso pode ser vazio: repositorio que nao
 # documenta os proprios criterios roda sem contexto, os promotores acusam do
 # mesmo jeito, e o arbitro sai `null` -- que e' a resposta honesta.
-CONTEXTO = Path(_s("CONTEXTO_REPO", str(RAIZ / "contexto" / "hack2l.md")))
+# O `contexto:` do veredito.yml e' relativo ao ARQUIVO, nao ao cwd nem a' nossa
+# raiz: quem escreve o yml esta pensando na arvore dele, e caminho relativo que
+# muda de significado conforme quem chama e' fonte garantida de "sumiu em
+# silencio" -- que aqui custaria o arbitro inteiro sair `null`.
+_ctx_yml = PROJETO.get("contexto")
+_ctx_padrao = (
+    (PROJETO_YML.parent / _ctx_yml).resolve() if (_ctx_yml and PROJETO_YML)
+    else RAIZ / "contexto" / "hack2l.md"
+)
+CONTEXTO = Path(_s("CONTEXTO_REPO", str(_ctx_padrao)))
 
 
 def contexto_do_repo() -> str | None:
@@ -265,16 +299,23 @@ def contexto_do_repo() -> str | None:
 # Isso nao da ConnectionRefused, da ReadTimeout -- entao cada chamada pendura o
 # timeout inteiro antes de falhar, e a acusacao vira INCONCLUSIVO por
 # infraestrutura. Em massa, a categoria de seguranca esvaziaria parecendo rigor.
-APP_API_URL = _s("APP_API_URL", "http://127.0.0.1:8000").rstrip("/")
-APP_WEB_URL = _s("APP_WEB_URL", "http://127.0.0.1:3000").rstrip("/")
+APP_API_URL = _s("APP_API_URL", _app.get("api") or "http://127.0.0.1:8000").rstrip("/")
+APP_WEB_URL = _s("APP_WEB_URL", _app.get("web") or "http://127.0.0.1:3000").rstrip("/")
+APP_SAUDE = _s("APP_SAUDE", _app.get("saude") or "/health")
 
-# Os quatro usuarios do seed. carol nao possui nada -- e' o controle negativo.
-USUARIOS = {
+# {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
+# e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e
+# parecer que o produto nao funciona.
+USUARIOS = projeto.usuarios(PROJETO) or {
     "demo": ("demo@hack2l.dev", "demo-password"),
     "alice": ("alice@hack2l.dev", "alice-password"),
     "bob": ("bob@hack2l.dev", "bob-password"),
     "carol": ("carol@hack2l.dev", "carol-password"),
 }
+
+# A conta que nao possui nada. Deduzida de `possui: 0` no yml -- declarar duas
+# vezes e' convidar as duas a divergirem.
+CONTROLE_NEGATIVO = _s("CONTROLE_NEGATIVO", projeto.controle_negativo(PROJETO) or "")
 
 # --- o nosso modelo ---------------------------------------------------------
 ANTHROPIC_API_KEY = _s("ANTHROPIC_API_KEY", "")
@@ -313,8 +354,8 @@ APP_EM_BANCO_DESCARTAVEL = _b("APP_EM_BANCO_DESCARTAVEL", False)
 # A copia. Nunca pode ser igual a BANCO_APP_ORIGEM -- ha teste para isso, porque
 # uma variavel de ambiente trocada faria a rodada rodar em cima do banco real
 # achando que esta contida, que e' pior do que nao ter contencao nenhuma.
-BANCO_APP = _s("BANCO_APP", "kb_veredito_app")
-BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", "kb")
+BANCO_APP = _s("BANCO_APP", _banco.get("descartavel_app") or "kb_veredito_app")
+BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", _banco.get("nome") or "kb")
 
 
 # --- contexto compartilhado no bloco cacheado -------------------------------

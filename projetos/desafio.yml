@@ -1,0 +1,95 @@
+# veredito.yml -- descreve O PROJETO SOB REVISAO.
+#
+# Este arquivo responde "como este app sobe, como se autentica nele, e onde e'
+# seguro escrever". Tudo aqui e' do projeto revisado; nada aqui e' do Veredito.
+# Modelo, orcamento, TOP_N e timeouts continuam no nosso `.env` -- sao COMO NOS
+# OPERAMOS, e nao mudam de projeto para projeto.
+#
+# 🚨 POR QUE ELE EXISTE
+#
+# Ate' 14/08 as quatro contas de teste estavam CHUMBADAS em config.py:155. Isso
+# fazia metade do produto -- a prova ponta a ponta, que e' a unica via que
+# sustenta severidade CRITICA junto com o arbitro -- funcionar so' no repositorio
+# do desafio. Apontar o Veredito para outro projeto rendia leitura e grep, e
+# mais nada.
+#
+# ONDE ELE MORA
+#
+# O lugar certo e' a RAIZ DO PROJETO REVISADO (`<projeto>/veredito.yml`), junto
+# do codigo que ele descreve -- e' assim que a Action vai funcionar. Este aqui
+# vive em `projetos/` porque o `desafio` e' repositorio de terceiro e nao da'
+# para commitar dentro dele.
+
+versao: 1
+
+app:
+  # Relativo a raiz do projeto revisado.
+  compose: docker-compose.yml
+  # 🚨 127.0.0.1, nunca `localhost`. Medido: localhost resolve ::1 primeiro, o
+  # caminho IPv6 aceita a conexao e nunca responde -- 0/8 contra 8/8. Nao da'
+  # ConnectionRefused, da' ReadTimeout, que parece app lento e nao app errado.
+  api: http://127.0.0.1:8000
+  web: http://127.0.0.1:3000
+  # Rota que responde 200 quando o app esta pronto. A contencao espera por ela
+  # depois de reiniciar o container -- "subiu" nao e' "no ar".
+  saude: /health
+
+banco:
+  servico: db          # nome do servico no compose
+  usuario: kb
+  senha: kb
+  nome: kb             # o banco da aplicacao -- so' e' LIDO
+
+  # Onde a suite do repositorio roda. Imposto de fora com -e DATABASE_URL desde
+  # 11/08, quando o advogado apagou o banco da aplicacao rodando a suite do
+  # commit base, que era anterior ao conserto do proprio autor.
+  descartavel_testes: kb_veredito
+
+  # A copia do banco da aplicacao, para a contencao do http_request (14/08).
+  descartavel_app: kb_veredito_app
+
+# 🚨 PRECISA de pelo menos tres contas, e uma tem que ser DONA DE NADA.
+#
+# Carlos Dutra, 06/08, verbatim: "anything involving one user's access to
+# another user's data needs at least three accounts to test properly."
+#
+# A conta sem nada e' o controle negativo: qualquer dado de outro usuario que
+# apareca para ela e' vazamento, sem precisar interpretar. Foi ela que provou a
+# CRITICA de 14/08 -- carol obteve 200 num documento compartilhado entre alice
+# e bob.
+contas:
+  - nome: demo
+    email: demo@hack2l.dev
+    senha: demo-password
+    possui: 3
+  - nome: alice
+    email: alice@hack2l.dev
+    senha: alice-password
+    possui: 1
+  - nome: bob
+    email: bob@hack2l.dev
+    senha: bob-password
+    possui: 1
+  - nome: carol
+    email: carol@hack2l.dev
+    senha: carol-password
+    possui: 0        # controle negativo
+
+# As regras que este projeto documenta, com arquivo e linha. E' o que permite ao
+# arbitro ser CITACAO COM PROCEDENCIA em vez de sigla inventada.
+#
+# 🚫 Nunca copiar isto para dentro de prompt. Foi exatamente isso que contaminou
+# 93 de 94 acusacoes em 10/08: as lentes chumbavam AC1-AC5, R1-R4, C1-C8 e
+# levavam o PRD do desafio para dentro de qualquer diff do mundo. Entra em
+# execucao, por aqui.
+#
+# ⚠️ Relativo a ESTE ARQUIVO, nao a raiz do projeto revisado. Quando o yml mora
+# junto do codigo (o caso normal) da' no mesmo; quando ele mora aqui em
+# `projetos/`, como este, a diferenca importa -- e a primeira versao apontou
+# para o lugar errado justamente por isso.
+contexto: ../contexto/hack2l.md
+
+# Rede sem saida para a suite do lado BASE. O banco fica dentro, a internet
+# fora. So' no base de proposito: a CI do cliente ja roda o head a cada push,
+# entao o risco marginal nosso la' e' zero. O base ninguem roda mais.
+rede_isolada: veredito_isolada
