@@ -122,7 +122,7 @@ pedindo arquivo.
 | **PR de terceiro com IA** | US$0,05 | a lente de injection ficou vazia nos 10 PRs porque nenhum tem modelo. Silêncio correto ou lente quebrada? |
 | ✅ **`$PARAM` nas regras do semgrep** *(14/08)* | 3 linhas | a mensagem agora nomeia a variável e a rota. Visível no parecer: *"o parametro **email** … na rota **share_document**"* |
 | **Taxa de aceitação** | depende do bot | de cada achado postado, qual fração o autor conserta. É a métrica que prova a tese |
-| 🎯 **A bancada com gabarito** | 2–3 dias | **destrava a métrica que nunca tivemos.** Ver abaixo |
+| 🎯 **A bancada com gabarito — 4 PRs** | meio dia + ~US$2 | **destrava a métrica que nunca tivemos.** Ver abaixo |
 
 ---
 
@@ -170,15 +170,43 @@ O gabarito fica **fora**: outro repositório, ou um arquivo que o harness de
 medição lê e o agente nunca alcança. Vale um teste mecânico que falhe se a
 palavra do gabarito aparecer na árvore sob revisão.
 
+### 🩺 Versão reduzida: QUATRO PRs primeiro
+
+**Não construir a bancada completa antes de saber se o instrumento mede.** É a
+mesma disciplina do princípio nº 2 — pipeline inteiro rodando cedo, mesmo burro,
+antes de refinar peça. Vale para a bancada também.
+
+Bancada de 10 PRs custa 2–3 dias e US$4–13 por varredura, e você só descobre no
+fim se ela mede o que devia. Quatro PRs custam meio dia e ~US$2, e respondem a
+mesma pergunta de instrumento.
+
+| PR | o que carrega | o que ele mede |
+|---|---|---|
+| 1 | defeito **ao alcance** (ex.: injection num caminho de escrita) | o motor prova o que dá para provar? |
+| 2 | defeito **ao alcance**, de outra categoria | uma lente diferente acorda, ou só a de injection funciona? |
+| 3 | defeito **fora do alcance** (race condition / check-then-act) | ele responde INCONCLUSIVO com causa, ou inventa prova? |
+| 4 | **nenhum defeito** | ele refuta com motivo, ou condena por condenar? |
+
+**Os quatro desfechos esperados são diferentes entre si** — provado, provado,
+inconclusivo, refutado. Se os quatro derem a mesma coisa, o instrumento está
+quebrado, e isso aparece por ~US$2 em vez de US$13.
+
+O PR 3 é o menos intuitivo e o mais valioso: a rodada de 14/08 já produziu um
+INCONCLUSIVO exemplar em concorrência — *"as ferramentas disponíveis são
+sequenciais, não há artefato determinístico possível"*. Esse comportamento é
+ativo, não falha, e sem um PR assim a bancada não consegue medi-lo.
+
+**Só depois de os quatro se comportarem** vale construir os outros seis.
+
 ### Como seria
 
 | passo | nota |
 |---|---|
 | 1. `veredito.yml` | **pré-requisito duro.** Hoje `config.py:155` chumba os quatro usuários; sem isso a bancada só funciona se ela imitar o desafio, e aí não prova generalização nenhuma |
-| 2. app mínimo rodável | API + banco + suíte. Rodável é obrigatório: sem app no ar só se mede o promotor, e o diferencial é a prova por execução |
-| 3. um defeito por PR | PR com dois defeitos torna ambíguo qual achado corresponde a qual, e a conta de recall vira palpite |
-| 4. PRs limpos no meio | controle negativo, sem avisar qual é qual a quem mede |
-| 5. rodar e contar | recall (dos N plantados, quantos provados), precisão (das M condenações, quantas batem), e a **distribuição dos inconclusivos com causa** |
+| 2. app mínimo rodável | API + banco + suíte. Rodável é obrigatório: sem app no ar só se mede o promotor, e o diferencial é a prova por execução. **E fácil de mexer** — bancada em que dá trabalho acrescentar um PR não é usada, e isso é requisito, não conforto |
+| 3. os 4 PRs acima | um defeito por PR: com dois, fica ambíguo qual condenação corresponde a qual, e a conta de recall vira palpite |
+| 4. rodar e contar | recall, precisão, e a **distribuição dos inconclusivos com causa** — as três, nunca só a primeira |
+| 5. *(depois)* mais 6 PRs | só se os quatro primeiros se comportarem |
 
 ### O que ela permite dizer, e que hoje é proibido
 
@@ -188,11 +216,16 @@ Isso hoje é alegação sobre gabarito que não temos — está listado nos 🚫
 `CLAUDE.md`. Com a bancada, passa a ser verdade conferível. É a frase que muda
 uma conversa de investidor.
 
-### ⚠️ Custo, que não é desprezível
+⚠️ Com quatro PRs o n é pequeno demais para essa frase. A versão reduzida prova
+que **o instrumento funciona**, não que o produto acha defeito. As duas coisas
+são diferentes, e confundi-las seria o erro dos 45% de árbitro outra vez.
 
-Cada rodada completa custa US$0,40–1,30. Uma varredura de 10 PRs é **US$4–13**,
-e toda mudança de prompt pede varredura nova. Isso vira o maior item de custo
-recorrente do projeto — e é o preço de parar de andar às cegas.
+### ⚠️ Custo
+
+Cada rodada completa custa US$0,40–1,30. **Quatro PRs ≈ US$2 por varredura**;
+dez, US$4–13. Toda mudança de prompt pede varredura nova, então isso vira o
+maior item de custo recorrente do projeto — e é o preço de parar de andar às
+cegas.
 
 ### 🚫 E a regra que a bancada compra
 
