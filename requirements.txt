@@ -8,6 +8,12 @@ anthropic==0.120.2
 # A v4 do SDK nao conversa com ele. Nao subir esta versao.
 langfuse==2.57.0
 
+# Le o veredito.yml do projeto revisado (veredito/projeto.py) e o gabarito da
+# bancada (roda_bancada.py). Entrou com o veredito.yml em 14/08 e ficou de fora
+# desta lista: nas duas maquinas de dev ja' estava instalado, entao ninguem viu.
+# Sem ele a suite nem coleta -- 19 dos 20 modulos morrem no import.
+pyyaml
+
 httpx
 requests
 python-dotenv

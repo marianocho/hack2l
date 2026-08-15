@@ -23,6 +23,11 @@ def test_deteta_o_estado_do_llm_alvo():
     print(f"\n  LLM alvo: {est} -- {detalhe}")
 
 
+# O unico deste modulo que EXIGE o app no ar: `_token` faz login de verdade e
+# levanta ConnectionError sem o container. Os outros quatro degradam para
+# INDETERMINADO e passam offline -- passam sem provar nada, o que e' outro
+# problema, mas nao e' vermelho.
+@pytest.mark.lento
 def test_duas_sondas_diferentes_e_o_veredito_bate():
     """A regra e' so uma: respostas iguais => duble."""
     from veredito.ferramentas import _token
