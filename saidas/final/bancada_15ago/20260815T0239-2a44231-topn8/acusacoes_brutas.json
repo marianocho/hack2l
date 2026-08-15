@@ -1,0 +1,263 @@
+[
+  {
+    "id": "correcao_01",
+    "categoria": "correcao",
+    "local": "app/main.py:119-120",
+    "hipotese": "Variável `dono` é consultada do banco mas nunca usada no Member criado; a resposta inclui `convidado_por` mas o registro persistido não captura origem do convite",
+    "arbitro": null,
+    "provado_se": "Adicionar membro, depois consultar Member no banco: campo de quem convidou não existe na tabela, resposta tem convidado_por mas dado não persiste; segunda consulta ao mesmo Member não devolve origem",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_02",
+    "categoria": "correcao",
+    "local": "app/main.py:118-121",
+    "hipotese": "Race condition: verificação de limite com `len(set(atuais))` e insert de Member não são atômicos; duas requisições simultâneas podem passar ambas pela contagem, inserir duas linhas quando limite é 50",
+    "arbitro": {
+      "regra": "Adicionar um membro que já participa é idempotente: repetir a chamada não cria linha duplicada nem devolve erro",
+      "onde": "docs/REGRAS.md:Persistência"
+    },
+    "provado_se": "Disparar duas requisições POST /projects/{id}/members com mesmo email simultaneamente quando projeto tem 49 membros; contar Members após: se houver 51 ou mais, o limite foi burlado",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_03",
+    "categoria": "correcao",
+    "local": "app/main.py:125-126",
+    "hipotese": "Acesso à `p.dono_id` sem verificar se `p` existe ou se usuário autenticado é o dono; variável `p` não está definida no escopo visível do diff",
+    "arbitro": {
+      "regra": "Somente o dono do projeto adiciona membros",
+      "onde": "docs/REGRAS.md:Acesso e isolamento"
+    },
+    "provado_se": "Chamar adiciona_membro como usuário não-dono; se nenhuma verificação de autorização executar antes da linha 125, estoura NameError ou AttributeError em `p.dono_id`",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_04",
+    "categoria": "correcao",
+    "local": "app/main.py:118",
+    "hipotese": "Contagem de membros usa `set()` sobre lista que pode conter IDs duplicados, mas lógica assume que duplicatas no banco significam o que (violação de unicidade removida)? Sem contexto claro do comportamento esperado",
+    "arbitro": null,
+    "provado_se": "Inserir manualmente duas linhas Member com mesmo (project_id, user_id) após remover UniqueConstraint; chamar adiciona_membro: verificar se `len(set(atuais)) >= LIMITE_DE_MEMBROS` conta ou não a duplicata",
+    "confianca": "media"
+  },
+  {
+    "id": "correcao_05",
+    "categoria": "correcao",
+    "local": "app/models.py:41-42",
+    "hipotese": "Remover UniqueConstraint (project_id, user_id) permite inserir duplicatas; comentário diz que `ja is not None` já confere, mas isso não é atomicidade — sem constraint, concorrência deixa duplicatas passar",
+    "arbitro": null,
+    "provado_se": "Consulta simultânea: thread A e B ambas executam `ja = db.scalar(...)` retornando None; ambas passam e inserem mesmo Member; tabela fica com duplicata",
+    "confianca": "alta"
+  },
+  {
+    "id": "correcao_06",
+    "categoria": "correcao",
+    "local": "app/main.py:125",
+    "hipotese": "Variável `dono` recuperada do banco é `None` quando User com id=p.dono_id não existe ou foi deletado; acessar `dono.email` na linha 130 causa AttributeError",
+    "arbitro": null,
+    "provado_se": "Criar projeto, deletar usuário dono, chamar adiciona_membro; ou passar dono_id inválido; resposta estouraria 500 em vez de tratar ausência",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_01",
+    "categoria": "padroes",
+    "local": "app/main.py:128",
+    "hipotese": "resposta do endpoint adiciona novo campo 'convidado_por' ao dict, divergindo do contrato declarado",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "read_file em app/main.py: LoginIn, TaskIn e outras rotas usam BaseModel; adiciona_membro não declara response_model e retorna dict com campo novo 'convidado_por' que não estava antes",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_02",
+    "categoria": "padroes",
+    "local": "app/main.py:124",
+    "hipotese": "consulta ao banco de dados (select e all()) feita inline na rota sem abstrair em repositório ou camada de dados",
+    "arbitro": null,
+    "provado_se": "read_file em app/main.py:124-126: db.scalars(select(...)).all() montado diretamente na função de rota, enquanto padrão observado em outras rotas (linhas 90+) também usa db.scalar/scalars mas para verificações simples; aqui carrega lista inteira em memória",
+    "confianca": "media"
+  },
+  {
+    "id": "padroes_03",
+    "categoria": "padroes",
+    "local": "app/main.py:121-128",
+    "hipotese": "validação de limite de membros levanta HTTPException(409) antes de tentar inserir; insere Member sem transação explícita de rollback se erro ocorrer após validação",
+    "arbitro": null,
+    "provado_se": "read_file em app/main.py:121-128: db.add(Member) é chamado fora de try/except; se dono = db.scalar(...) falhar ou restrição de FK falhar, commit() não foi executado ainda, mas padrão em outras rotas não mostra tratamento centralizado de erro pós-validação",
+    "confianca": "baixa"
+  },
+  {
+    "id": "padroes_04",
+    "categoria": "padroes",
+    "local": "app/models.py:34-40",
+    "hipotese": "remoção de UniqueConstraint permite inserir duplicatas (project_id, user_id); comentário afirma que o endpoint confere, mas confere apenas ja_is_not_none (presença), não ausência após saída",
+    "arbitro": {
+      "regra": "adicionar um membro que já participa é idempotente: repetir a chamada não cria linha duplicada",
+      "onde": "docs/REGRAS.md"
+    },
+    "provado_se": "read_file em app/models.py: __table_args__ removido; read_file em app/main.py:115-116: ja = db.scalar(select(Member)...) confere presença atual, mas se Member foi deletado e inserido novamente, nada impede inserção duplicada na próxima chamada",
+    "confianca": "alta"
+  },
+  {
+    "id": "padroes_05",
+    "categoria": "padroes",
+    "local": "app/main.py:125-126",
+    "hipotese": "cálculo de len(set(atuais)) força materialização em memória de user_ids do projeto inteiro para comparação de limite",
+    "arbitro": null,
+    "provado_se": "read_file em app/main.py:125-126: db.scalars(...).all() retorna lista, set(atuais) e len() forçam materialização; padrão observado usa db.scalar(select(count(...))) para contagens (ex.: linha 100+)",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_01",
+    "categoria": "performance",
+    "local": "app/main.py:121-122",
+    "hipotese": "A query que valida o teto de membros carrega todos os user_id sem filtro de distinção no banco, depois deduplica em memória com set() — em um projeto com 49 membros, traz 49 registros desnecessariamente",
+    "arbitro": null,
+    "provado_se": "A operação `db.scalars(select(Member.user_id).where(...)).all()` seguida de `len(set(atuais))` dispara uma varredura completa de Member e deduplica em Python; com N membros no projeto, traz N registros da rede quando `SELECT COUNT(DISTINCT user_id) WHERE project_id = ?` resolveria com 1 linha",
+    "confianca": "alta"
+  },
+  {
+    "id": "performance_02",
+    "categoria": "performance",
+    "local": "app/main.py:124-125",
+    "hipotese": "A query que busca o dono do projeto dispara a cada chamada de adiciona_membro sem cache, recarregando o mesmo User do banco repetidamente",
+    "arbitro": null,
+    "provado_se": "GET adiciona_membro acionado 100 vezes no mesmo projeto dispara 100 queries `SELECT * FROM users WHERE id = ?` idênticas; custo cresce linear com chamadas, trabalho redundante por request",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_03",
+    "categoria": "performance",
+    "local": "app/models.py:31-40",
+    "hipotese": "A remoção da UniqueConstraint (project_id, user_id) permite inserir duplicatas sem índice de unicidade, forçando varredura linear ou N+1 na validação `ja is not None` de linhas 115-116",
+    "arbitro": null,
+    "provado_se": "Sem constraint, a query `select(Member).where(Member.project_id == project_id, Member.user_id == convidado.id).scalar()` (linha 115) não está indexada; em projeto com M membros, pode varrer M linhas em vez de usar índice único",
+    "confianca": "media"
+  },
+  {
+    "id": "performance_04",
+    "categoria": "performance",
+    "local": "app/main.py:116-127",
+    "hipotese": "Não há índice adicionado em Member.project_id ou em (project_id, user_id) após remover UniqueConstraint, deixando queries de validação sem suporte indexado",
+    "arbitro": null,
+    "provado_se": "Linhas 115-116 (validação `ja`) e 121-122 (validação de teto) filtram por project_id sem índice visível na definição de Member; com 400+ membros históricos na tabela, ambas as queries escaneiam sequencialmente",
+    "confianca": "baixa"
+  },
+  {
+    "id": "prd_01",
+    "categoria": "prd",
+    "local": "app/main.py:124-126",
+    "hipotese": "a variável `dono` é consultada mas nunca usada no registro Member que é inserido; o endpoint devolve `convidado_por` mas Member não tem coluna para armazená-lo, violando a promessa de persistência",
+    "arbitro": {
+      "regra": "toda consulta ao banco passa pelo ORM e dados são persistidos; dado interno não vaza por acidente",
+      "onde": "docs/REGRAS.md (Persistência e Respostas)"
+    },
+    "provado_se": "chamar adiciona_membro, verificar que a linha em members não contém quem convidou; desligar o app e consultar o banco diretamente mostra que a coluna convidado_por não existe em members",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_02",
+    "categoria": "prd",
+    "local": "app/main.py:119-121",
+    "hipotese": "a consulta de `atuais` usa `select(Member.user_id).where(Member.project_id == project_id)` mas depois converte em set; se um user foi removido e reconvidado, a linha antiga ainda existe e é contada, impedindo a reconvocação mesmo que o projeto não esteja cheio",
+    "arbitro": {
+      "regra": "adicionar um membro que já participa é idempotente: repetir a chamada não cria linha duplicada nem devolve erro",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "remover a UniqueConstraint permite duplicatas; convidar user A, removê-lo (deletar Member), convidar novamente: se houver mais de 50 linhas no total (incluindo a antiga de A), o LIMITE_DE_MEMBROS bloqueia a reconvocação",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_03",
+    "categoria": "prd",
+    "local": "app/main.py:116-121",
+    "hipotese": "o modelo de resposta do endpoint adiciona_membro foi alterado para incluir 'convidado_por', mas nenhum teste do PR valida que este campo está presente no JSON de saída, violando a promessa de que a resposta declara um modelo",
+    "arbitro": {
+      "regra": "todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo",
+      "onde": "docs/REGRAS.md (Respostas)"
+    },
+    "provado_se": "inspecionar app/main.py para ver se existe uma classe Pydantic que declare o retorno de adiciona_membro com o campo 'convidado_por'; se não existir ou divergir do dict retornado, o modelo não foi declarado",
+    "confianca": "media"
+  },
+  {
+    "id": "prd_04",
+    "categoria": "prd",
+    "local": "app/models.py:31-40",
+    "hipotese": "removendo UniqueConstraint(project_id, user_id) sem alterar a lógica de `ja_existe` no endpoint permite que o mesmo user seja adicionado múltiplas vezes ao mesmo projeto, criando duplicatas e violando a idempotência",
+    "arbitro": {
+      "regra": "adicionar um membro que já participa é idempotente: repetir a chamada não cria linha duplicada",
+      "onde": "docs/REGRAS.md (Persistência)"
+    },
+    "provado_se": "chamar adiciona_membro duas vezes com o mesmo (project_id, user_id); consultar members diretamente e contar quantas linhas existem: se houver 2 ou mais, a idempotência falhou",
+    "confianca": "alta"
+  },
+  {
+    "id": "prd_05",
+    "categoria": "prd",
+    "local": "app/main.py:119-121",
+    "hipotese": "a consulta `db.scalars(select(Member.user_id)...)` retorna IDs duplicados se a mesma pessoa tiver múltiplas linhas; converter para set mascara o problema de duplicatas, permitindo ultrapassar artificialmente o limite real de participantes únicos",
+    "arbitro": null,
+    "provado_se": "com UniqueConstraint removida, inserir a mesma dupla (project_id, user_id) manualmente duas vezes; chamar adiciona_membro para um terceiro user; se a contagem considerar a duplicata, o limite vai estar errado",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_01",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:119-121",
+    "hipotese": "a checagem de limite de membros usa len(set(atuais)) sobre IDs, mas nao valida que o usuario autenticado eh o dono do projeto antes de permitir o convite",
+    "arbitro": {
+      "regra": "Somente o dono do projeto adiciona membros",
+      "onde": "docs/REGRAS.md:13"
+    },
+    "provado_se": "POST /projects/{project_id}/members com email valido, autenticado como usuario que nao eh dono, retorna 200 em vez de 403/404",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_02",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:125",
+    "hipotese": "a resposta adiciona 'convidado_por': dono.email ao retorno, expondo o email do dono do projeto para qualquer principal que chame o endpoint, mesmo sem permissao de leitura sobre quem eh o dono",
+    "arbitro": {
+      "regra": "Todo endpoint declara um modelo de resposta e devolve apenas os campos desse modelo. Dado interno nao vaza por acidente de serializacao",
+      "onde": "docs/REGRAS.md:20"
+    },
+    "provado_se": "POST /projects/{project_id}/members retorna um campo 'convidado_por' que nao estava definido no modelo LoginIn ou na resposta original",
+    "confianca": "alta"
+  },
+  {
+    "id": "vazamento_03",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:123",
+    "hipotese": "a query db.scalar(select(User).where(User.id == p.dono_id)) ocorre apos a checagem de permissao, mas nao ha validacao que 'p' (object do projeto) pertence ao usuario autenticado ou que o usuario autenticado pode ver quem eh o dono",
+    "arbitro": {
+      "regra": "Um usuario ve um projeto se for o dono dele ou se participar dele",
+      "onde": "docs/REGRAS.md:3"
+    },
+    "provado_se": "em adiciona_membro, chamar POST /projects/{id_alheio}/members onde id_alheio eh de projeto que o usuario autenticado nao eh dono nem participante, verificar se p.dono_id eh obtido sem validacao prvia",
+    "confianca": "media"
+  },
+  {
+    "id": "vazamento_04",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/models.py:31-40",
+    "hipotese": "remover UniqueConstraint('project_id', 'user_id') permite que a mesma (project_id, user_id) seja inserida multiplas vezes. O comentario alega que 'o endpoint ja confere', mas nao ha evidencia no diff de que a checagem de 'ja participa' ocorre antes da insercao",
+    "arbitro": {
+      "regra": "Adicionar um membro que ja participa eh idempotente: repetir a chamada nao cria linha duplicada nem devolve erro",
+      "onde": "docs/REGRAS.md:17"
+    },
+    "provado_se": "POST /projects/{id}/members com email de usuario que ja esta em members, apos a mudanca, verificar se insere linha duplicada em vez de devolver False no campo 'novo'",
+    "confianca": "alta"
+  },
+  {
+    "id": "vazamento_05",
+    "categoria": "vazamento_de_contexto",
+    "local": "app/main.py:116-118",
+    "hipotese": "a variavel 'ja' (resultado da checagem de participacao previa) eh usada para retornar 'novo': False, mas nao aparece o codigo que atribui 'ja'. Se 'ja' nao filtra por project_id, a checagem pode retornar participacao em outro projeto",
+    "arbitro": null,
+    "provado_se": "rastrear a definicao de 'ja' acima da linha 116 no diff original ou no codigo base para confirmar se a query filtra (project_id, user_id) ou apenas user_id",
+    "confianca": "baixa"
+  }
+]

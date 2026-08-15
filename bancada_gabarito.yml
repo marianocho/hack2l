@@ -105,22 +105,42 @@ prs:
       mas entre a checagem e o INSERT ha duas consultas novas (teto de membros e
       lookup do dono) -- e nada no banco impede a linha duplicada.
     regra_violada: "docs/REGRAS.md -- Persistencia: adicionar membro que ja participa e' idempotente"
-    esperado: INCONCLUSIVO
-    ao_alcance: false
+
+    # 🚨 O ESPERADO ESTAVA ERRADO, e o produto me corrigiu (15/08).
+    #
+    # Eu escrevi INCONCLUSIVO partindo de "e' impossivel provar sem
+    # concorrencia". A premissa e' falsa: o RACE e' irreproduzivel
+    # sequencialmente, mas a REMOCAO DA GARANTIA e' trivialmente provavel --
+    # teste que insere duplicata levanta IntegrityError no base e passa no head.
+    #
+    # E' a licao do proprio SISTEMA ("escreva o teste sobre a INVARIANTE, nao
+    # sobre o endpoint") aplicada a concorrencia. Eu nao tinha pensado nisso; o
+    # advogado pensou.
+    esperado: PROVADO
+    severidade_esperada: MEDIA        # R2: prova nao ponta a ponta nao passa de MEDIA
+    esperado_antigo: INCONCLUSIVO     # errado, mantido para nao apagar a licao
+    ao_alcance: parcial               # a consequencia sim; o race em si, nao
     # Como o runner reconhece que ESTE defeito foi acusado, para distinguir
     # "nao entrou no TOP_N" de "o veredito divergiu".
     pistas: ["concorr", "simultan", "race", "toctou", "duplicat", "unicidade",
              "unique", "constraint", "paralel"]
-    🚨_por_que_esperamos_inconclusivo: >-
-      as ferramentas do advogado sao SEQUENCIAIS. `http_request` dispara uma
-      chamada por vez e `prova_diferencial` roda num processo so'. Chamadas
-      sequenciais continuam idempotentes, entao nao ha artefato deterministico
-      possivel. A resposta CERTA e' INCONCLUSIVO com a causa. **REFUTADO e'
-      ERRADO** -- o defeito existe, so' nao e' alcancavel com o que ele tem.
+    o_que_ele_fez_em_15_08: >-
+      PROVADO em MEDIA, com a limitacao declarada no proprio motivo: "no commit
+      base o banco recusa uma segunda linha identica com IntegrityError, e no
+      head a insercao duplicada persiste sem erro (...) nao houve prova pela API
+      porque chamadas sequenciais nao expoem a janela de corrida".
+
+      Provou a PRECONDICAO em vez do race. A R2 rebaixou para MEDIA por nao ser
+      ponta a ponta -- as regras seguraram sozinhas.
+
+    🚫 REFUTADO CONTINUA SENDO ERRADO aqui: o defeito existe. O que mudou e' que
+      PROVADO tambem esta certo, por uma via que eu nao tinha previsto.
+
     verificado: >-
-      reproduzido com 24 requisicoes alinhadas por barreira: 9 linhas
-      duplicadas para o mesmo par, na 2a tentativa de 6. E' PROBABILISTICO --
-      uma tentativa nao basta, e isso e' natureza do defeito.
+      o race em si reproduzido com 24 requisicoes alinhadas por barreira: 9
+      linhas duplicadas para o mesmo par, na 2a tentativa de 6. E'
+      PROBABILISTICO -- uma tentativa nao basta, e isso e' natureza do defeito.
+      Mas provar o race nao e' necessario para conden'a-lo.
     ⚠️_operacional: >-
       `api` e `seed` sao imagens SEPARADAS construidas do mesmo ./app. Rebuildar
       so' a api deixa o seed com o models.py do ramo anterior, e a tabela mantem

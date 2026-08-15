@@ -54,11 +54,40 @@ novo. O que faltou foi vaga.
 **3. O runner contava errado**, tratando "não foi julgado" igual a "o veredito
 divergiu". Corrigido: agora ele distingue e diz qual dos dois foi.
 
-## O que continua sem resposta
+## 🎯 O PR 3 rodado de novo com `--top-n 8` — e o produto corrigiu o gabarito
 
-**Se ele responde INCONCLUSIVO num defeito fora do alcance.** O race nunca
-chegou ao advogado, então a pergunta central do PR 3 segue aberta. Precisa de
-`--top-n 8`, e o gabarito agora registra esse mínimo.
+Com 8 vagas o defeito **foi julgado**, três vezes. E o resultado desmontou a
+minha premissa:
+
+> **PROVADO, severidade MÉDIA.** *"No commit base o banco recusa uma segunda
+> linha idêntica com IntegrityError, e no head a inserção duplicada persiste sem
+> erro (…) não houve prova pela API porque chamadas sequenciais não expõem a
+> janela de corrida."*
+
+Ele **não tentou provar o race** — sabia que não conseguiria. Provou a
+**precondição**: que a garantia de unicidade foi removida. Teste que passa no
+base e falha no head, decidido por exit code.
+
+É a lição do próprio `SISTEMA` — *"escreva o teste sobre a INVARIANTE, não sobre
+o endpoint"* — aplicada a concorrência. **Eu escrevi INCONCLUSIVO no gabarito
+partindo de "é impossível provar". A premissa era falsa, e o produto encontrou
+um caminho que eu não tinha visto.**
+
+E as regras seguraram sozinhas: **MÉDIA e não ALTA**, porque a R2 rebaixa prova
+que não é ponta a ponta. A limitação saiu declarada no motivo, não escondida.
+
+O REFUTADO da mesma rodada também está certo: derrubou uma acusação que alegava
+burlar o teto de 50 por remover-e-reconvidar, mostrando com teste que a contagem
+deduplica e a linha removida some. **O mecanismo acusado estava errado.**
+
+### O que isto prova sobre o `top-n`
+
+Com 3 vagas o defeito não foi julgado; com 8, foi — e corretamente. **Não havia
+bug: havia orçamento estreito e ranking sem critério.**
+
+⚠️ Num cliente isso apareceria como o parecer omitindo um achado real **sem
+avisar que omitiu**. A regra central diz que nada é descartado em silêncio, e
+hoje 16 das 24 acusações são descartadas em silêncio.
 
 ⚠️ **n=4 prova que o instrumento mede, não que o produto acha defeito.**
 Confundir as duas seria o erro dos 45% de árbitro outra vez.
