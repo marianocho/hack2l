@@ -91,10 +91,39 @@ diferença muda a força do achado, e quem lê o parecer precisa vê-la.
 
 ## Como escrever `provado_se`
 
-Violação de convenção é, em geral, **estática** — provável por leitura de código,
-não com o app rodando. Fraseie como uma verificação observável de
-`read_file`/`grep`. Ex.: "grep por `os.getenv` em `routers/` retorna ocorrência
-fora do módulo de configuração".
+**Primeiro pergunte: dá para observar isto de fora?** Se a convenção violada
+muda alguma coisa que um cliente do sistema consegue ver — a forma de uma
+resposta, um campo novo no JSON, um código de status, o número de queries — o
+`provado_se` é a **chamada que expõe a diferença**, não o `grep` que encontra a
+linha.
+
+Ex.: "chamar o endpoint alterado e verificar se a resposta traz campo que não
+está no modelo declarado" — e não "grep mostra o `return` com campo a mais".
+
+🚨 **Medido em 15/08–16/08, e é por isso que esta seção mudou.** Um campo fora
+do contrato de resposta foi acusado duas vezes, pela mesma regra e com a mesma
+procedência. A acusação cujo `provado_se` mandava **ler** (`grep` pelo `return`)
+virou **REFUTADO**: o advogado leu o fonte, não achou `response_model`
+declarado, e concluiu que não havia contrato a violar. A que mandava **chamar**
+o endpoint virou **PROVADO**, com teste que passa no base e falha no head.
+
+Mesmo defeito, mesma regra, ferramentas iguais e sem erro nos dois. O que virou
+o veredito foi o experimento que ESTE campo prescreveu. Na varredura das 19
+rodadas gravadas, dentro desta lente: `provado_se` de execução deu 6 provados em
+6; de leitura, 4 em 11.
+
+Leitura continua sendo a resposta certa quando a convenção **só** existe no
+código — organização de módulo, nome de variável, import fora de lugar, padrão
+que o resto do repositório segue e este trecho não. Aí fraseie como verificação
+observável de `read_file`/`grep`. Ex.: "grep por `os.getenv` em `routers/`
+retorna ocorrência fora do módulo de configuração".
+
+⚠️ Na dúvida entre as duas, **prescreva a execução**. Se ela não fechar, o
+advogado ainda pode ler; o caminho contrário não vale, porque uma leitura que
+"não achou o que violar" encerra o assunto e produz absolvição. Errar para o
+lado da execução custa voltas do laço; errar para o lado da leitura custa um
+defeito real dado como refutado — e o desafio é explícito em que deixar passar
+defeito é pior que falso alarme.
 
 Ciente de que prova estática (não ponta a ponta) sustenta no máximo severidade
 **média** — e tudo bem: aqui o valor é cobertura e interpretabilidade.
