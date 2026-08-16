@@ -73,7 +73,20 @@ def _compose_com_override(override: Path, *args: str,
 
 
 def _psql(banco: str, sql: str, timeout: int = 120) -> subprocess.CompletedProcess:
-    return _compose("exec", "-T", "db", "psql", "-U", "kb", "-d", banco,
+    """🚨 Usuario e servico vem do `veredito.yml`, nunca chumbados.
+
+    Ate' 16/08 isto era `-U kb` e `db` fixos -- as credenciais do desafio. Na
+    bancada, que usa `bancada`, TODO retrato do banco falhava com
+    `role "kb" does not exist`, e o `delta_do_banco` lia dois dicionarios vazios
+    e concluia "limpo". Seis rodadas seguidas disseram que nao tocaram em nada
+    sem terem conseguido olhar uma vez.
+
+    E' o sexto chumbado da mesma familia dos cinco que o `veredito.yml` tirou em
+    14-15/08 -- e o mais perigoso deles, porque os outros faziam a rodada
+    FALHAR, e este fazia ela dizer que estava tudo bem.
+    """
+    return _compose("exec", "-T", cfg.BANCO_SERVICO,
+                    "psql", "-U", cfg.BANCO_USUARIO, "-d", banco,
                     "-v", "ON_ERROR_STOP=1", "-t", "-A", "-c", sql,
                     timeout=timeout)
 
@@ -102,7 +115,7 @@ def copia_o_banco(destino: Path | None = None) -> None:
     confere_nomes()
     dump = "/tmp/veredito_contencao.sql"
 
-    r = _compose("exec", "-T", "db", "pg_dump", "-U", "kb",
+    r = _compose("exec", "-T", cfg.BANCO_SERVICO, "pg_dump", "-U", cfg.BANCO_USUARIO,
                  "-d", cfg.BANCO_APP_ORIGEM, "-f", dump, timeout=600)
     if r.returncode != 0:
         raise ContencaoFalhou(f"pg_dump falhou: {r.stderr.strip()[:300]}")
@@ -117,8 +130,9 @@ def copia_o_banco(destino: Path | None = None) -> None:
         raise ContencaoFalhou(f"nao consegui criar {cfg.BANCO_APP}: "
                               f"{r.stderr.strip()[:300]}")
 
-    r = _compose("exec", "-T", "db", "sh", "-c",
-                 f"psql -U kb -d {cfg.BANCO_APP} -v ON_ERROR_STOP=1 -f {dump}",
+    r = _compose("exec", "-T", cfg.BANCO_SERVICO, "sh", "-c",
+                 f"psql -U {cfg.BANCO_USUARIO} -d {cfg.BANCO_APP} "
+                 f"-v ON_ERROR_STOP=1 -f {dump}",
                  timeout=600)
     if r.returncode != 0:
         raise ContencaoFalhou(f"restore falhou: {r.stderr.strip()[:300]}")
@@ -176,6 +190,35 @@ def delta_do_banco(antes: dict, depois: dict) -> dict:
     de escrita exige), remover nao e' nunca. Somar os dois num numero so'
     esconderia exatamente o caso grave.
     """
+    # 🚨 RETRATO QUE FALHOU NAO E' RETRATO VAZIO.
+    #
+    # Este bloco e' o conserto de 16/08, e o defeito era exemplar: a comparacao
+    # lia so' `tabelas`, entao dois retratos que ERRARAM viravam {} contra {},
+    # nenhuma diferenca, e `limpo: True`. Seis rodadas da bancada afirmaram nao
+    # ter tocado no banco sem terem conseguido conectar nele uma vez -- o
+    # `erro` estava gravado nos dois retratos, e ninguem olhava.
+    #
+    # E' o padrao de bug da casa na guarda que existe justamente porque o
+    # `shares 0->3` de 14/08 "so' apareceu porque tiramos retrato a mao". Ela
+    # voltou a nao avisar, e da forma mais cara: dizendo que estava tudo bem.
+    #
+    # Mesma doutrina do terceiro estado -- ausencia de observacao nunca e'
+    # absolvicao. Aqui `medido: False` e' o INCONCLUSIVO do efeito no banco.
+    erros = [e for e in (antes.get("erro"), depois.get("erro")) if e]
+    if erros:
+        return {
+            "banco": depois.get("banco") or antes.get("banco"),
+            "medido": False,
+            "criadas": {},
+            "removidas": {},
+            # Nunca True aqui. "Nao consegui olhar" nao pode ler como "olhei e
+            # estava limpo" -- e' a diferenca entre REFUTADO e INCONCLUSIVO.
+            "limpo": False,
+            "houve_remocao": False,
+            "causa": " | ".join(erros)[:400],
+            "nao_detecta": "TUDO -- o retrato do banco falhou, nada foi medido",
+        }
+
     a, d = antes.get("tabelas", {}), depois.get("tabelas", {})
     criadas, removidas = {}, {}
     for t in sorted(set(a) | set(d)):
@@ -186,6 +229,7 @@ def delta_do_banco(antes: dict, depois: dict) -> dict:
             removidas[t] = antes_n - depois_n
     return {
         "banco": depois.get("banco") or antes.get("banco"),
+        "medido": True,
         "criadas": criadas,
         "removidas": removidas,
         "limpo": not criadas and not removidas,

@@ -135,6 +135,26 @@ def _registra_efeito_no_banco(antes: dict) -> dict:
         print(f"  [!] nao consegui medir o efeito no banco: {type(e).__name__}: {e}")
         return {}
 
+    # 🚨 NAO MEDIDO vem antes de tudo, e nunca le como "nenhum efeito".
+    #
+    # Ate' 16/08 nao havia este ramo: retrato que falhava virava {} contra {},
+    # o delta dizia `limpo` e esta funcao imprimia "efeito no banco: NENHUM".
+    # Seis rodadas da bancada afirmaram nao ter tocado no banco sem terem
+    # conseguido conectar. A falha de medicao usava a mesma frase do sucesso.
+    if not d.get("medido", True):
+        print(f"\n  [!!] EFEITO NO BANCO: NAO MEDIDO -- {d.get('causa')}")
+        print("       Isto NAO e' 'nao houve efeito'. A rodada pode ter criado"
+              " ou removido linhas e ninguem olhou.")
+        if cfg.APP_EM_BANCO_DESCARTAVEL:
+            # Contencao ligada + retrato falhando = nao da' para afirmar que a
+            # copia esta no ar. Levantar aqui e' a unica leitura honesta: o
+            # operador pediu contencao e nao ha como dizer que ele a teve.
+            raise contencao_app.ContencaoFalhou(
+                f"contencao ligada mas o retrato do banco falhou: {d.get('causa')}")
+        print("       Confira `banco.usuario` e `banco.servico` no veredito.yml"
+              " do projeto revisado.")
+        return d
+
     if d["limpo"]:
         print(f"\nefeito no banco {d['banco']}: NENHUM"
               + (" (contencao ligada)" if cfg.APP_EM_BANCO_DESCARTAVEL else ""))

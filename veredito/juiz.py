@@ -487,9 +487,19 @@ def _secao_efeito_no_banco() -> list[str]:
     conteudo treina o leitor a pular a secao, e ai ela nao serve quando importa.
     """
     d = _carrega_json(cfg.RODADA / "efeito_no_banco.json", {}).get("delta") or {}
-    if not d or d.get("limpo"):
+    if not d or (d.get("limpo") and d.get("medido", True)):
         return []
     p = ["", "## EFEITO NO BANCO DO APP", ""]
+    # 🚨 Medicao falhada tem que aparecer no PARECER, nao so' no console: o
+    # console rola e o arquivo fica. Quem le amanha precisa saber que ninguem
+    # olhou -- caso contrario a ausencia da secao passa a significar "limpo",
+    # que e' exatamente a leitura errada que custou seis rodadas em 15-16/08.
+    if not d.get("medido", True):
+        return p + [
+            f"- **NAO MEDIDO**: o retrato do banco falhou. `{d.get('causa')}`",
+            "- Isto **não** é 'não houve efeito'. A rodada pode ter criado ou "
+            "removido linhas, e este parecer não sabe.",
+        ]
     if d.get("houve_remocao"):
         p.append(f"- **A rodada REMOVEU linhas** de `{d.get('banco')}`: "
                  f"{d['removidas']}. Criar linha para provar defeito em endpoint "
