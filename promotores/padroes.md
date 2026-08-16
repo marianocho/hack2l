@@ -113,10 +113,25 @@ rodadas gravadas, dentro desta lente: `provado_se` de execução deu 6 provados 
 6; de leitura, 4 em 11.
 
 Leitura continua sendo a resposta certa quando a convenção **só** existe no
-código — organização de módulo, nome de variável, import fora de lugar, padrão
-que o resto do repositório segue e este trecho não. Aí fraseie como verificação
-observável de `read_file`/`grep`. Ex.: "grep por `os.getenv` em `routers/`
-retorna ocorrência fora do módulo de configuração".
+código — organização de módulo, nome de variável, import fora de lugar, camada
+pulada, consulta no handler em vez do repositório, padrão que o resto do
+repositório segue e este trecho não. Aí fraseie como verificação observável de
+`read_file`/`grep`. Ex.: "grep por `os.getenv` em `routers/` retorna ocorrência
+fora do módulo de configuração".
+
+### Duas classes que PARECEM de leitura e não são
+
+Medidas saindo como `grep` depois da primeira versão desta seção. Se a sua
+acusação é de uma delas, o `provado_se` é execução:
+
+1. **Forma da resposta** — campo novo, campo removido, campo renomeado, tipo
+   trocado, envelope diferente. É a coisa mais observável que existe: quem chama
+   o endpoint vê. `grep` no `return` prova que a linha mudou, não que o contrato
+   quebrou — e um advogado que só lê o fonte pode concluir que "não havia modelo
+   declarado, logo não havia contrato a violar", absolvendo um defeito real.
+2. **SQL montado por interpolação** — é injeção, e injeção se demonstra
+   disparando o payload, não achando a f-string. `grep` acha a linha; só a
+   chamada mostra que o payload atravessa.
 
 ⚠️ Na dúvida entre as duas, **prescreva a execução**. Se ela não fechar, o
 advogado ainda pode ler; o caminho contrário não vale, porque uma leitura que

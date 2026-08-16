@@ -104,10 +104,50 @@ custa defeito real dado como refutado.
 edição usava `POST /projects/{id}/members`, rota real da bancada — a mesma forma
 de contaminação que os 93 árbitros do desafio custaram.
 
+## O conserto, medido — e a varredura não bastava
+
+A varredura seguinte da bancada **pareceu** confirmar, e não confirmava: as
+outras cinco lentes, que ninguém tocou, tinham se movido na mesma direção
+(`prd` 85%→100%, `vazamento` 94%→100%, `performance` 71%→100%). Com 2–4
+acusações por PR, "melhorou" e "variou" têm a mesma cara — e a varredura custa
+~US$2 para não distinguir as duas.
+
+O A/B distingue (`experimento_prompt.py`): mesmo diff, mesmo modelo, N
+repetições, só o prompt mudando. 48 chamadas de Haiku, centavos.
+
+| prompt | exec | leit | **% execução** |
+|---|---|---|---|
+| antes | 1 | 42 | **2%** |
+| depois da 1ª versão | 14 | 35 | 29% |
+| depois de endurecido | 20 | 29 | **41%** |
+
+E generaliza — nos três diffs, apertado: 40%, 43%, 40%. A primeira versão dava
+31%, 12%, 41%, que é dispersão de quem acertou num caso.
+
+### O alvo NÃO é 100%, e por pouco eu errei isso
+
+Escrevi "60–70%" como meta antes de olhar o conteúdo. Número sem fundamento.
+Lendo as 17 prescrições de leitura que sobravam, **~12 estavam certas** —
+camada pulada, consulta no handler, comentário, padrão de migração: convenção
+que só existe no código. O teto útil nestes diffs é ~40–45%, e empurrar além
+faria a lente inventar enquadramento executável para o que não é observável.
+
+Isso é o primo do padrão de bug — otimizar a métrica em vez da coisa. O
+endurecimento mirou **as duas classes mal atribuídas**, não a porcentagem:
+
+| classe | antes | depois |
+|---|---|---|
+| forma da resposta *(o defeito falsamente refutado)* | 11% | **82%** |
+| SQL montado por interpolação | 0% | 46% |
+
 ## O que ainda não sabemos
 
-- se a mudança de fraseado muda o comportamento na prática: **não medido**. Só
-  outra varredura da bancada responde.
+- **fraseado não é veredito.** O A/B mede o que a lente emite; a ponte para o
+  veredito é a tabela 6/6 contra 4/11, com n minúsculo. Número melhor aqui é
+  hipótese de melhora lá.
+- **variância é grande.** Numa amostra de N=4 o prompt antigo deu 25% num diff
+  onde a de N=8 deu 0%. Rodar uma vez e comemorar é o erro que este arnês
+  existe para evitar — inclusive quando o resultado agrada.
 - `performance` tem 48 de 78 `provado_se` sem experimento nenhum (`descrição`).
   Não foi investigado, e é a próxima pedra desta mesma calçada.
 
