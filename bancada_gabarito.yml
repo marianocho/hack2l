@@ -184,6 +184,29 @@ prs:
     o_que: >-
       mudanca real e correta: outer join agregado para contar tarefas, em vez de
       uma consulta por projeto dentro do laco. Autorizacao intacta.
+
+    # 🚨 ELE NAO ERA LIMPO, e o produto me corrigiu -- a TERCEIRA vez (16/08).
+    #
+    # O outer join agregado caia sobre `Task.project_id`, que era FK SEM indice.
+    # Antes do PR nada varria `tasks`; depois, todo GET /projects varria a
+    # tabela inteira. Provado com teste diferencial e EXPLAIN mostrando
+    # `Seq Scan on tasks` -- alegacao conferida a mao, as duas metades
+    # verdadeiras.
+    #
+    # A gravidade nao e' a performance. E' que ESTE PR e' o controle negativo:
+    # enquanto carregasse defeito real, ele nao distinguia "achou coisa
+    # verdadeira" de "condena por condenar", e essa e' a unica peca da bancada
+    # que mede precisao. Todo placar medido enquanto isso valia menos.
+    #
+    # Consertado em `481d2e7`: a feature e o indice que ela exige entram juntos,
+    # que e' o que um PR competente faria.
+    #
+    # ⚠️ E ele so' apareceu porque a EXPANSAO alcancou a acusacao -- ela estava
+    # na 6a posicao, fora do teto de 3, e em 15/08 nunca foi julgada. O mesmo
+    # mecanismo que achou o race no orcamento estreito achou isto.
+    corrigido_em_16_08: >-
+      indice em Task.project_id. Antes disso o "controle negativo" tinha
+      regressao real de performance e nao servia de controle.
     esperado: REFUTADO
     ao_alcance: true
     por_que_importa: >-
