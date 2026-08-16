@@ -133,6 +133,13 @@ acusação é de uma delas, o `provado_se` é execução:
    disparando o payload, não achando a f-string. `grep` acha a linha; só a
    chamada mostra que o payload atravessa.
 
+   🚫 **E o payload é SEMPRE de leitura.** `' OR '1'='1` devolvendo linhas
+   demais prova a mesma coisa que um `DROP`, sem apagar nada. Nunca escreva
+   `provado_se` pedindo `DROP`, `DELETE`, `UPDATE` ou `INSERT` — o advogado
+   dispara isso contra o app **de verdade**, e já apagamos um banco assim.
+   Esta restrição anda junto com a instrução de disparar, e não catorze linhas
+   abaixo: quem lê "dispare o payload" tem que ler o limite na mesma respiração.
+
 ⚠️ Na dúvida entre as duas, **prescreva a execução**. Se ela não fechar, o
 advogado ainda pode ler; o caminho contrário não vale, porque uma leitura que
 "não achou o que violar" encerra o assunto e produz absolvição. Errar para o
