@@ -242,10 +242,18 @@ REDE_ISOLADA = _s("REDE_ISOLADA", PROJETO.get("rede_isolada") or "veredito_isola
 PERMITIR_REDE_NO_BASE = _b("PERMITIR_REDE_NO_BASE", False)
 
 
-# Credenciais e servico do banco, do veredito.yml. Os padroes sao os do desafio.
+# Credenciais e servico do banco, do veredito.yml.
+#
+# 🚨 `usuario` e `senha` SEM FALLBACK desde 17/08: `kb`/`kb` sao do desafio, e
+# foi esse chumbado que fez o retrato do banco falhar contra a bancada e gravar
+# `"limpo": true` em seis rodadas sem ter olhado (16/08). Consertaram o retrato
+# e deixaram o padrao -- a mesma meia-correcao do `app/api/tests`.
+#
+# ⚠️ `servico: db` e a porta 5432 ficam: os dois projetos irmaos declaram igual,
+# e sao convencao de compose, nao identidade de projeto.
 BANCO_SERVICO = _s("BANCO_SERVICO", _banco.get("servico") or "db")
-BANCO_USUARIO = _s("BANCO_USUARIO", _banco.get("usuario") or "kb")
-BANCO_SENHA = _s("BANCO_SENHA", _banco.get("senha") or "kb")
+BANCO_USUARIO = _s("BANCO_USUARIO", _banco.get("usuario") or "")
+BANCO_SENHA = _s("BANCO_SENHA", _banco.get("senha") or "")
 BANCO_PORTA = _i("BANCO_PORTA", int(_banco.get("porta") or 5432))
 
 
@@ -394,7 +402,9 @@ APP_PREPARAR = _app.get("preparar") or []
 # TEM layout -- nunca o do vizinho. Ver `TEM_PROVA_DIFERENCIAL` abaixo.
 _codigo = PROJETO.get("codigo") or {}
 CODIGO_MONTAGENS = _codigo.get("montagens") or []
-CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "/code")
+# `/code` e' a arvore do desafio; a bancada usa `/srv`. Sem fallback, e entra no
+# criterio de `TEM_PROVA_DIFERENCIAL` abaixo: `docker run -w ""` nao roda.
+CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "")
 
 # ⚠️ SAO DOIS CAMINHOS DIFERENTES, e confundi-los custou uma rodada inteira.
 #
@@ -428,12 +438,12 @@ CODIGO_TESTES_NO_REPO = _s("CODIGO_TESTES_NO_REPO",
 # escrever arquivo ou chamar docker. Derivada, nunca declarada duas vezes --
 # irma de `TEM_APP`.
 #
-# Os tres sao necessarios e nenhum se deduz do outro: sem `montagens` o pytest
+# Os QUATRO sao necessarios e nenhum se deduz do outro: sem `montagens` o pytest
 # roda o codigo ASSADO NA IMAGEM (falso negativo silencioso, canario de 08/08);
 # sem `testes` nao ha alvo dentro do container; sem `testes_no_repo` nao ha onde
-# gravar o arquivo no worktree.
+# gravar o arquivo no worktree; sem `trabalho` o `docker run -w ""` nao sobe.
 TEM_PROVA_DIFERENCIAL = bool(CODIGO_MONTAGENS and CODIGO_TESTES
-                             and CODIGO_TESTES_NO_REPO)
+                             and CODIGO_TESTES_NO_REPO and CODIGO_TRABALHO)
 
 # O banco de teste do projeto ja vem com dados, ou nasce vazio?
 #
@@ -454,11 +464,26 @@ BANCO_DE_TESTE_SEMEADO = _b("BANCO_DE_TESTE_SEMEADO",
 # token em `access_token`. Sao tres convencoes do desafio, e nenhum app do mundo
 # e' obrigado a compartilhar as tres. Na bancada e' `/login`, `senha` e `token`
 # -- o login falhava com 404 e toda prova ponta a ponta morria antes de comecar.
+#
+# 🚨 SEM FALLBACK desde 17/08. `/auth/login`, `password` e `access_token` sao as
+# convencoes DO DESAFIO -- a bancada usa `/login`, `senha` e `token`, e nenhum
+# app do mundo e' obrigado a compartilhar as tres. Padrao que aponta para um
+# projeto especifico e' pior que padrao nenhum: as sondas ficam verdes e a
+# rodada segue contra o alvo errado.
+#
+# ⚠️ `campo_usuario` mantem `email` de proposito: os dois projetos irmaos
+# declaram igual, entao e' convencao e nao contaminacao. A diferenca e' o
+# criterio da trava em `tests/test_config_sem_desafio.py`.
 _auth = PROJETO.get("auth") or {}
-AUTH_ROTA = _s("AUTH_ROTA", _auth.get("rota") or "/auth/login")
+AUTH_ROTA = _s("AUTH_ROTA", _auth.get("rota") or "")
 AUTH_CAMPO_USUARIO = _s("AUTH_CAMPO_USUARIO", _auth.get("campo_usuario") or "email")
-AUTH_CAMPO_SENHA = _s("AUTH_CAMPO_SENHA", _auth.get("campo_senha") or "password")
-AUTH_CAMPO_TOKEN = _s("AUTH_CAMPO_TOKEN", _auth.get("campo_token") or "access_token")
+AUTH_CAMPO_SENHA = _s("AUTH_CAMPO_SENHA", _auth.get("campo_senha") or "")
+AUTH_CAMPO_TOKEN = _s("AUTH_CAMPO_TOKEN", _auth.get("campo_token") or "")
+
+# Da' para autenticar neste projeto? Derivada -- o login precisa dos tres, e
+# adivinhar qualquer um deles e' postar credencial num endereco que nao e' o de
+# login. Ver `ferramentas._token`, que recusa.
+TEM_AUTH = bool(AUTH_ROTA and AUTH_CAMPO_SENHA and AUTH_CAMPO_TOKEN)
 
 # {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
 # e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e
@@ -513,7 +538,22 @@ APP_EM_BANCO_DESCARTAVEL = _b("APP_EM_BANCO_DESCARTAVEL", False)
 # uma variavel de ambiente trocada faria a rodada rodar em cima do banco real
 # achando que esta contida, que e' pior do que nao ter contencao nenhuma.
 BANCO_APP = _s("BANCO_APP", _banco.get("descartavel_app") or "kb_veredito_app")
-BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", _banco.get("nome") or "kb")
+# 🚨 Sem fallback: `kb` e' o banco do desafio. Este e' o nome que o retrato LE
+# para responder "a rodada mexeu no dado do cliente?" -- apontado para o banco
+# errado, ele responde sobre o projeto errado.
+BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", _banco.get("nome") or "")
+
+# Da' para tirar retrato do banco deste projeto? Pelo mesmo motivo do
+# `TEM_AUTH`: `psql -U "" -d ""` nao e' uma pergunta, e' um erro com cara de
+# resposta.
+#
+# ⚠️ `BANCO_SERVICO` de fora, de proposito, e foi a propria trava do
+# `test_banco_nao_se_aplica` que apontou: ele cai em `db`, e um criterio que se
+# apoia num valor adivinhado herda o palpite. Alem disso o nome do SERVICO nao
+# e' o que torna um banco declarado -- nome e usuario sao. Servico errado faz o
+# retrato falhar alto (NAO MEDIDO com causa), que e' o desfecho honesto; nome ou
+# usuario vazios fariam o psql responder lixo com cara de resposta.
+TEM_BANCO = bool(BANCO_APP_ORIGEM and BANCO_USUARIO)
 
 # 🚨 EXISTE ALGUMA VIA, NESTA RODADA, QUE CHEGUE A UM BANCO?
 #
@@ -535,7 +575,7 @@ BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", _banco.get("nome") or "kb")
 # ⚠️ `_banco.get("nome")` cru, e nao `BANCO_APP_ORIGEM`: aquele cai em `kb`, o
 # banco do desafio, quando o projeto nao declara -- perguntar a ele seria
 # perguntar ao proprio chumbado que este criterio existe para nao repetir.
-ALCANCA_BANCO = bool(TEM_APP or TEM_PROVA_DIFERENCIAL or _banco.get("nome"))
+ALCANCA_BANCO = bool(TEM_APP or TEM_PROVA_DIFERENCIAL or TEM_BANCO)
 
 
 # --- contexto compartilhado no bloco cacheado -------------------------------

@@ -457,10 +457,23 @@ reciclado**. Preenchido não é válido.
 3. Toda chave derivada de um campo: **e se o campo sumir?** Foi o dedup.
 4. Toda checagem que depende de convenção de string: **e se a convenção não
    valer?**
-5. 🆕 **O que só existe num caso não é testado pelo caso que existe.** Os 375
-   testes rodam todos contra o desafio, então tudo específico dele é invisível
-   para eles. Foi preciso apontar o produto para um **segundo** projeto — a
-   bancada — para o layout chumbado aparecer.
+5. **O que só existe num caso não é testado pelo caso que existe.** A suíte roda
+   toda contra o desafio, então tudo específico dele é invisível para ela: ali
+   *"leu do yml"* e *"caiu no padrão"* produzem **o mesmo valor**. Foi preciso
+   apontar o produto para um **segundo** projeto — a bancada — para o layout
+   chumbado aparecer.
+6. 🆕 **E o corte é a AUSÊNCIA de projeto, não o segundo projeto.** Medido em
+   17/08: **14 de 14** fallbacks com literal no `config.py` usavam um valor que
+   o `desafio.yml` declara; nove a bancada declarava diferente. A bancada acha
+   isso por ser um segundo *exemplo*, a ~US$2 por varredura. O **projeto nu** —
+   rodar sem `veredito.yml` nenhum — acha por ser a *ausência* de exemplo, em
+   milissegundos, sem repo nem container. `tests/test_projeto_nu.py`.
+
+> **O `or <valor do desafio>` é cicatriz de migração.** O código nasceu contra o
+> desafio e o `veredito.yml` foi enxertado depois; o `or` era a ponte, e virou
+> dívida no segundo em que a migração acabou. Por isso 15/08 trocou o *valor* de
+> `app/api/tests` e deixou o `or` — e mordeu de novo em 17/08.
+> **Consertar o valor trata o sintoma; o mecanismo é o fallback existir.**
 
 ### 🚨 E toda guarda precisa ser vista FALHANDO
 

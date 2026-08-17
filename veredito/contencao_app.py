@@ -84,7 +84,16 @@ def _psql(banco: str, sql: str, timeout: int = 120) -> subprocess.CompletedProce
     E' o sexto chumbado da mesma familia dos cinco que o `veredito.yml` tirou em
     14-15/08 -- e o mais perigoso deles, porque os outros faziam a rodada
     FALHAR, e este fazia ela dizer que estava tudo bem.
+
+    ⚠️ 17/08: consertar o VALOR nao bastava, porque o fallback continuava sendo
+    `kb`. Agora `usuario` e `nome` nao tem padrao, e a pergunta vem antes --
+    `psql -U "" -d ""` nao e' uma pergunta, e' um erro com cara de resposta.
     """
+    if not cfg.TEM_BANCO:
+        return subprocess.CompletedProcess(
+            args=["psql"], returncode=1, stdout="",
+            stderr=("o projeto revisado nao declara `banco` (nome, usuario, "
+                    "servico) no veredito.yml"))
     return _compose("exec", "-T", cfg.BANCO_SERVICO,
                     "psql", "-U", cfg.BANCO_USUARIO, "-d", banco,
                     "-v", "ON_ERROR_STOP=1", "-t", "-A", "-c", sql,

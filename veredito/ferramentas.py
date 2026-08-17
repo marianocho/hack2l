@@ -964,6 +964,16 @@ def _token(usuario: str) -> str:
         return _TOKENS[usuario]
     if usuario not in cfg.USUARIOS:
         raise RuntimeError(f"usuario desconhecido: {usuario}. Use: {', '.join(cfg.USUARIOS)}")
+    # 🚨 Sem `auth` declarado nao se adivinha rota de login. Ate' 17/08 os tres
+    # campos caiam nas convencoes do desafio, e a consequencia nao e' so' um 404:
+    # e' POSTAR EMAIL E SENHA num endereco que este projeto nunca disse ser o de
+    # login. Contencao, nao predicao -- vale para credencial em primeiro lugar.
+    if not cfg.TEM_AUTH:
+        raise RuntimeError(
+            "o projeto revisado nao declara `auth` (rota, campo_senha, "
+            "campo_token) no veredito.yml: nao ha rota de login conhecida, e "
+            "adivinhar uma significaria enviar credencial para um endereco "
+            "arbitrario. Sem prova ponta a ponta neste projeto.")
     email, senha = cfg.USUARIOS[usuario]
     # ⚠️ Rota, nomes dos campos e nome do token vem do veredito.yml. Ate' 15/08
     # os quatro estavam chumbados no formato do desafio (`/auth/login`,

@@ -142,22 +142,49 @@ def test_alcanca_banco_liga_com_QUALQUER_uma_das_tres():
         "o criterio deixou de ser 'qualquer uma das vias' -- com `and` ele "
         "silenciaria a medicao em projeto que declara so' o bloco `codigo`")
     termos = {ast.unparse(v) for v in dentro.values}
-    assert termos == {"TEM_APP", "TEM_PROVA_DIFERENCIAL", "_banco.get('nome')"}, (
+    assert termos == {"TEM_APP", "TEM_PROVA_DIFERENCIAL", "TEM_BANCO"}, (
         f"as vias ate' um banco mudaram: {termos}")
 
 
-def test_criterio_nao_pergunta_ao_proprio_chumbado():
-    """`BANCO_APP_ORIGEM` cai em `kb` -- o banco do desafio -- quando o projeto
-    nao declara. Derivar o criterio dele seria perguntar ao chumbado que ele
-    existe para nao repetir, e `ALCANCA_BANCO` seria SEMPRE verdadeiro.
+def test_criterio_nao_pergunta_a_valor_com_fallback_do_desafio():
+    """🚨 O criterio nao pode se apoiar em nada que caia num valor do desafio.
+
+    Quando escrevi este teste, em 17/08, `BANCO_APP_ORIGEM` ainda caia em `kb`
+    -- o banco do desafio -- e derivar `ALCANCA_BANCO` dele teria dado SEMPRE
+    verdadeiro, com o conserto virando no-op. O fallback saiu no commit
+    seguinte, entao passar por `TEM_BANCO` ficou seguro; o que este teste
+    protege e' a propriedade, nao o caminho: **todo identificador de que o
+    criterio depende tem que ser definido sem literal de projeto.**
     """
+    import ast
     import inspect
+
     fonte = inspect.getsource(cfg)
-    i = fonte.index("ALCANCA_BANCO = ")
-    linha = fonte[i:fonte.index("\n", i)]
-    assert "BANCO_APP_ORIGEM" not in linha, (
-        "o criterio pergunta ao valor que tem fallback para o desafio")
-    assert '_banco.get("nome")' in linha
+    arvore = ast.parse(fonte)
+    atribuicoes = {t.id: n.value for n in ast.walk(arvore)
+                   if isinstance(n, ast.Assign)
+                   for t in n.targets if isinstance(t, ast.Name)}
+
+    vistos, fila = set(), ["ALCANCA_BANCO"]
+    while fila:
+        nome = fila.pop()
+        if nome in vistos or nome not in atribuicoes:
+            continue
+        vistos.add(nome)
+        valor = atribuicoes[nome]
+        for no in ast.walk(valor):
+            if isinstance(no, ast.Name):
+                fila.append(no.id)
+            # `X or "literal"` em qualquer ponto da cadeia
+            if isinstance(no, ast.BoolOp) and isinstance(no.op, ast.Or):
+                for v in no.values:
+                    if isinstance(v, ast.Constant) and isinstance(v.value, str) \
+                            and v.value.strip():
+                        pytest.fail(
+                            f"ALCANCA_BANCO depende de {nome}, que cai em "
+                            f"{v.value!r} -- valor de projeto no criterio que "
+                            "existe para nao repetir chumbado")
+    assert "TEM_BANCO" in vistos, "a cadeia nao foi percorrida de verdade"
 
 
 def test_json_da_rodada_guarda_a_causa(rodada, sem_nada, monkeypatch):
