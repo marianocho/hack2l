@@ -90,6 +90,21 @@ _CHAMADAS: dict[str, list[dict]] = {}
 # Marcado por _marca_falha durante UMA chamada, lido por _fecha_chamada.
 _FALHA_DA_CHAMADA: str | None = None
 
+# 🚨 O TERCEIRO DESFECHO -- 17/08. Ferramenta que QUEBROU e ferramenta que o
+# projeto NAO DECLAROU nao sao a mesma coisa, e trata-las igual custou uma
+# rodada inteira: revisando `pallets/flask`, o advogado refutou cinco acusacoes
+# por leitura e o parecer saiu 4 de 5 inconclusivos, porque as chamadas a
+# `prova_diferencial` e `run_tests` -- ferramentas que aquele projeto nao tem --
+# entravam na conta como falha.
+#
+# Quebrou   = existia, foi tentada, nao respondeu.       Contamina o veredito.
+# Indisponivel = nao existe para este projeto.           Limite conhecido.
+#
+# ⚠️ Isto NAO afrouxa a R3b: ela dispara com ZERO sucesso, e indisponivel
+# continua nao sendo sucesso. O que muda e' a R3 (o artefato para de trazer
+# `erro`) e o que o parecer consegue dizer sobre a causa.
+_INDISPONIVEL_DA_CHAMADA: str | None = None
+
 
 def _marca_falha(texto: str) -> str:
     """Marca que a chamada em curso falhou e devolve o texto INALTERADO.
@@ -102,18 +117,39 @@ def _marca_falha(texto: str) -> str:
     return texto
 
 
+def _marca_indisponivel(texto: str) -> str:
+    """Marca que a ferramenta NAO EXISTE para este projeto. Mesmo contrato."""
+    global _INDISPONIVEL_DA_CHAMADA
+    _INDISPONIVEL_DA_CHAMADA = texto[:300]
+    return texto
+
+
 def _abre_chamada() -> None:
-    global _FALHA_DA_CHAMADA
+    global _FALHA_DA_CHAMADA, _INDISPONIVEL_DA_CHAMADA
     _FALHA_DA_CHAMADA = None
+    _INDISPONIVEL_DA_CHAMADA = None
+
+
+def _desfecho_em_curso() -> str:
+    # A falha ganha da indisponibilidade: se as duas foram marcadas, alguma
+    # coisa foi tentada e quebrou, e o estado honesto e' o pior dos dois.
+    if _FALHA_DA_CHAMADA is not None:
+        return "erro"
+    return "indisponivel" if _INDISPONIVEL_DA_CHAMADA is not None else "ok"
 
 
 def _fecha_chamada(nome: str, saida: str) -> str:
     """Registra o desfecho e devolve a saida que o modelo le, sem tocar nela."""
-    global _FALHA_DA_CHAMADA
+    global _FALHA_DA_CHAMADA, _INDISPONIVEL_DA_CHAMADA
+    desfecho = _desfecho_em_curso()
     _CHAMADAS.setdefault(_ACUSACAO_ATUAL, []).append({
         "ferramenta": nome,
-        "ok": _FALHA_DA_CHAMADA is None,
-        "causa": _FALHA_DA_CHAMADA or "",
+        # `ok` continua sendo o booleano de sempre: quem le `chamadas.json` de
+        # uma rodada antiga nao pode passar a ler outra coisa. `desfecho` e' o
+        # campo novo, e e' quem separa os tres estados.
+        "ok": desfecho == "ok",
+        "desfecho": desfecho,
+        "causa": _FALHA_DA_CHAMADA or _INDISPONIVEL_DA_CHAMADA or "",
     })
     # Limpa ao registrar, e nao so' no _abre_chamada. `autoteste` chama
     # `_read_file`/`_grep`/`_http_request` DIRETO, fora de qualquer ferramenta:
@@ -122,6 +158,7 @@ def _fecha_chamada(nome: str, saida: str) -> str:
     # lembrar e' como o prefixo `ERRO` virou divida -- entao o estado se limpa
     # nas duas pontas.
     _FALHA_DA_CHAMADA = None
+    _INDISPONIVEL_DA_CHAMADA = None
     # Grava a cada chamada, nao no fim: rodada que morre no meio nao pode levar
     # junto a prova de que as ferramentas estavam funcionando. Mesmo motivo do
     # _avisa acima.
@@ -151,17 +188,26 @@ def chamadas_da_acusacao(id_acusacao: str) -> list[dict]:
     return list(_CHAMADAS.get(id_acusacao, []))
 
 
-def desfecho_da_acusacao(id_acusacao: str) -> tuple[int, int]:
-    """(sucessos, erros) das ferramentas que EXECUTARAM nesta acusacao.
+def desfecho_da_acusacao(id_acusacao: str) -> tuple[int, int, int]:
+    """(sucessos, erros, indisponiveis) das ferramentas chamadas nesta acusacao.
 
     ⚠️ Nao cobre chamada que nem chegou ao nosso codigo -- input invalido que a
     API rejeita antes de nos chamar nao aparece aqui. Quem fecha esse vao e'
-    `advogado._conta_ferramentas`, contando os blocos que voltaram. Somar os
+    `advogado._consolida_ferramentas`, contando os blocos que voltaram. Somar os
     dois e' de proposito: cada um enxerga o que o outro nao ve.
+
+    ⚠️ O terceiro valor entrou em 17/08 e a assinatura mudou de proposito: quem
+    consome tem que ser obrigado a olhar para ele. Devolver (ok, erro) com os
+    indisponiveis calados faria a soma do chamador contar cada recusa como
+    "bloco sem registro", ou seja, como erro -- o conserto viraria no-op, e em
+    silencio. E' o padrao de bug deste projeto, e ele mora na aritmetica.
     """
     chamadas = _CHAMADAS.get(id_acusacao, [])
-    ok = sum(1 for c in chamadas if c["ok"])
-    return ok, len(chamadas) - ok
+    # Chamada gravada antes de 17/08 nao tem `desfecho`; `ok` decide, e a
+    # ausencia do campo nunca vira "indisponivel" retroativo.
+    ok = sum(1 for c in chamadas if c.get("desfecho", "ok" if c["ok"] else "erro") == "ok")
+    indisp = sum(1 for c in chamadas if c.get("desfecho") == "indisponivel")
+    return ok, len(chamadas) - ok - indisp, indisp
 
 
 # Chamadas HTTP por acusacao. Mesma chaveagem dos avisos, e pelo mesmo motivo:
@@ -605,12 +651,44 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         "exit_base": None, "exit_head": None,
         "stdout_base": "", "stdout_head": "",
         # estado e' o campo autoritativo -- calculado em Python, o LLM nao toca.
-        # motivo explica qualquer nao-PROVADO. erro e' SO falha de infra.
+        # motivo explica qualquer nao-PROVADO. erro e' SO falha de infra, e
+        # indisponivel e' SO "este projeto nao tem esta ferramenta" -- os dois
+        # separados desde 17/08, porque a R3 do juiz le o primeiro e nao o
+        # segundo.
         "estado": "INCONCLUSIVO", "provado": False,
-        "motivo": "a prova nao chegou a rodar", "erro": None,
+        "motivo": "a prova nao chegou a rodar", "erro": None, "indisponivel": None,
         "segundos": 0.0,
     }
     escritos: list[Path] = []
+
+    # 🚨 Recusa ANTES de tocar em disco: projeto que nao declara layout NAO TEM
+    # layout, e adivinhar o do desafio ja custou uma rodada inteira (17/08,
+    # `pallets/flask`: as cinco provas morreram com "app/api/tests nao existe em
+    # base", DEPOIS de o advogado ter escrito cinco testes).
+    #
+    # Mesma doutrina do `http_request` sem `app.api` declarado: a ferramenta diz
+    # que nao pode e diz o que fazer em vez disso, no primeiro segundo em vez de
+    # no fim das voltas.
+    #
+    # 🚨 `indisponivel`, NUNCA `erro` -- e a diferenca entre os dois e' a decisao
+    # de 17/08. `erro` significa "existia e quebrou", e a R3 do juiz converte
+    # qualquer veredicto que tenha um: foi assim que quatro refutacoes obtidas
+    # por leitura, com o grep funcionando, sairam inconclusivas no Flask.
+    # Ferramenta que este projeto nao tem e' limite conhecido do projeto, e
+    # limite conhecido nao vira duvida sobre o codigo.
+    if not cfg.TEM_PROVA_DIFERENCIAL:
+        art["indisponivel"] = (
+            "o projeto revisado nao declara o bloco `codigo` no veredito.yml "
+            "(montagens, testes, testes_no_repo): nao ha onde gravar o teste "
+            "nem como monta-lo no container, entao a prova diferencial nao "
+            "existe para este projeto. Prove por leitura (read_file/grep) ou "
+            "peca ao dono do repositorio um veredito.yml.")
+        art["motivo"] = art["indisponivel"]
+        cfg.ARTEFATOS.mkdir(parents=True, exist_ok=True)
+        (cfg.ARTEFATOS / f"prova_{art['id']}.json").write_text(
+            json.dumps(art, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        return art
 
     # Recusa ANTES de executar: um teste que escreve no banco da aplicacao
     # destroi o seed, e nao ha como desfazer depois de rodar.
@@ -737,6 +815,8 @@ def _formata_prova(art: dict) -> str:
     ]
     if art["erro"]:
         linhas.append(f"  falha de execucao: {art['erro']}")
+    if art.get("indisponivel"):
+        linhas.append(f"  ferramenta indisponivel neste projeto: {art['indisponivel']}")
     if art["estado"] == "PROVADO":
         linhas.append("  Este teste passa no codigo de hoje e quebra com a mudanca do PR.")
     linhas.append(f"  artefato: artefatos/prova_{art['id']}.json ({art['segundos']}s)")
@@ -967,6 +1047,11 @@ def _http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str 
             "o projeto revisado nao declara `app.api` no veredito.yml: nao ha "
             "app para chamar. Prove por leitura (read_file/grep) ou peca ao dono "
             "do repositorio um veredito.yml.")
+        # Mesma decisao de 17/08 da `prova_diferencial`: app que o projeto nao
+        # declarou e' limite conhecido, nao ferramenta quebrada. Deixar so' esta
+        # aqui como `erro` seria consertar metade -- num repo de terceiro o
+        # advogado tenta as tres, e uma so' bastava para contaminar a contagem.
+        saida["indisponivel"] = True
         return saida
     try:
         cabecalhos = {}
@@ -1017,6 +1102,8 @@ def prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> str:
     # artefato ja sabe se a execucao quebrou -- e' a mesma fonte que a R3 le.
     if art.get("erro"):
         _marca_falha(f"prova_diferencial: {art['erro']}")
+    elif art.get("indisponivel"):
+        _marca_indisponivel(f"prova_diferencial: {art['indisponivel']}")
     return _fecha_chamada("prova_diferencial", saida)
 
 
@@ -1032,6 +1119,14 @@ def run_tests(expressao: str = "") -> str:
             Vazio roda a suite inteira.
     """
     _abre_chamada()
+    # Sem `codigo.testes` declarado o alvo do pytest seria uma string vazia, e
+    # rodar a suite inteira do repositorio de um desconhecido dentro do nosso
+    # container e' exatamente o que apagou o banco em 11/08. Nao adivinhar.
+    if not cfg.TEM_PROVA_DIFERENCIAL:
+        return _fecha_chamada("run_tests", _marca_indisponivel(
+            "INDISPONIVEL: o projeto revisado nao declara o bloco `codigo` no "
+            "veredito.yml (montagens, testes, testes_no_repo), entao nao ha "
+            "suite que eu saiba rodar aqui. Prove por leitura (read_file/grep)."))
     try:
         wt = _worktree_de("head")
         alvo = (f"{cfg.CODIGO_TESTES}/{Path(expressao).name}"
@@ -1099,8 +1194,10 @@ def http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str =
     if r["erro"]:
         # De novo o CAMPO, e nao o texto: `_http_request` ja devolve o desfecho
         # estruturado, entao nao ha o que adivinhar.
-        return _fecha_chamada("http_request", _marca_falha(
-            f"ERRO ({r['como']}): {r['erro']}"))
+        marca = _marca_indisponivel if r.get("indisponivel") else _marca_falha
+        rotulo = "INDISPONIVEL" if r.get("indisponivel") else "ERRO"
+        return _fecha_chamada("http_request", marca(
+            f"{rotulo} ({r['como']}): {r['erro']}"))
     saida = f"HTTP {r['status']} (como {r['como']})\n{_corta(r['corpo'], 3000)}"
 
     # Deteccao por SONDA (llm_alvo), nao por comparar com a string enlatada:
@@ -1268,18 +1365,36 @@ def autoteste(sondar_app: bool = True) -> dict:
     # unica ferramenta que assina PROVADO nao funcionava.
     #
     # Conferir a pasta e' de graca e responde antes de a rodada comecar.
-    try:
-        faltando = [lado for lado in ("base", "head")
-                    if not (cfg.WORKTREES / lado / cfg.CODIGO_TESTES_NO_REPO).is_dir()]
-        r["destino_do_teste"] = {
-            "ok": not faltando,
-            "detalhe": (f"{cfg.CODIGO_TESTES_NO_REPO} existe nos dois lados"
-                        if not faltando else
-                        f"{cfg.CODIGO_TESTES_NO_REPO} nao existe em {faltando} -- "
-                        "ajuste `codigo.testes_no_repo` no veredito.yml"),
+    #
+    # 🚨 A sonda vinha ANTES da pergunta que a habilita, e sem o `TEM_...` ela
+    # ficaria MUDA justo no caso novo: com `testes_no_repo` vazio o caminho
+    # conferido vira a raiz do worktree, que e' sempre um diretorio, e o pre-voo
+    # sairia VERDE dizendo que o destino existe. Guarda condicionada ao sinal que
+    # ela deveria vigiar -- o padrao de bug deste projeto, dentro da guarda
+    # escrita contra ele. Por isso a pergunta vem primeiro.
+    if not cfg.TEM_PROVA_DIFERENCIAL:
+        # 🚫 Dito, nunca omitido: a sonda some porque o projeto nao se
+        # descreveu, e isso muda o que a rodada consegue provar.
+        r["prova_diferencial"] = {
+            "ok": False,
+            "detalhe": ("o projeto nao declara o bloco `codigo` no veredito.yml "
+                        "(montagens, testes, testes_no_repo) -- sem prova "
+                        "diferencial e sem run_tests. A rodada segue com "
+                        "read_file e grep, e a R2 limita tudo a MEDIA."),
         }
-    except Exception as e:
-        r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+    else:
+        try:
+            faltando = [lado for lado in ("base", "head")
+                        if not (cfg.WORKTREES / lado / cfg.CODIGO_TESTES_NO_REPO).is_dir()]
+            r["destino_do_teste"] = {
+                "ok": not faltando,
+                "detalhe": (f"{cfg.CODIGO_TESTES_NO_REPO} existe nos dois lados"
+                            if not faltando else
+                            f"{cfg.CODIGO_TESTES_NO_REPO} nao existe em {faltando} -- "
+                            "ajuste `codigo.testes_no_repo` no veredito.yml"),
+            }
+        except Exception as e:
+            r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
     # Os scanners externos -- NAO essenciais, mas nao invisiveis.
     #

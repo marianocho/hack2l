@@ -27,7 +27,46 @@ Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md` e no diário do vault
 | Três guardas mudas consertadas | scanner, encoding do relatório, retrato do banco |
 | Controle negativo | voltou a ser negativo (`index=True` na bancada) |
 
-## 🎯 A decisão que está aberta — comece por aqui
+## ✅ RESOLVIDA em 17/08, à tarde — (a) e (b), com medição controlada
+
+> A seção abaixo fica como está, porque é o registro do diagnóstico. O que
+> mudou: **as duas partes foram feitas**, e o dado corrigiu duas previsões
+> minhas pelo caminho.
+
+**Três rodadas do mesmo PR, mesmas 5 acusações (`--reusar`), só o código
+mudando.** É a disciplina do `experimento_prompt.py` aplicada ao motor: sem
+`--reusar`, os promotores rodariam de novo e a comparação mediria variância do
+Haiku junto com o conserto.
+
+| | advogado disse REFUTADO | descartados no parecer | inconclusivos |
+|---|---|---|---|
+| antes | 1 de 5 | **0** | 5 |
+| só com (a) | **5 de 5** | 1 | 4 |
+| com (a) + (b) | 5 de 5 | **4** | 1 |
+
+**Duas coisas que eu previ errado, e o dado desmentiu:**
+
+1. Diagnostiquei que a frase *"você testou, o teste rodou"* em
+   `advogado.py:120` era a causa de 4 dos 5 inconclusivos, e propus reescrevê-la.
+   **Não era.** Sem tocar uma linha do prompt, o advogado foi de 1 para 5
+   refutações — o que prendia era a ferramenta descobrir tarde. Dizer no
+   primeiro segundo *"não existe aqui, prove por leitura"* bastou.
+2. Escrevi que o (b) converteria os 4 restantes. **Converteu 3.** O quarto
+   (`correcao_05`) tem `ferramentas_ok=0`: chamou as duas ferramentas
+   inexistentes, não leu arquivo nenhum, e refutou a partir do diff que já vinha
+   no prompt. A **R3b segurou**, e está certa em segurar — isso é argumentar,
+   não testar. O parecer agora diz a causa com todas as letras.
+
+**O que ficou no código:** um terceiro desfecho de ferramenta
+(`ok` / `erro` / `indisponivel`), sem fallback no bloco `codigo` do config,
+`TEM_PROVA_DIFERENCIAL` derivado dos três campos, recusa em `prova_diferencial`,
+`run_tests` e `http_request`, e a R3 lendo só `erro`. **12 travas**, todas
+vistas falhando com a violação injetada — inclusive a da aritmética, que era
+onde o conserto viraria no-op em silêncio.
+
+---
+
+## 🎯 A decisão que estava aberta — o diagnóstico, preservado
 
 A primeira revisão de um PR de terceiro pela porta da frente rodou
 (`pallets/flask#6095`, `--top-n 2`, US$~0,15) e deu:
@@ -52,6 +91,8 @@ linha documenta que esse mesmo chumbado já custou uma rodada em 15/08.
 
 > Conserto: caminhos vazios quando não declarados, e `prova_diferencial` recusa
 > dizendo isso — igual ao `http_request` desde 17/08. **Seguro, e eu faria.**
+>
+> ✅ **Feito.** E ele sozinho já levou o advogado de 1 para 5 refutações.
 
 **(b) A R3 confunde dois estados.**
 
@@ -67,6 +108,9 @@ inalcançável pela porta nova.
 > 🚫 O (b) mexe na regra central do juiz — a que impede absolvição falsa.
 > Afrouxar errado ali é o erro mais caro possível neste projeto. **Não fazer sem
 > decidir com o Luis.**
+>
+> ✅ **Decidido e feito em 17/08**, com o dado na mesa antes da decisão: a R3
+> passou a ler só `erro`, e a R3b **não** foi afrouxada. Ver o topo do arquivo.
 
 ## O que 16–17/08 estabeleceu como regra
 

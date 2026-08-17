@@ -306,6 +306,8 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
         # Alimentam a R3b do juiz. Sao contagem de OBSERVACAO, nao de tentativa:
         # o advogado ja disse PROVADO com as cinco chamadas falhando.
         "ferramentas_ok": 0, "ferramentas_erro": 0,
+        # Nem sucesso nem falha: ferramenta que este projeto nao declarou.
+        "ferramentas_indisponivel": 0,
     }
 
     try:
@@ -609,13 +611,24 @@ def _consolida_ferramentas(v: dict, id_acusacao: str, blocos: int) -> None:
     cada `break`. Guarda que depende de alguem lembrar de chama-la no caminho
     de erro e' guarda que fica muda no caminho de erro.
     """
-    ok, erro = ferramentas.desfecho_da_acusacao(id_acusacao)
+    ok, erro, indisponivel = ferramentas.desfecho_da_acusacao(id_acusacao)
+    # 🚨 `indisponivel` entra na subtracao, e esquece-lo era o jeito de o
+    # conserto de 17/08 virar no-op EM SILENCIO: cada recusa viraria "bloco sem
+    # registro", cairia em `nao_executadas`, e voltaria para a conta de erro
+    # exatamente de onde tinha acabado de sair. O padrao de bug deste projeto
+    # mora na aritmetica tambem.
+    #
     # Bloco devolvido sem registro correspondente = chamada que nao chegou a
     # executar. Nao observou nada, entao e' erro -- nunca sucesso. O default
     # tem que cair para o lado de INCONCLUSIVO, que e' o estado honesto.
-    nao_executadas = max(0, blocos - (ok + erro))
+    nao_executadas = max(0, blocos - (ok + erro + indisponivel))
     v["ferramentas_ok"] = ok
     v["ferramentas_erro"] = erro + nao_executadas
+    # ⚠️ NAO entra na R3b. Ela dispara com ZERO sucesso, e indisponivel nunca
+    # foi sucesso: veredito sem nenhuma observacao continua inconclusivo, tenha
+    # a ferramenta quebrado ou nunca existido. Este campo serve para o parecer
+    # dizer QUAL das duas coisas aconteceu.
+    v["ferramentas_indisponivel"] = indisponivel
 
 
 def _prompt_da_acusacao(a: dict) -> str:

@@ -388,11 +388,12 @@ APP_PREPARAR = _app.get("preparar") or []
 # pytest roda o codigo ASSADO NA IMAGEM e a prova diferencial devolve o mesmo
 # resultado nos dois lados -- falso negativo silencioso, provado com canario em
 # 08/08.
+#
+# 🚨 SEM FALLBACK desde 17/08, pelo mesmo motivo das contas e do `app.api`: o
+# padrao apontava para a arvore do desafio, e projeto que nao declara layout NAO
+# TEM layout -- nunca o do vizinho. Ver `TEM_PROVA_DIFERENCIAL` abaixo.
 _codigo = PROJETO.get("codigo") or {}
-CODIGO_MONTAGENS = _codigo.get("montagens") or [
-    ["app/api/app", "/code/app"],
-    ["app/api/tests", "/code/tests"],
-]
+CODIGO_MONTAGENS = _codigo.get("montagens") or []
 CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "/code")
 
 # ⚠️ SAO DOIS CAMINHOS DIFERENTES, e confundi-los custou uma rodada inteira.
@@ -408,9 +409,31 @@ CODIGO_TRABALHO = _s("CODIGO_TRABALHO", _codigo.get("trabalho") or "/code")
 # `prova_diferencial` gravava fora do worktree da bancada e morria com
 # FileNotFoundError, e as quatro acusacoes viraram INCONCLUSIVO. A ferramenta
 # que assina PROVADO nao funcionava fora do desafio -- de novo.
-CODIGO_TESTES = _s("CODIGO_TESTES", _codigo.get("testes") or "tests")
+#
+# 🚨 E em 17/08 ele mordeu de novo, na primeira revisao de um PR de terceiro
+# pela porta da frente. O comentario acima ja contava a historia da bancada, e o
+# conserto de la' foi trocar o valor -- nao tirar o chumbado. Revisando o
+# `pallets/flask`, que nao tem `veredito.yml`, as CINCO provas diferenciais
+# morreram com "app/api/tests nao existe em base", e o `erro` no artefato levou
+# a R3 a converter em INCONCLUSIVO ate' uma refutacao obtida por leitura.
+#
+# Valor padrao que aponta para o desafio e' a quinta instancia do mesmo padrao
+# (contas, APP_API_URL, -U kb do psql, py -3.12 no fontes.py, e este). A troca
+# certa e' sempre a mesma: lista mantida -> criterio derivado.
+CODIGO_TESTES = _s("CODIGO_TESTES", _codigo.get("testes") or "")
 CODIGO_TESTES_NO_REPO = _s("CODIGO_TESTES_NO_REPO",
-                           _codigo.get("testes_no_repo") or "app/api/tests")
+                           _codigo.get("testes_no_repo") or "")
+
+# A pergunta que `prova_diferencial` e `run_tests` passam a fazer antes de
+# escrever arquivo ou chamar docker. Derivada, nunca declarada duas vezes --
+# irma de `TEM_APP`.
+#
+# Os tres sao necessarios e nenhum se deduz do outro: sem `montagens` o pytest
+# roda o codigo ASSADO NA IMAGEM (falso negativo silencioso, canario de 08/08);
+# sem `testes` nao ha alvo dentro do container; sem `testes_no_repo` nao ha onde
+# gravar o arquivo no worktree.
+TEM_PROVA_DIFERENCIAL = bool(CODIGO_MONTAGENS and CODIGO_TESTES
+                             and CODIGO_TESTES_NO_REPO)
 
 # O banco de teste do projeto ja vem com dados, ou nasce vazio?
 #

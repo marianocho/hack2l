@@ -147,14 +147,30 @@ def aplica_regras(
     # ⚠️ AUSENTE nao e' ZERO. Rodada gravada antes de 11/08 nao tem o campo;
     # tratar ausencia como zero viraria todo reprocessamento em inconclusivo,
     # inventando um problema que nao houve.
+    # ⚠️ O GATILHO NAO MUDOU em 17/08, e nao mudar foi a decisao. Ferramenta
+    # indisponivel deixou de contar como ERRO (a R3 parou de converter por causa
+    # dela), mas nunca contou como SUCESSO -- entao veredito sem nenhuma
+    # observacao continua inconclusivo, tenha a ferramenta quebrado ou nunca
+    # existido neste projeto. Ler o diff que ja veio no prompt e' argumentar, e
+    # o produto existe para barrar isso. O que mudou aqui e' so a CAUSA dita.
     ok = v.get("ferramentas_ok")
     if ok == 0 and v.get("veredito") in ("PROVADO", "REFUTADO"):
         erros = v.get("ferramentas_erro") or 0
+        indisp = v.get("ferramentas_indisponivel") or 0
+        if indisp and not erros:
+            causa = (f"as {indisp} chamada(s) foram a ferramentas que este "
+                     "projeto nao declara, e nenhuma leitura do repositorio foi "
+                     "feita")
+        elif indisp:
+            causa = (f"{erros} chamada(s) com erro e {indisp} a ferramenta(s) "
+                     "que este projeto nao declara")
+        else:
+            causa = f"{erros} chamada(s) com erro"
         antes = v["veredito"]
         v["veredito"] = "INCONCLUSIVO"
         v["severidade"] = "SUSPEITA"
         v["motivo"] = (
-            f"nenhuma ferramenta funcionou ({erros} chamada(s) com erro), entao "
+            f"nenhuma ferramenta funcionou ({causa}), entao "
             f"nao houve observacao que sustentasse {antes}. "
             + (v.get("motivo") or "")
         ).strip()
@@ -165,6 +181,23 @@ def aplica_regras(
         return v
 
     # REGRA 3 (antes das de severidade: execucao falha encerra o assunto)
+    #
+    # 🚨 `erro`, e SO `erro` -- a decisao de 17/08. O artefato passou a ter dois
+    # campos, `erro` ("existia e quebrou") e `indisponivel` ("este projeto nao
+    # tem esta ferramenta"), e esta regra le apenas o primeiro.
+    #
+    # Medido no `pallets/flask#6095`: com os dois no mesmo campo, QUATRO
+    # refutacoes obtidas por leitura -- com o grep funcionando, uma delas
+    # apontando a assinatura documentada do pytest -- sairam inconclusivas. E a
+    # unica que sobreviveu sobreviveu por acaso: o advogado, naquela, nao chegou
+    # a chamar a ferramenta que nao existe. Mesma qualidade de prova, desfecho
+    # decidido por qual ferramenta o modelo tentou -- que e' exatamente o que a
+    # segunda via da R1 consertou em 10/08, e pelo mesmo argumento.
+    #
+    # 🚫 O que NAO afrouxou: ferramenta que quebrou continua convertendo, e a
+    # R3b continua disparando com zero observacao. Um projeto que nao declara
+    # ferramenta nenhuma nao ganha veredito de graca -- ganha o direito de ser
+    # julgado pelo que a leitura sustenta, que e' o limite honesto dele.
     if v.get("veredito") == "INCONCLUSIVO" or (artefato or {}).get("erro"):
         v["veredito"] = "INCONCLUSIVO"
         v["severidade"] = "SUSPEITA"

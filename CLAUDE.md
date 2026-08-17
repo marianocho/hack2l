@@ -371,10 +371,38 @@ R0   artefato ganha do advogado: ele disse PROVADO e o exit code disse não? val
 R0b  prova ponta a ponta é fato do artefato, nunca autodeclaração do modelo
 R1   CRITICA exige UMA das duas: árbitro com procedência OU prova ponta a ponta
 R2   prova que não é ponta a ponta → severidade no máximo MEDIA
-R3   execução falhou → INCONCLUSIVO, nunca absolvido
+R3   execução FALHOU → INCONCLUSIVO, nunca absolvido
+     ⚠️ falhou ≠ não existe: ferramenta que o projeto não declarou não converte
 R3b  PROVADO/REFUTADO com ZERO ferramenta bem-sucedida → INCONCLUSIVO
+     (indisponível nunca foi sucesso — a R3b não afrouxou)
 R4   REFUTADO + LLM do app alvo dublê → INCONCLUSIVO (ver ACHADO_APP_SEM_MODELO)
 ```
+
+### 🚨 A R3 separou "quebrou" de "não existe" — 17/08
+
+**Guarda que não consegue olhar tem que dizer que não olhou, e isso é diferente
+de olhar e não achar nada.** A R3 tratava as duas iguais, e o preço apareceu na
+primeira revisão de PR de terceiro pela porta da frente (`pallets/flask#6095`):
+**5 acusações, 5 refutações por leitura, e o parecer saiu 4 inconclusivos.** O
+advogado apontou a assinatura documentada do pytest — refutação correta, com o
+grep funcionando — e a chamada a uma ferramenta que aquele projeto **não tem**
+preencheu `erro` no artefato, e a R3 converteu.
+
+E a que sobrou, sobreviveu **por acaso**: naquela o advogado não chegou a chamar
+a ferramenta inexistente. Mesma prova, desfecho decidido por qual ferramenta o
+modelo tentou — o argumento exato que comprou a segunda via da R1 em 10/08.
+
+| desfecho da ferramenta | significa | R3 |
+|---|---|---|
+| `erro` | existia, foi tentada, não respondeu | converte |
+| `indisponivel` | o projeto não a declarou | **não converte** |
+
+🚫 **O que NÃO afrouxou, e a distinção é a parte delicada:** a R3b continua
+disparando com zero sucesso. Indisponível deixou de contar como erro; **nunca
+passou a contar como observação.** Refutar a partir do diff que já veio no
+prompt, sem abrir o repositório, é *argumentar* — e continua INCONCLUSIVO, agora
+dizendo qual das duas causas foi. Medido: 4 descartados, 1 inconclusivo, e o
+inconclusivo é exatamente esse caso.
 
 **A R1 tem duas vias desde 10/08, e não é afrouxamento.** No parecer premiado, o
 mesmo SQL injection saiu CRITICA por uma lente (que recitou um rótulo chumbado)
@@ -392,7 +420,7 @@ crítico e perguntar se ele convence. 30 segundos, e só nos críticos.
 > **A guarda existe, mas está condicionada ao mesmo sinal que ela deveria
 > vigiar. Então ela fica muda exatamente onde é necessária.**
 
-Aconteceu **quatro vezes**, sempre com cara diferente, sempre custando caro.
+Aconteceu **uma dúzia de vezes**, sempre com cara diferente, sempre custando caro.
 Não é descuido pontual — é o formato de erro que esta arquitetura convida,
 porque quase toda regra aqui confere um artefato, e a ausência do artefato é
 justamente o caso perigoso.
@@ -408,6 +436,8 @@ justamente o caso perigoso.
 | **retrato do banco chumbado** | delta de estado por rodada, contra efeito colateral | `_psql` fixava `-U kb`: contra a bancada todo retrato falhava, `delta_do_banco` lia só `tabelas` e ignorava `erro`, e seis rodadas gravaram `"limpo": true` sem terem olhado. O console usava **a mesma frase do sucesso**. ✅ 16/08. |
 | **`provado_se` de leitura** | "não argumenta, TESTA" | a regra vale, mas quem decide se o advogado testa é um campo que o PROMOTOR escreve. `padroes.md` mandava `grep` em 57% dos casos, e a absolvição falsa entrou por aí. ✅ 16/08, medido em A/B. |
 | **layout do repo chumbado** | — | `_roda_pytest` fixava `app/api/app` e `app/api/tests`: a prova diferencial, única que assina PROVADO, só funcionava num repositório. ✅ 14/08. |
+| **o mesmo layout, de novo** | — | 15/08 trocou o VALOR e deixou o fallback. No `pallets/flask` ele voltou a apontar para a árvore do desafio, e o `erro` que isso gerou levou a R3 a converter refutação obtida por leitura. ✅ 17/08: sem fallback, `TEM_PROVA_DIFERENCIAL` derivado, ferramenta recusa dizendo. |
+| **a recusa na aritmética** | `indisponivel` fora da conta de erro | 🆕 e quase mudo: `_consolida_ferramentas` deduz "bloco sem registro" de `blocos - (ok + erro)`. Sem somar os indisponíveis ali, cada recusa voltaria para a conta de erro **pela porta dos blocos**, e o conserto seria no-op. O padrão de bug mora na aritmética também. |
 | **a chave em dois lugares** | — | `load_dotenv` não sobrescreve o ambiente: a do Windows vencia o `.env` **em silêncio**, e trocar o arquivo não mudava nada. Custou 4 tentativas. |
 
 **Um primo, na mesma família:** métrica que mede a coisa errada. O diagnóstico

@@ -14,9 +14,16 @@ hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 ---
 
 > 🎯 **A sessão de 16–17/08 tem handoff próprio: `HANDOFF_17AGO.md`.**
-> A entrada "revise este PR" existe, a licença saiu, e ficou **uma decisão
-> aberta** sobre a R3 tratar "ferramenta não declarada" como "execução falhou" —
-> que hoje faz todo PR de terceiro sair 100% inconclusivo. Comece por lá.
+> A entrada "revise este PR" existe, a licença saiu, e a decisão sobre a R3
+> **foi tomada e medida em 17/08 à tarde**: "ferramenta não declarada" deixou de
+> ser "execução falhou". No mesmo PR de terceiro, com as mesmas 5 acusações, o
+> parecer foi de **0 descartados / 5 inconclusivos** para **4 / 1** — e o
+> inconclusivo que sobrou é a R3b segurando um veredito sem nenhuma leitura,
+> como deve. Comece por lá.
+>
+> ⚠️ **A fila abaixo ainda diz que PR de terceiro sai 100% inconclusivo em
+> alguns pontos.** Não saía por causa de uma coisa só, e o texto é anterior à
+> medição.
 
 ## Onde o produto está
 
