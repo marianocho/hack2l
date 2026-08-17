@@ -31,9 +31,9 @@ que condenar, e absolve com motivo quando não há:
 
 **O que impede uso real**, em ordem — sobraram DOIS:
 
-1. **Não tem onde entregar.** O parecer sai no terminal. Com a licença feita,
-   este é o único bloqueador de adoção que resta, e a peça que falta é a
-   entrada "revise este PR" (ver fila A).
+1. **Não tem onde entregar.** O parecer sai no terminal. A *entrada* já existe
+   desde 17/08 (`revisa_pr.py`); o que falta é a **saída** — o parecer virar
+   comentário de PR.
 2. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
 
 > ✅ **Saiu em 14–15/08:** *"metade só funciona no desafio"*. Contas, layout,
@@ -53,10 +53,10 @@ que condenar, e absolve com motivo quando não há:
 | item | tamanho | nota |
 |---|---|---|
 | ✅ **Licença** *(16/08)* | | Apache-2.0, `38a6fd7` |
-| 🎯 **Entrada "revise este PR"** | horas | **agora é o topo desta seção.** PR → SHAs de base e head → checkout dos dois. É a peça que liga na Action, e o único bloqueador de adoção que sobrou |
+| ✅ **Entrada "revise este PR"** *(17/08)* | | `revisa_pr.py <url>`. Resolve o merge-base pela API, clona raso os dois commits, monta os worktrees. ⚠️ Ver `HANDOFF_17AGO.md`: rodou de verdade e expos a R3 |
 | ✅ **Contenção do `http_request`** *(14/08)* | | três partes, provada sob carga. Ver abaixo. ⚠️ Fechou o **banco**, não a rede — ver "o vão que sobrou" |
 | ✅ **`veredito.yml`** *(14–15/08)* | | contas, layout, login, bancos, como o app sobe. **Cinco chumbados saíram do código**, todos achados apontando para o segundo projeto |
-| **Entrada "revise este PR"** | horas | hoje é config apontando para pasta local |
+| 🎯 **Parecer como comentário de PR** | 1–2 dias | com a entrada pronta, é o que falta para a Action. Ver os cinco pontos em "A Action não é só seguir passo a passo" |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
 
