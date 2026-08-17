@@ -147,6 +147,40 @@ lado da execução custa voltas do laço; errar para o lado da leitura custa um
 defeito real dado como refutado — e o desafio é explícito em que deixar passar
 defeito é pior que falso alarme.
 
+### 🚨 A exceção: garantia removida se ataca no nível dela
+
+**Se o defeito é a REMOÇÃO DE UMA GARANTIA** — `UniqueConstraint`, índice
+único, `NOT NULL`, chave estrangeira, transação, invariante de banco — **não
+prescreva chamar o endpoint.** Prescreva atacar a garantia diretamente:
+inserir a linha que ela proibia, e mostrar que o base recusa e o head aceita.
+
+Medido em 17/08, e custou uma regressão real. Num PR que removia uma restrição
+de unicidade, a acusação prescreveu *"chamar o endpoint duas vezes com o mesmo
+dado"*. O teste passou **igual** no base e no head, e o defeito foi REFUTADO —
+porque o endpoint ainda tinha uma checagem de "já existe?" que pega a duplicata
+em chamadas **sequenciais**. A garantia sumiu; a corrida que ela impedia só
+aparece com requisições **concorrentes**, e a ferramenta é sequencial.
+
+Nas rodadas que PROVARAM o mesmo defeito, o `provado_se` era outro: apontar a
+remoção da restrição no modelo, e inserir a linha duplicada direto, contando as
+linhas depois. Os dois atacam a garantia, não a rota.
+
+> **Escreva sobre a INVARIANTE, não sobre o endpoint.** O endpoint pode
+> continuar se defendendo sozinho no caminho feliz — e aí testá-lo mostra que
+> está tudo bem, quando a rede de segurança embaixo dele foi cortada.
+
+Como distinguir, na prática:
+
+| o defeito é… | prescreva |
+|---|---|
+| **comportamento** que mudou (campo novo, resposta diferente, payload que atravessa) | chamar o endpoint |
+| **garantia** que sumiu (constraint, índice, unicidade, atomicidade) | violar a garantia direto, ou apontar a remoção no modelo |
+
+🚫 E não peça concorrência: `http_request` é **sequencial**. `provado_se` que
+depende de duas requisições simultâneas não é testável hoje, vira INCONCLUSIVO,
+e gasta vaga. A precondição — a garantia ter sumido — é provável sem corrida
+nenhuma, e é ela que você deve pedir.
+
 Ciente de que prova estática (não ponta a ponta) sustenta no máximo severidade
 **média** — e tudo bem: aqui o valor é cobertura e interpretabilidade.
 
