@@ -460,9 +460,25 @@ perdeu duas vezes"*.
 
 | item | custo | o que responde |
 |---|---|---|
-| 🎯 **A lente de `performance`** | centavos no A/B | 48 de **78** `provado_se` dela não prescrevem experimento nenhum (`descrição`). Mesmo tipo de achado do `padroes`, segunda maior lente, ferramenta de medir já pronta |
 | **Canário de egresso** | junto com o repo de demo | a única camada de contenção sem validação empírica em qualquer direção |
-| **`CLAUDE.md:407`** | 2 min | a linha diz "banco descartável, rede sem saída ✅ 14/08" para o `http_request`. Só o banco foi |
+| ✅ **`CLAUDE.md:407`** *(16/08)* | | dizia "banco descartável, rede sem saída ✅ 14/08" para o `http_request`; só o banco foi |
+| ❌ **A lente de `performance`** | *investigada, não é defeito* | ver abaixo |
+
+#### ❌ A lente de `performance` — levantada e derrubada no mesmo dia
+
+Ficou registrado que ela tinha 48 de 78 `provado_se` sem experimento
+(`descrição`) e que era "a próxima pedra da mesma calçada". **Investigado: não
+é.** Descrição dá 5 PROVADO / 0 REFUTADO / 2 INCONCLUSIVO (n=7); execução dá
+2/1/0 (n=3). As duas inconclusivas são infraestrutura, não fraseado.
+
+O erro foi de categoria: `descrição` e `leitura` não são a mesma coisa, mesmo o
+classificador chamando as duas de "não-execução". **Leitura desvia** o advogado
+para um método que absolve falso; **descrição deixa o método aberto**, e ele
+escolhe um bom sozinho. O PROVADO do PR limpo veio de uma descrição sem medida
+citada — o advogado inventou a carga e o `EXPLAIN`.
+
+🚫 **Não mexer no `padroes.md`-style aqui.** Seria otimizar a métrica contra o
+conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
 
 ### D — Dívida
 

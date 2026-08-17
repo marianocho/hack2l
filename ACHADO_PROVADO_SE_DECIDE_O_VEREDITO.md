@@ -148,8 +148,48 @@ endurecimento mirou **as duas classes mal atribuídas**, não a porcentagem:
 - **variância é grande.** Numa amostra de N=4 o prompt antigo deu 25% num diff
   onde a de N=8 deu 0%. Rodar uma vez e comemorar é o erro que este arnês
   existe para evitar — inclusive quando o resultado agrada.
-- `performance` tem 48 de 78 `provado_se` sem experimento nenhum (`descrição`).
-  Não foi investigado, e é a próxima pedra desta mesma calçada.
+## ❌ A pedra seguinte não era pedra — investigada em 16/08
+
+Ficou registrado aqui que `performance` tinha **48 de 78** `provado_se` sem
+experimento nenhum (`descrição`), e que era "a próxima pedra desta mesma
+calçada". **Foi investigado e não se sustenta.**
+
+| `provado_se` de `performance` | PROVADO | REFUTADO | INCONCL. | n |
+|---|---|---|---|---|
+| execução | 2 | 1 | 0 | 3 |
+| **descrição** | **5** | **0** | 2 | 7 |
+
+Nenhuma das 7 descrições julgadas citava medida, e 5 foram provadas assim mesmo.
+As 2 inconclusivas são infraestrutura — a rodada com o layout chumbado (4
+ferramentas com erro) e um `BadRequestError` de saldo da API. Nenhuma
+atribuível ao fraseado.
+
+**O erro foi meu, e é de categoria:** tratei `descrição` e `leitura` como a mesma
+coisa porque o classificador chama as duas de "não-execução". São opostas no que
+importa:
+
+- **leitura** *(o defeito real)* — **desvia** o advogado para um método que
+  produz absolvição falsa. Ele lê, não acha o que violar, encerra o assunto.
+- **descrição** *(não é defeito)* — **deixa o método aberto**, e o advogado
+  escolhe um bom. O PROVADO do PR limpo em 16/08 veio de uma descrição sem
+  medida citada, e ele inventou a carga de 800 linhas e o `EXPLAIN` sozinho.
+
+O que torna a leitura nociva não é ela deixar de ser execução — é ela
+**prescrever o método errado**. Um campo vago não faz mal; um campo que aponta
+para o lugar errado, sim.
+
+⚠️ n=7 e n=3. Isto não prova que descrição é boa — prova que **o caso para
+mexer não está feito**, que é diferente. Mexer no prompt aqui seria otimizar a
+métrica contra o conteúdo, exatamente o que a seção acima diz para não fazer.
+
+## O que ainda não sabemos
+
+- **fraseado não é veredito.** O A/B mede o que a lente emite; a ponte para o
+  veredito é a tabela 6/6 contra 4/11, com n minúsculo. Número melhor aqui é
+  hipótese de melhora lá.
+- **variância é grande.** Numa amostra de N=4 o prompt antigo deu 25% num diff
+  onde a de N=8 deu 0%. Rodar uma vez e comemorar é o erro que este arnês
+  existe para evitar — inclusive quando o resultado agrada.
 
 Relacionado: `ACHADO_ARBITRO_CHUMBADO.md` (critério de projeto dentro da lente)
 · `ACHADO_APP_SEM_MODELO.md` (absolvição falsa por observação ausente)
