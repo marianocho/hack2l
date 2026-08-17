@@ -527,6 +527,20 @@ def _secao_efeito_no_banco() -> list[str]:
     # console rola e o arquivo fica. Quem le amanha precisa saber que ninguem
     # olhou -- caso contrario a ausencia da secao passa a significar "limpo",
     # que e' exatamente a leitura errada que custou seis rodadas em 15-16/08.
+    # 🚫 NAO SE APLICA vem antes de NAO MEDIDO, e nao pode usar a frase dele.
+    # "A rodada pode ter criado ou removido linhas" e' FALSO num projeto onde
+    # nenhuma ferramenta alcanca banco -- e alarme falso repetido em todo PR de
+    # terceiro treina o leitor a pular a secao. A guarda morreria de excesso.
+    #
+    # ⚠️ Dito, nunca omitido: sumir com a secao faria "sem secao" significar
+    # duas coisas diferentes, que e' como o `limpo` mudo comecou em 15/08.
+    if d.get("aplicavel") is False:
+        return p + [
+            f"- **NAO SE APLICA**: {d.get('causa')}.",
+            "- Nenhum banco foi lido, e nenhum podia ter sido tocado. Isto é "
+            "diferente de **NAO MEDIDO**, que é quando havia banco e o retrato "
+            "falhou.",
+        ]
     if not d.get("medido", True):
         return p + [
             f"- **NAO MEDIDO**: o retrato do banco falhou. `{d.get('causa')}`",

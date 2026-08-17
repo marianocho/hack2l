@@ -125,6 +125,27 @@ def _registra_efeito_no_banco(antes: dict) -> dict:
     calado: silencio aqui e' exatamente o estado anterior, em que a linha de
     base deslocava e ninguem via.
     """
+    # NAO SE APLICA e' diferente de NAO MEDIDO, e a distincao e' a mesma de
+    # `erro` vs `indisponivel` nas ferramentas: "tentei e nao consegui" nao e'
+    # "nao havia o que tentar". Ver `cfg.ALCANCA_BANCO`.
+    if not cfg.ALCANCA_BANCO:
+        d = {"aplicavel": False, "medido": False, "limpo": False,
+             "causa": ("o projeto nao declara app, banco nem bloco `codigo` no "
+                       "veredito.yml: nenhuma ferramenta desta rodada alcanca um "
+                       "banco de dados")}
+        (cfg.RODADA / "efeito_no_banco.json").write_text(
+            json.dumps({"antes": antes, "depois": {}, "delta": d},
+                       indent=2, ensure_ascii=False), encoding="utf-8")
+        if cfg.APP_EM_BANCO_DESCARTAVEL:
+            # O operador pediu contencao de um banco que este projeto nao tem.
+            # Seguir calado deixaria alguem acreditando que ha uma copia no ar.
+            raise contencao_app.ContencaoFalhou(
+                "APP_EM_BANCO_DESCARTAVEL ligado, mas o projeto revisado nao "
+                "declara banco nem app -- nao ha o que conter.")
+        print("\nefeito no banco: NAO SE APLICA -- este projeto nao declara app,"
+              " banco nem suite.")
+        return d
+
     try:
         depois = contencao_app.retrato_do_banco()
         d = contencao_app.delta_do_banco(antes, depois)
@@ -326,7 +347,11 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
     # ela desligada, que e' o padrao. Foi por falta disto que o deslocamento de
     # 14/08 (shares 0 -> 3) so' apareceu porque um humano desconfiou e anotou o
     # estado a mao. Medicao nao pode depender de alguem lembrar.
-    antes_do_banco = contencao_app.retrato_do_banco()
+    # ⚠️ Condicionado a `ALCANCA_BANCO` porque o retrato de um projeto sem banco
+    # nao falha de graca: sao dois `docker compose` que levam segundos para
+    # descobrir que nao ha compose nenhum.
+    antes_do_banco = (contencao_app.retrato_do_banco() if cfg.ALCANCA_BANCO
+                      else {})
 
     # A contencao envolve SO' o laco do advogado: e' ele que tem http_request
     # apontado para o app. O juiz nao toca no app, entao fica de fora e a api

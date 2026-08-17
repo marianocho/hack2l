@@ -438,6 +438,7 @@ justamente o caso perigoso.
 | **layout do repo chumbado** | — | `_roda_pytest` fixava `app/api/app` e `app/api/tests`: a prova diferencial, única que assina PROVADO, só funcionava num repositório. ✅ 14/08. |
 | **o mesmo layout, de novo** | — | 15/08 trocou o VALOR e deixou o fallback. No `pallets/flask` ele voltou a apontar para a árvore do desafio, e o `erro` que isso gerou levou a R3 a converter refutação obtida por leitura. ✅ 17/08: sem fallback, `TEM_PROVA_DIFERENCIAL` derivado, ferramenta recusa dizendo. |
 | **a recusa na aritmética** | `indisponivel` fora da conta de erro | 🆕 e quase mudo: `_consolida_ferramentas` deduz "bloco sem registro" de `blocos - (ok + erro)`. Sem somar os indisponíveis ali, cada recusa voltaria para a conta de erro **pela porta dos blocos**, e o conserto seria no-op. O padrão de bug mora na aritmética também. |
+| **o alarme do banco** | `NAO MEDIDO` contra efeito colateral | 🆕 **a guarda morrendo de EXCESSO, e é a variação nova.** Sem banco declarado o retrato falhava, e todo PR de terceiro fechava com *"a rodada pode ter criado ou removido linhas"* — falso: nenhuma ferramenta ali alcança banco. Alarme que dispara sempre ensina a pular a linha que existe para o caso de 14/08. ✅ 17/08: `ALCANCA_BANCO`, e `NAO SE APLICA` ≠ `NAO MEDIDO`. |
 | **a chave em dois lugares** | — | `load_dotenv` não sobrescreve o ambiente: a do Windows vencia o `.env` **em silêncio**, e trocar o arquivo não mudava nada. Custou 4 tentativas. |
 
 **Um primo, na mesma família:** métrica que mede a coisa errada. O diagnóstico
@@ -446,6 +447,9 @@ reciclado**. Preenchido não é válido.
 
 ### Como procurar
 
+0. 🆕 **Toda guarda que alarma: ela consegue ficar quieta?** Guarda que dispara
+   em todo caso ensina o leitor a pular justamente ela, e morre de excesso —
+   que dá no mesmo que morrer de falta. Foi o `NAO MEDIDO` do banco.
 1. Toda guarda dentro de um `if`: **o que acontece quando a condição é falsa?**
    Se a resposta é "passa batido", a guarda não existe no caso que importa.
 2. Toda métrica: **isto pode estar medindo outra coisa?** Foi a pergunta que

@@ -515,6 +515,28 @@ APP_EM_BANCO_DESCARTAVEL = _b("APP_EM_BANCO_DESCARTAVEL", False)
 BANCO_APP = _s("BANCO_APP", _banco.get("descartavel_app") or "kb_veredito_app")
 BANCO_APP_ORIGEM = _s("BANCO_APP_ORIGEM", _banco.get("nome") or "kb")
 
+# 🚨 EXISTE ALGUMA VIA, NESTA RODADA, QUE CHEGUE A UM BANCO?
+#
+# Sem esta pergunta o parecer de todo PR de terceiro abria com **NAO MEDIDO: a
+# rodada pode ter criado ou removido linhas**. Nao podia: sem app declarado o
+# `http_request` recusa, sem o bloco `codigo` a suite nao roda, e o retrato
+# falhava so' porque procurava um `docker-compose.yml` que aquele repositorio
+# nao tem.
+#
+# ⚠️ E o alarme errado custa MAIS caro que o alarme ausente aqui. Esta e' a
+# linha que avisa que o agente mexeu em dado vivo -- o incidente de 14/08
+# (`shares` 0 -> 3) so' apareceu porque um humano desconfiou. Disparar em toda
+# rodada de terceiro ensina o leitor a pular exatamente ela, e ai a guarda
+# morre de excesso em vez de morrer de falta.
+#
+# 🚫 Conservador de proposito: QUALQUER uma das tres vias liga a medicao de
+# volta. So' e' "nao se aplica" quando nao existe caminho nenhum ate' um banco.
+#
+# ⚠️ `_banco.get("nome")` cru, e nao `BANCO_APP_ORIGEM`: aquele cai em `kb`, o
+# banco do desafio, quando o projeto nao declara -- perguntar a ele seria
+# perguntar ao proprio chumbado que este criterio existe para nao repetir.
+ALCANCA_BANCO = bool(TEM_APP or TEM_PROVA_DIFERENCIAL or _banco.get("nome"))
+
 
 # --- contexto compartilhado no bloco cacheado -------------------------------
 #
