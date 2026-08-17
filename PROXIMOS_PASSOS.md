@@ -13,6 +13,11 @@ hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 
 ---
 
+> 🎯 **A sessão de 16–17/08 tem handoff próprio: `HANDOFF_17AGO.md`.**
+> A entrada "revise este PR" existe, a licença saiu, e ficou **uma decisão
+> aberta** sobre a R3 tratar "ferramenta não declarada" como "execução falhou" —
+> que hoje faz todo PR de terceiro sair 100% inconclusivo. Comece por lá.
+
 ## Onde o produto está
 
 **O motor está medido nos dois sentidos.** Ele condena com artefato quando há o
