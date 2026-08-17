@@ -1,6 +1,16 @@
 <!-- tag: hack2l -->
 
-# ESTADO — 08/08/2026, ~12h00
+# ESTADO — 08/08/2026, ~12h00  ⟨HISTÓRICO⟩
+
+> 🚫 **Não é a fila viva.** Este é o handoff do **dia do hackathon**, preservado
+> como está — fala de "a máquina do palco" e "o slide". Os números aqui estão
+> superados (dizia "53 testes rápidos + 5 lentos"; em 16/08 são 448).
+>
+> **Onde retomar: `PROXIMOS_PASSOS.md`.**
+>
+> Não foi atualizado de propósito: uma terceira fonte de verdade ao lado do
+> `PROXIMOS_PASSOS.md` e do `Onde retomar.md` do vault divergiria em silêncio —
+> e as duas que já existem divergiram **nos dois sentidos** em 15/08.
 
 Handoff para a próxima sessão. O **README.md** explica a arquitetura; o
 **CONTRATO.md**, as interfaces. Este arquivo diz só onde paramos e o que fazer.

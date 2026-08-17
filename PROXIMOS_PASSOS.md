@@ -1,9 +1,15 @@
 <!-- tag: hack2l -->
 
-# Próximos passos — reescrito em 11/08/2026
+# Próximos passos — atualizado em 16/08/2026
 
-Quadro geral e fila completa. Para **onde retomar**, leia
-`HANDOFF_12AGO.md` primeiro.
+Quadro geral e fila completa. **Esta é a fila viva** — o `ESTADO.md` é do dia do
+hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
+
+> ⚠️ **Existe uma cópia deste quadro no vault** (`Onde retomar.md`). Em 15/08 as
+> duas divergiram **nos dois sentidos** — cada uma mais atual que a outra num
+> ponto diferente. Se você editar uma, propague. É a regra do "um arquivo só,
+> sem cópia" valendo para documento, e ela já custou quatro tentativas com a
+> chave da API.
 
 ---
 
@@ -18,14 +24,20 @@ que condenar, e absolve com motivo quando não há:
 | PR sem defeito | 8 de 8 refutados | US$1,23 |
 | PRs de terceiro (10 reais) | 68% refutados | US$0,071/alegação |
 
-**O que impede uso real**, em ordem:
+**O que impede uso real**, em ordem — sobraram DOIS:
 
-1. **Não tem onde entregar.** O parecer sai no terminal.
-2. **Metade só funciona no desafio.** `config.py:88` chumba os quatro usuários,
-   então a prova ponta a ponta — a que sustenta severidade alta — não generaliza.
-3. **Sem licença.** Repositório público sem `LICENSE` = todos os direitos
-   reservados. Ninguém pode legalmente rodar.
-4. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
+1. **Não tem onde entregar.** O parecer sai no terminal. Com a licença feita,
+   este é o único bloqueador de adoção que resta, e a peça que falta é a
+   entrada "revise este PR" (ver fila A).
+2. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
+
+> ✅ **Saiu em 14–15/08:** *"metade só funciona no desafio"*. Contas, layout,
+> rota de login, bancos e a precedência do `.env` saíram do código — cinco
+> chumbados, todos achados apontando o produto para um segundo projeto.
+> **Em 16/08 apareceu o sexto**, e era o pior: `-U kb` chumbado no retrato do
+> banco fazia a guarda de efeito colateral dizer "limpo" sem ter olhado.
+>
+> ✅ **Saiu em 16/08:** *"sem licença"*. Apache-2.0, commit `38a6fd7`.
 
 ---
 
@@ -35,8 +47,9 @@ que condenar, e absolve com motivo quando não há:
 
 | item | tamanho | nota |
 |---|---|---|
-| **Licença** | 10 min | decisão de sócio: MIT/Apache se o alvo é adoção |
-| ✅ **Contenção do `http_request`** *(14/08)* | | três partes, provada sob carga. Ver abaixo |
+| ✅ **Licença** *(16/08)* | | Apache-2.0, `38a6fd7` |
+| 🎯 **Entrada "revise este PR"** | horas | **agora é o topo desta seção.** PR → SHAs de base e head → checkout dos dois. É a peça que liga na Action, e o único bloqueador de adoção que sobrou |
+| ✅ **Contenção do `http_request`** *(14/08)* | | três partes, provada sob carga. Ver abaixo. ⚠️ Fechou o **banco**, não a rede — ver "o vão que sobrou" |
 | ✅ **`veredito.yml`** *(14–15/08)* | | contas, layout, login, bancos, como o app sobe. **Cinco chumbados saíram do código**, todos achados apontando para o segundo projeto |
 | **Entrada "revise este PR"** | horas | hoje é config apontando para pasta local |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
@@ -351,6 +364,105 @@ cegas.
 **Nunca calibrar prompt na bancada inteira.** Ajustar as lentes até a bancada
 dar 100% é decorar a prova. Separar um conjunto de PRs que só é rodado no fim,
 e nunca olhado durante o ajuste.
+
+---
+
+## 📍 16/08 — o dia da troca de máquina, e o que ela expôs
+
+A máquina nova funcionou como **segundo ambiente**: o mesmo papel que a bancada
+faz para o produto, ela fez para a toolchain. Nada disso era encontrável na
+máquina antiga.
+
+### Achados de produto (os que valem)
+
+**🚨 O `provado_se` decide o veredito.** `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
+O mesmo defeito, a mesma regra citada com procedência, as mesmas ferramentas —
+e o veredito virou conforme o experimento que o *promotor* prescreveu. Quem
+mandou `grep` produziu REFUTADO; quem mandou `chamar` produziu PROVADO com
+prova diferencial. `padroes.md` mandava ler em 57% das acusações; as outras
+cinco lentes, em 0–8%.
+
+Consertado e **medido em A/B** (2% → 41% de execução, consistente nos três
+diffs). A classe que causou a absolvição falsa — forma da resposta — foi de 11%
+para 82%.
+
+**🚨 O retrato do banco dizia "limpo" sem ter olhado.** Seis rodadas gravaram
+`"limpo": true` com o psql falhando nos dois lados. `-U kb` chumbado contra a
+bancada, que usa `bancada`; `delta_do_banco` lia só `tabelas` e ignorava `erro`.
+O console imprimia a **mesma frase do sucesso**. Consertado: `medido: False` +
+causa, e levanta se a contenção estava ligada.
+
+**🚨 Os scanners falhavam calados.** `bandit` ausente virava `[]` e o log dizia
+"0 achado(s)" — idêntico a "rodou e não achou". Agora levantam, e o pré-voo os
+expõe. ⚠️ E eles **funcionam**: 13 corroborações do bandit, 20 do semgrep nas
+rodadas gravadas — mas quase todas contra o desafio; na bancada dão ~0, o que é
+esperado e não é sintoma.
+
+### Ferramenta nova
+
+**`experimento_prompt.py`** — A/B de prompt de promotor. Mesmo diff, mesmo
+modelo, N repetições, só o prompt mudando. Haiku, centavos, um minuto.
+
+🚨 **Ele existe porque a varredura da bancada NÃO distingue melhora de
+variância.** A varredura pareceu confirmar o conserto do `padroes` e não
+confirmava: as outras cinco lentes, que ninguém tocou, tinham se movido junto.
+Com 2–4 acusações por PR, "melhorou" e "variou" têm a mesma cara — e a varredura
+custa ~US$2 para não responder.
+
+### A bancada
+
+✅ **Está no GitHub** (`luisfelp07/bancada`, privado). O 404 dele mente: privado
+sem acesso responde "not found", que se lê como "não existe".
+
+✅ **Tags `medicao-15ago/*`** preservam os SHAs medidos, que estavam soltos e a
+um `git gc` de sumir. Correspondência no `LEIA.md` da pasta de evidência.
+
+✅ **O controle negativo voltou a ser negativo.** Ele condenava com razão: o PR
+"limpo" adicionava agregação sobre FK sem índice, com prova diferencial e
+`EXPLAIN` mostrando `Seq Scan`. Foi a **terceira vez que o produto corrigiu o
+gabarito**. `index=True` em `Task.project_id`, e a rodada de verificação deu
+`REFUTADO:4`, zero condenações.
+
+⚠️ **Placar retroativo:** as medições anteriores a 16/08 foram feitas com o
+controle negativo cego. O que se afirma com segurança é sobre as rodadas de hoje
+em diante.
+
+✅ **A expansão foi validada.** Com `--top-n 3` ela alcança o defeito do race,
+que antes exigia `--top-n 8`. E é também ela que alcançou o achado do PR limpo —
+o mecanismo compra cobertura, e cobertura encontra o que o gabarito não previa.
+
+### 🚨 O vão que sobrou, e é decisão tomada
+
+O `contencao_app.py` de 14/08 fechou o `http_request` **pelo lado do banco**. A
+rede não. Não há função de rede naquele módulo.
+
+A análise de 10/08 (no vault, `conversas/2026-08-10`) tratou disso a fundo — a
+tabela de irreversibilidade (email, cobrança, webhook, SMS), o diagnóstico
+(*"o denominador comum é a rede"*) e a decisão: rede interna **só no base**,
+porque a CI do cliente já roda o head. O limite ficou escrito em
+`config.py:208`.
+
+⚠️ **Mas aquela análise é sobre a SUÍTE.** O argumento da assimetria não
+transfere para o `http_request`: a CI do cliente roda a suíte dele todo dia;
+ela nunca dá `POST /convite` com o payload do advogado.
+
+**Decidido em 16/08: fica assim.** Nenhum dos dois apps revisados manda e-mail,
+e a contenção do app está desligada por padrão. Quando for atacar, o gancho é o
+`aponta_api_para`, que já recria o container — e o lugar de *demonstrar* é o
+repo de demonstração, com um **canário de egresso** (endpoint que tenta sair
+para um coletor nosso), não um envio de e-mail de verdade.
+
+🚫 E a restrição de 10/08 vale: *"não detectar `smtplib`, não mapear serviços
+conhecidos, não manter lista de APIs perigosas — é predição, e predição já
+perdeu duas vezes"*.
+
+### O que 16/08 deixou aberto
+
+| item | custo | o que responde |
+|---|---|---|
+| 🎯 **A lente de `performance`** | centavos no A/B | 48 de **78** `provado_se` dela não prescrevem experimento nenhum (`descrição`). Mesmo tipo de achado do `padroes`, segunda maior lente, ferramenta de medir já pronta |
+| **Canário de egresso** | junto com o repo de demo | a única camada de contenção sem validação empírica em qualquer direção |
+| **`CLAUDE.md:407`** | 2 min | a linha diz "banco descartável, rede sem saída ✅ 14/08" para o `http_request`. Só o banco foi |
 
 ### D — Dívida
 

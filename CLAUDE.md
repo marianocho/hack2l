@@ -404,7 +404,9 @@ justamente o caso perigoso.
 | **R3b** | *(o vão que a R3 deixou)* | o advogado disse PROVADO com **todas** as ferramentas falhando, e escreveu isso no próprio motivo. |
 | **dedup** | funde por `(local, arbitro)` | o conserto do árbitro fez `arbitro` virar `null` na maioria — a chave evaporou junto. |
 | **`ERRO` como string** | contar ferramenta que falhou | dependia do prefixo no retorno `-> str`. ✅ 13/08: quem sabe que falhou passou a ser quem falhou — a ferramenta registra o desfecho. |
-| **`http_request` fora da contenção** | banco descartável, rede sem saída | aplicadas só ao caminho da `prova_diferencial`; o `http_request` fala com o app de verdade. ✅ 14/08. |
+| **`http_request` fora da contenção** | banco descartável, rede sem saída | aplicadas só ao caminho da `prova_diferencial`; o `http_request` fala com o app de verdade. ⚠️ **Meio consertado em 14/08:** o `contencao_app.py` fechou o BANCO; a rede não — não há função de rede naquele módulo. Ver "o vão que sobrou" em `PROXIMOS_PASSOS.md`. |
+| **retrato do banco chumbado** | delta de estado por rodada, contra efeito colateral | `_psql` fixava `-U kb`: contra a bancada todo retrato falhava, `delta_do_banco` lia só `tabelas` e ignorava `erro`, e seis rodadas gravaram `"limpo": true` sem terem olhado. O console usava **a mesma frase do sucesso**. ✅ 16/08. |
+| **`provado_se` de leitura** | "não argumenta, TESTA" | a regra vale, mas quem decide se o advogado testa é um campo que o PROMOTOR escreve. `padroes.md` mandava `grep` em 57% dos casos, e a absolvição falsa entrou por aí. ✅ 16/08, medido em A/B. |
 | **layout do repo chumbado** | — | `_roda_pytest` fixava `app/api/app` e `app/api/tests`: a prova diferencial, única que assina PROVADO, só funcionava num repositório. ✅ 14/08. |
 | **a chave em dois lugares** | — | `load_dotenv` não sobrescreve o ambiente: a do Windows vencia o `.env` **em silêncio**, e trocar o arquivo não mudava nada. Custou 4 tentativas. |
 
