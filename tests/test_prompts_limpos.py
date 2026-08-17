@@ -13,6 +13,10 @@ nenhum teste caia. Estes testes leem exatamente o que vai para o modelo --
 
 Nao bate na API.
 """
+import ast
+import pathlib
+import re
+
 import pytest
 
 from veredito import arbitro as arb
@@ -34,6 +38,125 @@ MARCAS_DO_DESAFIO = (
 def _corpo(texto: str) -> str:
     """Sem a linha `<!-- tag: hack2l -->`, que e' marcador do nosso repo."""
     return "\n".join(l for l in texto.splitlines() if not l.strip().startswith("<!--"))
+
+
+# ------------------------------------------- vocabulario de projeto, DERIVADO
+#
+# 🚨 A lacuna que isto fecha, exposta duas vezes em 16-17/08 -- pelo Claude que
+# escrevia os prompts, no mesmo dia, depois de ter escrito o aviso.
+#
+# `MARCAS_DO_DESAFIO` acima e' lista MANTIDA A MAO. Ela pega `shares.py` e
+# `hack2l.dev` porque alguem digitou. Nao pegava `adiciona_membro`,
+# `project_id` nem `POST /projects/{id}/members` -- nomes reais da BANCADA que
+# entraram numa lente que revisa qualquer repositorio do mundo.
+#
+# E nao adianta acrescentar os nomes da bancada na lista: o projeto seguinte
+# traz nomes novos e ninguem vai lembrar. Lista de proibidos e' PREDICAO, e
+# predicao ja perdeu duas vezes aqui.
+#
+# O criterio nao precisa de lista: **nome que aparece em UM projeto e nao no
+# outro e' vocabulario daquele projeto; nome que aparece nos dois e' universal.**
+# Com desafio e bancada lado a lado, `get_db`, `User`, `/health` e `/login` caem
+# fora sozinhos, e `adiciona_membro` e `/shared-with-me` ficam. Projeto novo
+# entra na conta sem ninguem editar teste.
+_IGNORA_DIR = {".git", "node_modules", "__pycache__", ".venv", ".worktrees"}
+
+# Abaixo disso o nome quase sempre e' fragmento generico (`/`, `User`, `health`)
+# e o casamento por substring viraria ruido. Limite conhecido, nao cobertura.
+_MIN = 8
+
+
+def _identificadores(raiz: pathlib.Path) -> set[str]:
+    """Nomes de funcao/classe e rotas literais definidos no codigo do projeto."""
+    nomes: set[str] = set()
+    for py in raiz.rglob("*.py"):
+        if any(p in _IGNORA_DIR for p in py.parts):
+            continue
+        try:
+            arvore = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, SyntaxError, ValueError):
+            continue
+        for n in ast.walk(arvore):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                nomes.add(n.name)
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str) \
+                    and n.value.startswith("/"):
+                nomes.add(n.value)
+    return nomes
+
+
+def _projetos_vizinhos() -> list[pathlib.Path]:
+    """Todo repo irmao com `app/` -- desafio, bancada, e o que vier depois."""
+    return sorted(p / "app" for p in cfg.RAIZ.parent.iterdir()
+                  if p.is_dir() and p.name != cfg.RAIZ.name and (p / "app").is_dir())
+
+
+def _vocabulario_de_projeto() -> set[str]:
+    vizinhos = _projetos_vizinhos()
+    if len(vizinhos) < 2:
+        # 🚫 Nunca devolver conjunto vazio aqui: vazio faria a assercao passar
+        # por ausencia de dado, que e' a guarda muda que este projeto ja pagou
+        # tres vezes. Quem chama SKIPA com a causa.
+        raise LookupError(
+            f"preciso de 2+ projetos irmaos para contrastar, achei {len(vizinhos)}: "
+            f"{[str(v.parent.name) for v in vizinhos]}")
+    conjuntos = [_identificadores(v) for v in vizinhos]
+    universal = set.intersection(*conjuntos)
+    especifico = set.union(*conjuntos) - universal
+    return {n for n in especifico if len(n) >= _MIN}
+
+
+def _cita(nome: str, texto: str) -> bool:
+    """Casamento com FRONTEIRA, nunca substring nua.
+
+    ⚠️ A primeira versao deste detector procurava substring, e acusou `Document`
+    dentro da palavra portuguesa **Documentos** em dois prompts. Teste que acusa
+    a coisa errada nao vale mais que teste que nao acusa nada -- e' a mesma
+    familia do `kb` casando dentro de `kb_veredito_app` e do `override=True`
+    casando no comentario que explicava por que ele estava desligado.
+    """
+    return re.search(rf"(?<![0-9A-Za-zÀ-ÿ_]){re.escape(nome)}(?![0-9A-Za-zÀ-ÿ_])",
+                     texto) is not None
+
+
+@pytest.mark.parametrize("nome,texto", LENTES, ids=NOMES)
+def test_nenhuma_lente_cita_vocabulario_de_UM_projeto(nome, texto):
+    """A lente nao pode nomear rota, funcao ou modelo de um alvo especifico.
+
+    Foi assim que 93 acusacoes citaram os criterios da Vindler em repositorios
+    de Flask, Django e Gin. O texto era do desafio; o defeito e' de forma, e a
+    forma se repete com qualquer projeto -- inclusive com a nossa bancada, que
+    e' onde ela reapareceu.
+    """
+    try:
+        proibidos = _vocabulario_de_projeto()
+    except LookupError as e:
+        pytest.skip(str(e))
+    corpo = _corpo(texto)
+    presentes = sorted(n for n in proibidos if _cita(n, corpo))
+    assert not presentes, (
+        f"{nome}.md cita vocabulario de um projeto especifico: {presentes}. "
+        "Troque por descricao generica -- 'o endpoint alterado', 'a restricao "
+        "de unicidade' -- senao a lente leva este alvo para dentro de todo "
+        "repositorio que ela revisar.")
+
+
+def test_o_detector_pega_a_violacao_injetada():
+    """A guarda vista FALHANDO -- senao ela passa por nao achar nada.
+
+    Usa um nome real de projeto vizinho em vez de inventado: o teste acima so'
+    vale se o conjunto derivado estiver de fato populado, e um nome fabricado
+    passaria mesmo com o conjunto vazio.
+    """
+    try:
+        proibidos = _vocabulario_de_projeto()
+    except LookupError as e:
+        pytest.skip(str(e))
+    assert proibidos, "conjunto derivado vazio: o detector nao detectaria nada"
+    alvo = sorted(proibidos)[0]
+    texto = f"## Como escrever\n\nEx.: chamar `{alvo}` e conferir a resposta.\n"
+    assert [n for n in proibidos if _cita(n, texto)], (
+        f"o detector nao pegou `{alvo}` num texto que o cita")
 
 
 def test_as_seis_lentes_continuam_sendo_carregadas():
