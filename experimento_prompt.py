@@ -148,9 +148,12 @@ def imprime_desfecho(lente: str | None) -> None:
         aviso = "   <- n baixo demais para taxa" if n < 10 else ""
         print(f"  {t:8} {c['PROVADO']:8} {c['REFUTADO']:9} {c['INCONCLUSIVO']:8} {n:5}   "
               f"{100*c['PROVADO']/n:8.0f}%{aviso}")
-    print("  ⚠️ `leit` alto NAO e' defeito por si: quando a convencao so' existe no")
-    print("     codigo, ler e' a prescricao certa. O sinal e' `leit` com %provado")
-    print("     BAIXO ao lado de `exec` com %provado alto -- foi assim no padroes.")
+    # [!] e nao emoji: `test_saida_no_console` trava isto, e travou de verdade --
+    # `⚠️` em print estoura no console cp1252, que e' o mesmo UnicodeEncodeError
+    # que matou o relatorio de uma rodada paga em 15/08.
+    print("  [!] `leit` alto NAO e' defeito por si: quando a convencao so' existe no")
+    print("      codigo, ler e' a prescricao certa. O sinal e' `leit` com %provado")
+    print("      BAIXO ao lado de `exec` com %provado alto -- foi assim no padroes.")
 
 
 # ----------------------------------------------------------------- amostras
@@ -177,9 +180,9 @@ def imprime_amostras(amostra: list[dict], por_caixa: int = 2) -> None:
                 continue
             for x in rnd.sample(itens, min(por_caixa, len(itens))):
                 print(f"  [{fase}/{t}] {(x['provado_se'] or '')[:104]}")
-    print("  ⚠️ Se alguma linha de `leit` fala de coisa observavel de FORA (forma")
-    print("     de resposta, payload que atravessa), ela esta na caixa errada --")
-    print("     e' esse o defeito, nao a porcentagem.")
+    print("  [!] Se alguma linha de `leit` fala de coisa observavel de FORA (forma")
+    print("      de resposta, payload que atravessa), ela esta na caixa errada --")
+    print("      e' esse o defeito, nao a porcentagem.")
 
 
 # ----------------------------------------------------------------- o A/B
