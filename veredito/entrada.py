@@ -195,4 +195,8 @@ def ambiente(info: dict) -> dict:
         "PR_BRANCH": info["head"],
         "BASE_BRANCH": info["merge_base"],
         "WORKTREES_DIR": str(info["worktrees"]),
+        # O merge-base veio do `compare` do GitHub. Sem isto, `commit_base`
+        # tentaria recalcular com `git merge-base` -- que nao funciona em clone
+        # raso, e matava a rodada DEPOIS de o pre-voo passar.
+        "BASE_JA_RESOLVIDO": "1",
     }

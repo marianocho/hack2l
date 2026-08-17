@@ -206,7 +206,27 @@ def commit_base() -> str:
     A ponta da main pode ser irmao do PR e nao ancestral (foi o caso aqui:
     f491ae1 so adiciona LICENSE/README, o pai de verdade e' 32a5241). Chumbar o
     hash poe uma mentira no artefato que vai pro slide.
+
+    🚨 EXCECAO EXPLICITA, e ela e' declarada por quem sabe -- nunca um fallback.
+
+    O `revisa_pr.py` clona RASO: dois commits, nao o repositorio inteiro. Ali
+    `git merge-base` nao tem historia para percorrer e falha sempre, e a rodada
+    morria aqui depois de o pre-voo passar. Mas naquele caminho o merge-base ja
+    foi resolvido -- pelo endpoint `compare` do GitHub, que enxerga a historia
+    que nos nao baixamos -- e chegou em `BRANCH_BASE`.
+    #
+    Entao quem resolveu AVISA, com `BASE_JA_RESOLVIDO=1`. Cair nisso por
+    exception seria fallback silencioso: numa clone completa, um merge-base que
+    falhasse por outro motivo passaria a usar a ponta do ramo sem ninguem saber,
+    que e' exatamente a mentira no artefato que esta funcao existe para impedir.
     """
+    if cfg.BASE_JA_RESOLVIDO:
+        base = _resolve_ref(cfg.BRANCH_BASE)
+        if not base:
+            raise RuntimeError(
+                f"BASE_JA_RESOLVIDO=1 mas nao consegui resolver {cfg.BRANCH_BASE!r} "
+                "no clone -- o commit foi buscado?")
+        return base
     r = _git("merge-base", _resolve_ref(cfg.BRANCH_BASE), _resolve_ref(cfg.BRANCH_PR))
     if r.returncode != 0 or not r.stdout.strip():
         raise RuntimeError(f"git merge-base falhou: {r.stderr.strip()}")
@@ -937,6 +957,17 @@ def _http_request(metodo: str, caminho: str, corpo: str = "", como_usuario: str 
     saida = {"status": None, "corpo": "", "erro": None, "como": como_usuario or "anonimo"}
     metodo = metodo.upper().strip() or "GET"
     alvo = "/" + caminho.strip().lstrip("/")
+    # 🚨 Sem app DECLARADO nao ha para onde chamar -- e chamar um endereco
+    # adivinhado e' pior que nao chamar. Em 17/08, revisando `pallets/flask`
+    # sem `veredito.yml`, este caminho alcancou o app do DESAFIO no
+    # 127.0.0.1:8000 e o pre-voo marcou verde. O advogado teria "provado" coisas
+    # sobre o app errado, e podia ter criado linha la.
+    if not cfg.TEM_APP:
+        saida["erro"] = (
+            "o projeto revisado nao declara `app.api` no veredito.yml: nao ha "
+            "app para chamar. Prove por leitura (read_file/grep) ou peca ao dono "
+            "do repositorio um veredito.yml.")
+        return saida
     try:
         cabecalhos = {}
         if como_usuario:
@@ -1276,14 +1307,17 @@ def autoteste(sondar_app: bool = True) -> dict:
     # de gastar as voltas todas.
     #
     # O sintoma nao parece problema de ambiente: parece o defeito nao existir.
-    if sondar_app:
+    #
+    # ⚠️ `cfg.TEM_APP` desde 17/08: repositorio de terceiro nao tem app nosso,
+    # e sondar assim mesmo alcancava o app de OUTRO projeto no endereco padrao.
+    if sondar_app and cfg.TEM_APP:
         try:
             r["app_serve_o_head"] = _confere_imagem_do_head()
         except Exception as e:
             r["app_serve_o_head"] = {"ok": False,
                                      "detalhe": f"{type(e).__name__}: {e}"}
 
-    if sondar_app:
+    if sondar_app and cfg.TEM_APP:
         try:
             resp = _http_request("GET", "/health")
             deu = bool(resp.get("status"))
@@ -1319,8 +1353,26 @@ def autoteste(sondar_app: bool = True) -> dict:
                            "-- confira `auth` no veredito.yml",
             }
 
-    # As essenciais sempre; as "com app" so' quando o app foi sondado. App fora
-    # do ar continua sendo DEGRADACAO conhecida (decide por leitura); app no ar
-    # servindo o codigo errado, nao -- aquilo mede a coisa errada em silencio.
-    exigidas = list(ESSENCIAIS) + (list(ESSENCIAIS_COM_APP) if sondar_app else [])
+    # As essenciais sempre; as "com app" so' quando ha app DECLARADO e ele foi
+    # sondado. App fora do ar continua sendo DEGRADACAO conhecida (decide por
+    # leitura); app no ar servindo o codigo errado, nao -- aquilo mede a coisa
+    # errada em silencio.
+    #
+    # 🚨 `cfg.TEM_APP` entrou em 17/08. Sem ele, `app_serve_o_head` era exigida
+    # mesmo num repositorio de terceiro que nao tem app nosso nenhum -- e como
+    # ela roda `git merge-base`, que nao existe em clone raso, a rodada abortava
+    # em vez de rodar com leitura e grep. Bloqueava o caso de uso inteiro do
+    # `revisa_pr.py`: PR de terceiro NUNCA vai ter app declarado.
+    com_app = sondar_app and cfg.TEM_APP
+    if sondar_app and not cfg.TEM_APP:
+        # 🚫 Dito, nunca omitido. Sonda que some sem explicacao le como "nao se
+        # aplica"; aqui ela some porque o projeto nao se descreveu, e isso muda
+        # o que a rodada consegue provar. Mesma doutrina do terceiro estado.
+        r["app"] = {
+            "ok": False,
+            "detalhe": ("o projeto nao declara `app.api` no veredito.yml -- sem "
+                        "http_request e sem prova ponta a ponta. A rodada segue "
+                        "com read_file e grep, e a R2 limita tudo a MEDIA."),
+        }
+    exigidas = list(ESSENCIAIS) + (list(ESSENCIAIS_COM_APP) if com_app else [])
     return {"ok": all(r.get(n, {}).get("ok") for n in exigidas), "ferramentas": r}

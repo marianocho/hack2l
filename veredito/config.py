@@ -313,9 +313,40 @@ def contexto_do_repo() -> str | None:
 # Isso nao da ConnectionRefused, da ReadTimeout -- entao cada chamada pendura o
 # timeout inteiro antes de falhar, e a acusacao vira INCONCLUSIVO por
 # infraestrutura. Em massa, a categoria de seguranca esvaziaria parecendo rigor.
-APP_API_URL = _s("APP_API_URL", _app.get("api") or "http://127.0.0.1:8000").rstrip("/")
-APP_WEB_URL = _s("APP_WEB_URL", _app.get("web") or "http://127.0.0.1:3000").rstrip("/")
+#
+# 🚨 E SEM `app:` DECLARADO O ENDERECO FICA VAZIO -- nao cai em 127.0.0.1:8000.
+#
+# Medido em 17/08, na primeira revisao de um PR de terceiro pela porta da
+# frente: revisando `pallets/flask`, sem `veredito.yml`, o pre-voo imprimiu
+#
+#     ok  http_request  GET /health -> 200
+#     ok  login         /auth/login como demo: token de 119 chars
+#
+# VERDE. Ele tinha feito login no app do DESAFIO, que estava no ar naquela
+# porta, com a conta `demo` do desafio -- enquanto revisava o Flask.
+#
+# E' o item 4 dos cinco chumbados de 15/08 outra vez ("revisaria um projeto
+# conversando com o app do outro, e o pre-voo diria health -> 200"), so' que a
+# causa agora nao e' o `.env`: e' este padrao. O conserto de 14/08 tirou os
+# valores de serem a UNICA fonte e os deixou como fallback -- e fallback que
+# aponta para outro projeto e' pior que fallback nenhum, porque as sondas ficam
+# verdes e a rodada segue.
+#
+# Contencao, nao predicao: nao adivinhar onde o app esta. Projeto que nao
+# declara app NAO TEM app, e quem depende dele diz isso em voz alta.
+APP_API_URL = _s("APP_API_URL", _app.get("api") or "").rstrip("/")
+APP_WEB_URL = _s("APP_WEB_URL", _app.get("web") or "").rstrip("/")
 APP_SAUDE = _s("APP_SAUDE", _app.get("saude") or "/health")
+
+# A pergunta que o pre-voo, o `http_request` e a contencao passam a fazer antes
+# de tocar em rede. Derivada, nunca declarada duas vezes.
+TEM_APP = bool(APP_API_URL)
+
+# Quem montou o alvo ja sabia o merge-base? O `revisa_pr.py` sabe -- ele o
+# recebe do endpoint `compare` do GitHub, que enxerga a historia que o clone
+# raso nao baixou. Declarado por quem sabe, nunca deduzido de uma falha:
+# `commit_base` explica por que a diferenca importa.
+BASE_JA_RESOLVIDO = _b("BASE_JA_RESOLVIDO", False)
 
 # --- levantar o app, quando ele nao esta no ar ------------------------------
 #
@@ -409,12 +440,13 @@ AUTH_CAMPO_TOKEN = _s("AUTH_CAMPO_TOKEN", _auth.get("campo_token") or "access_to
 # {nome: (email, senha)}. Vazio e' legitimo: o projeto perde prova ponta a ponta
 # e o pre-voo diz isso em voz alta, em vez de a rodada sair toda em MEDIA e
 # parecer que o produto nao funciona.
-USUARIOS = projeto.usuarios(PROJETO) or {
-    "demo": ("demo@hack2l.dev", "demo-password"),
-    "alice": ("alice@hack2l.dev", "alice-password"),
-    "bob": ("bob@hack2l.dev", "bob-password"),
-    "carol": ("carol@hack2l.dev", "carol-password"),
-}
+#
+# 🚨 SEM FALLBACK, e a ausencia dele e' o conserto de 17/08. Estas quatro contas
+# eram o padrao quando o projeto nao declarava nenhuma -- entao revisando o
+# `pallets/flask` o produto tentou (e conseguiu) logar como `demo@hack2l.dev` no
+# app do desafio, que estava no ar. O comentario abaixo ja dizia que vazio e'
+# legitimo; o `or {...}` garantia que nunca ficasse vazio.
+USUARIOS = projeto.usuarios(PROJETO)
 
 # A conta que nao possui nada. Deduzida de `possui: 0` no yml -- declarar duas
 # vezes e' convidar as duas a divergirem.
