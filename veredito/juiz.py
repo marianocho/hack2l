@@ -13,9 +13,11 @@ milissegundos, sem rede, e tem teste.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from . import arbitro
+from . import fusao
 from . import config as cfg
 from . import llm_alvo
 
@@ -435,6 +437,93 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = N
     return "\n".join(linhas)
 
 
+# O trecho " - arquivo:linha" no fim do cabecalho de um bloco. Ancorado no FIM
+# para nao casar um hifen que apareca no rotulo da categoria.
+_RE_LOCAL_DO_CABECALHO = re.compile(r" - [^\s].*$")
+
+
+def _principal(grupo: list[dict], artefatos: dict, http: dict) -> dict:
+    """Qual membro do grupo o autor le primeiro: o de prova mais forte.
+
+    Prova diferencial ganha de ponta a ponta por HTTP, que ganha de nenhuma --
+    e' a mesma ordem que a R1 e a R2 usam para sustentar severidade. Empate
+    fica com a ordem que o juiz ja deu (severidade).
+    """
+    def forca(v):
+        art = artefatos.get(v.get("id")) or {}
+        return (art.get("estado") == "PROVADO", bool(http.get(v.get("id"))))
+    return max(grupo, key=lambda v: (forca(v), -grupo.index(v)))
+
+
+def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
+                   http: dict | None = None) -> str:
+    """Um defeito, com toda a prova que as lentes juntaram nele.
+
+    🚨 O grupo NAO descarta os outros membros. Cada um continua com id, arquivo
+    de teste e artefato citados -- a fusao junta a APRESENTACAO, nunca apaga
+    verificacao. Tres arquivos de teste diferentes provando a mesma invariante
+    valem MAIS que um; o que estava errado era contar isso como tres defeitos.
+
+    ⚠️ "lentes", nunca "revisores independentes": sao seis chamadas do mesmo
+    modelo. E' a mesma honestidade que `_corroborado` guarda em promotores.py.
+    """
+    http = http or {}
+    if len(grupo) == 1:
+        v = grupo[0]
+        return _bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
+                      http.get(v["id"]))
+
+    chefe = _principal(grupo, artefatos, http)
+    linhas = _bloco(chefe, acusacoes.get(chefe["id"], {}), artefatos.get(chefe["id"]),
+                    http.get(chefe["id"])).split("\n")
+
+    nomes = [_CATEGORIA_DO_DESAFIO.get(c, c) for c in fusao.lentes(grupo, acusacoes)]
+    local = fusao.local_do_grupo(grupo, acusacoes)
+    # ⚠️ Acusacoes e lentes sao contagens DIFERENTES, e a rodada 2 tinha 3
+    # acusacoes de 2 lentes -- uma lente acusou duas vezes. Dizer "2 lentes,
+    # nao 3 problemas" na mesma frase faz o leitor procurar o numero que falta.
+    convergencia = (
+        f"CONVERGENCIA: {len(grupo)} acusacoes independentes, de {len(nomes)} "
+        f"lente(s) do revisor ({', '.join(nomes)}), caem neste mesmo defeito, "
+        f"cada uma com prova propria. E' UM defeito com UM conserto, "
+        f"nao {len(grupo)} problemas separados."
+    )
+    extras = []
+    for v in grupo:
+        if v is chefe:
+            continue
+        art = artefatos.get(v["id"]) or {}
+        if art.get("estado") == "PROVADO":
+            prova = (f"{art.get('arquivo_do_teste')} passa em {art.get('commit_base')} "
+                     f"e falha em {art.get('commit_head')}")
+        else:
+            prova = _evidencia_http(http.get(v["id"])) or v.get("motivo") or "sem artefato"
+            prova = str(prova).replace("EVIDENCIA: ", "").replace("\n", " ")[:160]
+        extras.append(f"  E TAMBEM ({v['id']}): {prova}")
+
+    # O cabecalho passa a mostrar a extensao do DEFEITO, e nao a linha do membro
+    # que por acaso liderou: o autor recebe um lugar so' para olhar, e ele cobre
+    # o que as lentes apontaram.
+    linhas[0] = _RE_LOCAL_DO_CABECALHO.sub(f" - {local}", linhas[0], count=1)
+
+    # 🚨 A ordem e' do leitor, nao do codigo. CONVERGENCIA sobe para logo depois
+    # do "O QUE" -- e' a primeira coisa que muda a leitura de "tres problemas"
+    # para "um" -- e o CONSERTO fica sendo a ultima linha, que e' a acao.
+    # Sem ancora reconhecivel, acrescenta no fim: perder conteudo e' pior que
+    # perder a ordem.
+    def _indice(prefixo: str) -> int | None:
+        return next((n for n, l in enumerate(linhas) if l.startswith(prefixo)), None)
+
+    pos = _indice("O QUE:")
+    linhas.insert(pos + 1 if pos is not None else len(linhas), convergencia)
+    fim = _indice("CONSERTO SUGERIDO:")
+    if fim is None:
+        fim = _indice("REGRAS:")
+    linhas[fim if fim is not None else len(linhas):
+           fim if fim is not None else len(linhas)] = extras
+    return "\n".join(linhas)
+
+
 def _cabecalho_do_escopo(escopo: dict | None, examinadas: int) -> list[str]:
     """A primeira linha do parecer, e o que ela deixa de implicar.
 
@@ -510,16 +599,16 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
 
     p += _cabecalho_do_escopo(escopo, len(c) + len(d) + len(i))
     p += [
-        f"Das examinadas: {len(c)} com parecer, {len(d)} descartados com motivo, "
+        f"Das examinadas: {len(fusao.agrupa(c, acusacoes))} com parecer, "
+        f"{len(d)} descartados com motivo, "
         f"{len(i)} inconclusivos com causa.",
         "",
         "## CONDENADOS", "",
     ]
     if not c:
         p.append("_nenhum achado sobreviveu a pericia._")
-    for v in c:
-        p += [_bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
-                     http.get(v["id"])), ""]
+    for grupo in fusao.agrupa(c, acusacoes):
+        p += [bloco_agrupado(grupo, acusacoes, artefatos, http), ""]
 
     p += ["## DESCARTADOS, COM MOTIVO", ""]
     if not d:

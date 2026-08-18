@@ -36,6 +36,7 @@ precisam ser enquadradas em voz alta OU VIRAM ACUSACAO.
 
 from __future__ import annotations
 
+from . import fusao
 from . import juiz
 
 # Achada pela rodada seguinte para atualizar este mesmo comentario. Invisivel no
@@ -162,8 +163,13 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
     i = organizado["inconclusivos"]
     levantadas = (escopo or {}).get("levantadas")
 
+    # 🚨 A contagem e' de DEFEITOS, nao de vereditos. As duas rodadas de 18/08
+    # publicaram "3 achados com evidencia" para UM defeito visto por tres
+    # lentes -- o unico lugar em que este produto inflava acusacao, e no texto
+    # que o cliente le.
+    grupos = fusao.agrupa(c, acusacoes)
     p: list[str] = [MARCA, "", "## Veredito", ""]
-    p += [_resumo(len(c), len(d), len(i)), ""]
+    p += [_resumo(len(grupos), len(d), len(i)), ""]
     p += _legenda()
 
     if levantadas:
@@ -172,9 +178,8 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
               "desta rodada.</sub>", ""]
 
     # Condenados ABERTOS e por extenso: e' o que o autor precisa agir.
-    for v in c:
-        p += [juiz._bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
-                          http.get(v["id"])), ""]
+    for grupo in grupos:
+        p += [juiz.bloco_agrupado(grupo, acusacoes, artefatos, http), ""]
 
     # E o resto colapsado. Presente, nunca omitido -- as duas listas sao a peca
     # que o produto tem e ninguem mais tem -- mas sem competir com o achado.
