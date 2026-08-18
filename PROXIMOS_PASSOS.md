@@ -36,12 +36,33 @@ que condenar, e absolve com motivo quando não há:
 | PR sem defeito | 8 de 8 refutados | US$1,23 |
 | PRs de terceiro (10 reais) | 68% refutados | US$0,071/alegação |
 
-**O que impede uso real**, em ordem — sobraram DOIS:
+**O que impede uso real** — sobrou UM:
 
-1. **Não tem onde entregar.** O parecer sai no terminal. A *entrada* já existe
-   desde 17/08 (`revisa_pr.py`); o que falta é a **saída** — o parecer virar
-   comentário de PR.
+1. ~~**Não tem onde entregar.**~~ ✅ **Saiu em 18/08, e foi verificado
+   publicando de verdade.** Ver abaixo.
 2. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
+
+> ✅ **Saiu em 18/08: o parecer chega ao PR.** Duas rodadas da Action contra
+> `luisfelp07/bancada#1`, as duas com `postar=true`:
+>
+> | | rodada 1 | rodada 2 |
+> |---|---|---|
+> | o passo disse | `criado:` | `atualizado:` |
+> | comentários no PR **depois** | 1 | **1** |
+> | id | 5333006742 | **5333006742** — o mesmo |
+> | corpo | 5683 car. | 5590 car. — trocado |
+>
+> As duas metades: **publica** e **não empilha**. A conferência é a API do
+> GitHub (`issues/1/comments`), não a linha que o nosso script imprimiu —
+> `criado:`/`atualizado:` é autodeclaração do código sob teste, e é a mesma
+> distinção da R0.
+>
+> ⚠️ **`posta()` e `acha_o_nosso()` tinham ZERO teste até 18/08** e o caminho
+> nunca tinha executado. Agora são 14 (`tests/test_posta_o_parecer.py`), cinco
+> violações injetadas — e **uma delas mostrou que o teste da recusa passava
+> pelo motivo errado**: com 403 em tudo, quem levantava era o `raise_for_status`
+> do GET dentro de `acha_o_nosso`, e o do POST podia ser apagado com a suíte
+> verde. Leitura e escrita agora têm status separados no dublê.
 
 > ✅ **Saiu em 14–15/08:** *"metade só funciona no desafio"*. Contas, layout,
 > rota de login, bancos e a precedência do `.env` saíram do código — cinco

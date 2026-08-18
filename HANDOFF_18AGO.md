@@ -11,16 +11,11 @@
 
 ## Estado verificado
 
-**570 testes verdes** (`py -3.12 -m pytest -q`, ~80s, com Docker e o app do
+**577 testes verdes** (`py -3.12 -m pytest -q`, ~95s, com Docker e o app do
 desafio de pé). Sem Docker, use `-m "not lento"` — 6 testes são deselecionados.
 
-`main == origin/main` em `ed74143`.
-
-⚠️ **A bancada tem 1 commit local não enviado** (o bump dos actions):
-
-```bash
-cd ../bancada && git push origin main
-```
+`main == origin/main` nos dois repos. ✅ O commit local da bancada (o bump dos
+actions, `3105b95`) foi enviado em 18/08 à tarde.
 
 ## 🎯 O QUE A SESSÃO ENTREGOU: a saída existe, e a Action roda
 
@@ -51,19 +46,46 @@ E TAMBÉM:  GET /tasks/1 como davi -> HTTP 200        (davi = controle negativo)
 Prova diferencial **mais** ponta a ponta **mais** regra do repositório deles
 citada com procedência. É o defeito do gabarito, com o conserto exato.
 
-## 🚨 O QUE NÃO ESTÁ VERIFICADO — leia antes de dizer que funciona
+## ✅ A ÚLTIMA MILHA FECHOU — 18/08, à tarde
 
-**O código que POSTA o comentário nunca executou.** As três rodadas usaram
-`postar=false`. `posta()` e `acha_o_nosso()` em `posta_parecer.py` não têm um
-único teste — os 12 de `test_comentario_de_pr.py` cobrem montar e cortar, não
-publicar.
+*(Esta seção dizia "o código que POSTA nunca executou". Executou.)*
 
-Ou seja: está provado da entrada até **montar** o comentário. A última milha —
-POST, achar o comentário anterior pela marca invisível, PATCH em vez de
-empilhar — é código que nunca rodou. É justamente o que transforma isto em
-produto.
+Duas rodadas da Action contra `luisfelp07/bancada#1`, as duas com
+`postar=true`:
 
-**É o passo 1 de "onde retomar".**
+| | rodada 1 | rodada 2 |
+|---|---|---|
+| o passo disse | `criado:` | `atualizado:` |
+| comentários no PR **depois** | 1 | **1** |
+| id | 5333006742 | **5333006742** — o mesmo |
+| corpo | 5683 car. | 5590 car. — trocado |
+| duração | 3m07s | 3m13s |
+
+**Publica e não empilha**, as duas metades. E a conferência foi a API
+(`gh api repos/luisfelp07/bancada/issues/1/comments`), **não** a linha que o
+nosso próprio script imprimiu: `criado:`/`atualizado:` é autodeclaração do
+código sob teste. Mesma distinção da R0 — quem decide é o fato externo.
+
+### E a última milha ganhou trava antes de rodar
+
+14 testes em `tests/test_posta_o_parecer.py`, cinco violações injetadas, cada
+`raise_for_status` removido individualmente derrubando **exatamente um** teste.
+
+🚨 **A quarta injeção cobrou o preço de sempre.** O teste da recusa afirmava que
+um 403 no POST sobe em vez de virar "postado". Apaguei o `raise_for_status()`
+do POST e a suíte ficou **verde, 12 de 12**: o dublê de GitHub tinha um status
+só, então com 403 em tudo quem levantava era o `raise_for_status` do **GET**
+dentro de `acha_o_nosso`. O teste observava a exceção certa vindo do lugar
+errado.
+
+> **Teste que acusa a coisa errada não vale mais que teste que não acusa nada.**
+> O `CLAUDE.md` já dizia. Escrevi o teste, confiei nele, e a injeção desmentiu —
+> dentro do teste escrito justamente para a peça sem trava.
+
+`status_leitura` e `status_escrita` são separados agora, e são três testes:
+recusa no LISTAR, no CRIAR e no ATUALIZAR.
+
+Suíte: **577 verdes** (eram 563).
 
 ## Os doze bugs, e o que cada um ensinou
 
@@ -139,38 +161,50 @@ diferente. Duas travas novas, nenhuma é lista mantida à mão:
 
 ## 📍 Onde retomar — em ordem
 
-**1. Postar de verdade, uma vez** *(15 min, ~US$0,50)* ← **comece aqui**
+~~**1. Postar de verdade**~~ ✅ **FEITO** — ver a seção acima. As duas rodadas,
+`criado:` e `atualizado:`, um comentário só no PR.
 
-```bash
-cd ../bancada && git push origin main          # o bump dos actions
-gh workflow run Veredito --repo luisfelp07/bancada \
-  -f pr=https://github.com/luisfelp07/bancada/pull/1 -f top_n=3 -f postar=true
-```
-
-Depois **dispare de novo**. Se aparecer um segundo comentário em vez de o
-primeiro ser atualizado, a marca invisível (`<!-- veredito:parecer -->`) não
-está funcionando. Duas rodadas provam as duas metades: publicar e não empilhar.
-
-**2. Atualizar a fila** *(30 min)* — `PROXIMOS_PASSOS.md` foi atualizado no
-essencial, mas vale reler: partes dele são anteriores a esta sessão.
+~~**2. Atualizar a fila**~~ ✅ `PROXIMOS_PASSOS.md` registra que o bloqueador
+"não tem onde entregar" caiu, e sobrou um.
 ⚠️ **A cópia no vault (`Onde retomar.md`) diverge** e não é alcançável daqui.
 
-**3. Fundir por CONSERTO, não por artefato** *(1 dia)* — os "3 achados" da
-rodada 3 são **1 defeito** visto por três lentes, todos em `app/main.py:103-104`
-com o mesmo conserto. A fusão que está na fila é por artefato, e a rodada
-provou que não basta: são três arquivos de teste diferentes provando a mesma
-invariante. Sem isso, todo PR com defeito real gera comentário que exagera 3×.
+**1. Fundir por CONSERTO, não por artefato** *(1 dia)* ← **comece aqui**
 
-⚠️ Relacionado: a lente `performance` produziu um achado de **segurança** com
-rótulo errado (`[ALTA] performance — "muda modelo de segurança sem compensação
-em cache ou índice"`). Conteúdo certo, categoria absurda.
+**As duas rodadas de 18/08 confirmaram isto ao vivo, e é o defeito mais visível
+do produto hoje.** Cada uma publicou **3 achados que são 1 defeito** — o mesmo
+IDOR em `app/main.py:103-104`, com o mesmo conserto:
 
-**4. Os outros três PRs da bancada** *(~US$1,50)* — a medição de 15/08 refeita
+| | rodada 1 | rodada 2 |
+|---|---|---|
+| | `correctness:103` | `correctness:104` |
+| | `padroes:104` | `correctness:103-106` |
+| | `performance:103` | `padroes:104` |
+
+Três lentes, três arquivos de teste diferentes (`test_isolamento_tarefa.py`,
+`test_idor_tarefa_cross_project.py`, `test_enumeracao_tarefas.py`) provando a
+mesma invariante. A fusão atual é **por artefato** e por isso não vê nada: os
+artefatos são genuinamente diferentes. Ela fundiu **1** duplicata, das 12
+levantadas — e o comentário que o autor lê exagera **3×** o tamanho do problema.
+
+🚨 **E o erro tem a direção mais cara.** O produto inteiro existe para não
+inflar acusação; este é o único lugar em que ele infla, e é justamente no
+texto que o cliente vê.
+
+⚠️ **A composição muda entre rodadas** (a tabela acima): mesmo PR, mesmo commit,
+mesmas 12 suspeitas levantadas — e o trio condenado veio diferente. Enquanto a
+fusão não existir, **duas rodadas do mesmo PR não são comparáveis entre si**.
+
+⚠️ Relacionado, e agora medido em duas amostras: a lente `performance` produziu
+um achado de **segurança** com rótulo errado na rodada 1 (`[ALTA] performance`
+para o IDOR) e **não** na rodada 2, onde o mesmo item caiu para 4º da fila.
+Conteúdo certo, categoria absurda, e **não determinístico**.
+
+**2. Os outros três PRs da bancada** *(~US$1,50)* — a medição de 15/08 refeita
 pela porta da frente. **O PR limpo é o que mais importa:** se ele condenar
 alguma coisa, há falso positivo na Action, e isso é pior que tudo que foi
 consertado hoje.
 
-**5. Repo de demonstração público** *(1 dia)* — é o que converte, e o único
+**3. Repo de demonstração público** *(1 dia)* — é o que converte, e o único
 jeito de mostrar isto sem dar acesso à bancada privada.
 
 ## Mapa rápido do que é novo no código
