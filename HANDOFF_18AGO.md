@@ -11,7 +11,7 @@
 
 ## Estado verificado
 
-**577 testes verdes** (`py -3.12 -m pytest -q`, ~95s, com Docker e o app do
+**600 testes verdes** (`py -3.12 -m pytest -q`, ~95s, com Docker e o app do
 desafio de pé). Sem Docker, use `-m "not lento"` — 6 testes são deselecionados.
 
 `main == origin/main` nos dois repos. ✅ O commit local da bancada (o bump dos
@@ -85,7 +85,7 @@ errado.
 `status_leitura` e `status_escrita` são separados agora, e são três testes:
 recusa no LISTAR, no CRIAR e no ATUALIZAR.
 
-Suíte: **577 verdes** (eram 563).
+Suíte: **577 verdes** (eram 563) — e **600** depois da fusão, abaixo.
 
 ## Os doze bugs, e o que cada um ensinou
 
@@ -168,36 +168,35 @@ diferente. Duas travas novas, nenhuma é lista mantida à mão:
 "não tem onde entregar" caiu, e sobrou um.
 ⚠️ **A cópia no vault (`Onde retomar.md`) diverge** e não é alcançável daqui.
 
-**1. Fundir por CONSERTO, não por artefato** *(1 dia)* ← **comece aqui**
+~~**1. Fundir por CONSERTO**~~ ✅ **FEITO em 18/08** — `veredito/fusao.py`.
+As duas rodadas de 18/08 saíam com *"3 achados com evidência"* para **um**
+defeito; agora saem com **1**, e as três provas continuam no bloco.
 
-**As duas rodadas de 18/08 confirmaram isto ao vivo, e é o defeito mais visível
-do produto hoje.** Cada uma publicou **3 achados que são 1 defeito** — o mesmo
-IDOR em `app/main.py:103-104`, com o mesmo conserto:
+**A leitura literal de "fundir por conserto" repetiria o bug.** Os três
+consertos da rodada 1 dizem a mesma coisa em três redações — casar essa string
+falha exatamente como a chave do árbitro falhava. Os dois **fatos** embaixo das
+redações são: mesmo arquivo em linhas vizinhas, e mesma **procedência**.
 
-| | rodada 1 | rodada 2 |
-|---|---|---|
-| | `correctness:103` | `correctness:104` |
-| | `padroes:104` | `correctness:103-106` |
-| | `performance:103` | `padroes:104` |
+> **Procedência é fato do repositório; a paráfrase da regra e do conserto é
+> opinião do modelo. A chave se constrói do fato.**
 
-Três lentes, três arquivos de teste diferentes (`test_isolamento_tarefa.py`,
-`test_idor_tarefa_cross_project.py`, `test_enumeracao_tarefas.py`) provando a
-mesma invariante. A fusão atual é **por artefato** e por isso não vê nada: os
-artefatos são genuinamente diferentes. Ela fundiu **1** duplicata, das 12
-levantadas — e o comentário que o autor lê exagera **3×** o tamanho do problema.
+Mora **depois** do laço caro, de propósito: fundir antes do advogado
+economizaria dinheiro (3 vagas → 1), mas ali uma fusão errada custa uma
+*verificação*. Na apresentação, fundir errado não esconde prova nenhuma.
+⚠️ A chave de `promotores.deduplica` **continua rígida** e é um item em aberto —
+medí-la é o que economizaria API de verdade.
 
-🚨 **E o erro tem a direção mais cara.** O produto inteiro existe para não
-inflar acusação; este é o único lugar em que ele infla, e é justamente no
-texto que o cliente vê.
+Reusa `_faixa` / `TOLERANCIA_LINHAS` / `LARGURA_MAX_PARA_CORROBORAR` de
+`fontes.py`, já calibrados contra este mesmo fenômeno.
 
-⚠️ **A composição muda entre rodadas** (a tabela acima): mesmo PR, mesmo commit,
-mesmas 12 suspeitas levantadas — e o trio condenado veio diferente. Enquanto a
-fusão não existir, **duas rodadas do mesmo PR não são comparáveis entre si**.
+⚠️ **Ainda em aberto, medido em duas amostras:** a lente `performance` produziu
+um achado de **segurança** com rótulo errado na rodada 1 e **não** na rodada 2.
+Conteúdo certo, categoria absurda, e **não determinístico**. A fusão esconde o
+sintoma no cabeçalho (o grupo assume o rótulo da lente líder) mas não resolve.
 
-⚠️ Relacionado, e agora medido em duas amostras: a lente `performance` produziu
-um achado de **segurança** com rótulo errado na rodada 1 (`[ALTA] performance`
-para o IDOR) e **não** na rodada 2, onde o mesmo item caiu para 4º da fila.
-Conteúdo certo, categoria absurda, e **não determinístico**.
+⚠️ **A composição ainda muda entre rodadas:** mesmo PR, mesmo commit, mesmas 12
+suspeitas, trio condenado diferente. A fusão faz as duas rodadas convergirem no
+mesmo *achado*, mas as acusações que chegam ao advogado seguem variando.
 
 **2. Os outros três PRs da bancada** *(~US$1,50)* — a medição de 15/08 refeita
 pela porta da frente. **O PR limpo é o que mais importa:** se ele condenar

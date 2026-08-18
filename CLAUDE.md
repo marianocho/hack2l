@@ -431,6 +431,7 @@ justamente o caso perigoso.
 | **R3** | execução falhou → INCONCLUSIVO | olha `artefato.erro`. Verificação só estática não gera artefato nenhum. |
 | **R3b** | *(o vão que a R3 deixou)* | o advogado disse PROVADO com **todas** as ferramentas falhando, e escreveu isso no próprio motivo. |
 | **dedup** | funde por `(local, arbitro)` | o conserto do árbitro fez `arbitro` virar `null` na maioria — a chave evaporou junto. |
+| **o dedup, de novo** | mesma chave `(local, árbitro)` | 🆕 **e agora com o árbitro PREENCHIDO.** Os dois campos do casamento exato oscilam: `103`/`104`/`103-106`, e `md:Acesso`/`md (Acesso)`/`md - Acesso`/`md:Acesso (linhas ~13-14)`. Cada par acertava um eixo e errava o outro, e um defeito saía como três achados no comentário do PR. ✅ 18/08 na apresentação (`fusao.py`); a chave do pré-advogado continua rígida. |
 | **`ERRO` como string** | contar ferramenta que falhou | dependia do prefixo no retorno `-> str`. ✅ 13/08: quem sabe que falhou passou a ser quem falhou — a ferramenta registra o desfecho. |
 | **`http_request` fora da contenção** | banco descartável, rede sem saída | aplicadas só ao caminho da `prova_diferencial`; o `http_request` fala com o app de verdade. ⚠️ **Meio consertado em 14/08:** o `contencao_app.py` fechou o BANCO; a rede não — não há função de rede naquele módulo. Ver "o vão que sobrou" em `PROXIMOS_PASSOS.md`. |
 | **retrato do banco chumbado** | delta de estado por rodada, contra efeito colateral | `_psql` fixava `-U kb`: contra a bancada todo retrato falhava, `delta_do_banco` lia só `tabelas` e ignorava `erro`, e seis rodadas gravaram `"limpo": true` sem terem olhado. O console usava **a mesma frase do sucesso**. ✅ 16/08. |
@@ -468,6 +469,13 @@ reciclado**. Preenchido não é válido.
    isso por ser um segundo *exemplo*, a ~US$2 por varredura. O **projeto nu** —
    rodar sem `veredito.yml` nenhum — acha por ser a *ausência* de exemplo, em
    milissegundos, sem repo nem container. `tests/test_projeto_nu.py`.
+
+7. 🆕 **Toda chave: ela é feita de FATO ou de PARÁFRASE?** Campo que o modelo
+   redige em prosa — a regra, o conserto, a hipótese — muda de redação a cada
+   rodada, e chave feita dele não casa duas vezes. `local` e `arbitro.onde` são
+   fatos do repositório; `arbitro.regra` e `conserto` são opinião do modelo
+   sobre eles. Foi o que fez a fusão de 18/08 ignorar o texto da regra e casar
+   pela procedência.
 
 > **O `or <valor do desafio>` é cicatriz de migração.** O código nasceu contra o
 > desafio e o `veredito.yml` foi enxertado depois; o `or` era a ponte, e virou
