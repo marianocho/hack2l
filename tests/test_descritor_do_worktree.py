@@ -102,29 +102,79 @@ def test_o_base_ganha_quando_os_dois_existem(alvo):
 
 # ------------------------------------------- e o config amarra os dois
 
-def test_config_resolve_descritor_e_compose_na_MESMA_raiz():
-    """Um aponta para o outro: `app.compose` e' relativo a raiz do descritor.
-
-    Resolver os dois em lugares diferentes e' a mesma classe da chave da API em
-    dois lugares -- divergem em silencio, e o sintoma aparece longe da causa.
-    """
+def _atribuicoes_do_config() -> dict:
     import ast
     import inspect
 
     from veredito import config as cfg
     fonte = inspect.getsource(cfg)
-    atribs = {t.id: ast.unparse(n.value) for n in ast.walk(ast.parse(fonte))
-              if isinstance(n, ast.Assign)
-              for t in n.targets if isinstance(t, ast.Name)}
-    assert atribs["COMPOSE"].startswith("RAIZ_DO_PROJETO"), (
-        f"COMPOSE saiu da raiz do descritor: {atribs['COMPOSE']}")
-    assert "PROJETO_YML" in atribs and "no_worktree=RAIZ_DO_PROJETO" in atribs["PROJETO_YML"]
-    # A raiz sai do worktree do BASE -- segue a cadeia em vez de procurar a
-    # palavra na linha errada, que foi o primeiro erro deste teste.
-    assert "_wt_base" in atribs["RAIZ_DO_PROJETO"], (
-        f"a raiz do projeto nao sai do worktree: {atribs['RAIZ_DO_PROJETO']}")
-    assert atribs["_wt_base"] == "WORKTREES / 'base'", (
-        f"o lado mudou, e o lado e' a trava de seguranca: {atribs['_wt_base']}")
+    return {t.id: ast.unparse(n.value) for n in ast.walk(ast.parse(fonte))
+            if isinstance(n, ast.Assign)
+            for t in n.targets if isinstance(t, ast.Name)}
+
+
+def test_sao_DUAS_raizes_descritor_no_base_e_app_no_head():
+    """🚨 A separacao, e ela e' o conserto do abort no pre-voo.
+
+    A primeira versao usava UMA raiz para as duas coisas, e a rodada morria com
+    "o app no ar NAO serve o head": `subir: true` construia o container da
+    arvore do BASE, e a sonda `app_serve_o_head` -- ESSENCIAL quando ha app --
+    comparava o diff do PR contra um container do codigo de antes dele.
+
+    A sonda estava certa (custou tres rodadas pagas em 15/08). Quem estava
+    errado era a raiz unica. A linha e' entre CONFIGURACAO e CODIGO SOB
+    REVISAO.
+    """
+    a = _atribuicoes_do_config()
+    assert "_wt_base" in a["RAIZ_DO_DESCRITOR"], (
+        f"o descritor deixou de sair do base: {a['RAIZ_DO_DESCRITOR']}")
+    assert a["_wt_base"] == "WORKTREES / 'base'", (
+        f"o lado do descritor e' a trava de seguranca: {a['_wt_base']}")
+    assert "_wt_head" in a["RAIZ_DO_APP"], (
+        f"o app deixou de sair do head: {a['RAIZ_DO_APP']}")
+    assert a["_wt_head"] == "WORKTREES / 'head'"
+    assert a["RAIZ_DO_DESCRITOR"] != a["RAIZ_DO_APP"], (
+        "as duas raizes colapsaram numa so' -- e' exatamente o estado que "
+        "abortava a rodada no pre-voo")
+
+
+def test_o_compose_e_o_descritor_vem_de_lados_DIFERENTES():
+    """O NOME vem do descritor (base); o ARQUIVO vem do app (head).
+
+    Nao sao a mesma informacao em dois lugares -- sao um ponteiro e um alvo. O
+    descritor diz "o compose se chama X"; o conteudo de X em cada commit e'
+    codigo sob revisao, e e' o do head que tem que subir.
+    """
+    a = _atribuicoes_do_config()
+    assert a["COMPOSE"].startswith("RAIZ_DO_APP"), (
+        f"o compose do HEAD nao e' o que sobe: {a['COMPOSE']}")
+    assert "_app.get('compose')" in a["COMPOSE"], (
+        "o nome do arquivo deixou de vir do descritor")
+    assert "no_worktree=RAIZ_DO_DESCRITOR" in a["PROJETO_YML"]
+
+
+def test_os_worktrees_so_valem_quando_o_clone_nao_tem_arvore():
+    """⚠️ Sem esta pergunta o modo local quebra de um jeito traicoeiro.
+
+    `--project-directory` batiza o PROJETO do compose. Apontado para o worktree
+    num ambiente onde o operador subiu o app a partir do checkout, `docker
+    compose exec db` passaria a procurar containers de um projeto chamado
+    `head` -- e o erro sairia "no such service", longe da causa.
+    """
+    from veredito import config as cfg
+
+    a = _atribuicoes_do_config()
+    for nome in ("RAIZ_DO_DESCRITOR", "RAIZ_DO_APP"):
+        assert "_tem_arvore(DESAFIO)" in a[nome], (
+            f"{nome} nao pergunta se o clone tem arvore: {a[nome]}")
+
+    # E a pergunta responde do disco, nao de bandeira declarada.
+    assert cfg._tem_arvore(cfg.RAIZ) is True
+    import tempfile
+    vazio = pathlib.Path(tempfile.mkdtemp())
+    (vazio / ".git").mkdir()
+    assert cfg._tem_arvore(vazio) is False, (
+        "um clone com so' `.git` foi tratado como checkout")
 
 
 def test_revisa_pr_confere_o_worktree_e_nao_o_clone():
@@ -140,12 +190,16 @@ def test_revisa_pr_confere_o_worktree_e_nao_o_clone():
     assert 'info["worktrees"] / "base" / "veredito.yml"' in fonte
 
 
-def test_o_compose_roda_na_raiz_do_descritor_e_nao_no_clone():
+def test_o_compose_roda_na_raiz_do_APP_e_nao_no_clone():
     """`--project-directory` resolve `build: .` e volume relativo do compose.
 
     Apontado para o clone -- que nao tem working tree -- nao ha contexto de
-    build nem caminho relativo para resolver. Sao oito chamadas em tres modulos,
-    e uma sobrando ja quebraria a rodada num alvo montado por `revisa_pr.py`.
+    build nem caminho relativo para resolver. E apontado para o BASE, constroi
+    o app do commit errado, que e' o abort do pre-voo.
+
+    Sao oito chamadas em tres modulos, e uma sobrando ja quebraria a rodada num
+    alvo montado por `revisa_pr.py` -- "sete de oito" nao e' um estado que
+    alguem perceba lendo.
     """
     import re
 
@@ -154,8 +208,8 @@ def test_o_compose_roda_na_raiz_do_descritor_e_nao_no_clone():
     for arq in ("contencao_app.py", "ferramentas.py", "subida.py"):
         fonte = (raiz / arq).read_text(encoding="utf-8")
         for m in re.finditer(r'"--project-directory",\s*str\(cfg\.(\w+)\)', fonte):
-            if m.group(1) != "RAIZ_DO_PROJETO":
+            if m.group(1) != "RAIZ_DO_APP":
                 sobraram.append(f"{arq}: cfg.{m.group(1)}")
     assert not sobraram, (
-        "compose apontado para uma raiz que pode nao ter arquivos: "
+        "compose apontado para uma raiz que nao e' a do app sob revisao: "
         + ", ".join(sobraram))

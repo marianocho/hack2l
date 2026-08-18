@@ -90,7 +90,7 @@ BRANCH_BASE = _s("BASE_BRANCH", "main")
 # do deles sujariam a arvore que o app esta servindo.
 #
 # ⚠️ Subiu para ANTES do descritor em 18/08: e' de um worktree que ele passa a
-# ser lido. Ver `RAIZ_DO_PROJETO` logo abaixo.
+# ser lido. Ver `RAIZ_DO_DESCRITOR` e `RAIZ_DO_APP` logo abaixo.
 WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolve()
 
 # 🚨 DE ONDE O PROJETO SE DESCREVE -- e nao e' do clone. 18/08.
@@ -114,20 +114,76 @@ WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolv
 #
 # ⚠️ O preco, dito em voz alta: o PR que ADICIONA um veredito.yml so' vale
 # depois de mesclado. E' o lado seguro do erro.
+def _tem_arvore(raiz: Path) -> bool:
+    """O repositorio esta CHECADO ali, ou so' ha `.git`?
+
+    E' a pergunta que separa os dois modos de operar, e ela e' derivada do
+    disco em vez de declarada -- ninguem precisa lembrar de ligar uma bandeira.
+
+      operador local  ->  `../desafio` e' um checkout de verdade. O app dele
+                          esta de pe a partir DALI, e o projeto do compose tem
+                          o nome daquela pasta.
+      `revisa_pr.py`  ->  o clone e' `git init` + `fetch`: so' `.git`. Quem tem
+                          arquivos sao os worktrees.
+
+    ⚠️ Sem esta pergunta, apontar tudo para o worktree quebraria o modo local
+    de um jeito traicoeiro: `--project-directory` batiza o PROJETO do compose,
+    entao `docker compose exec db` passaria a procurar containers de um projeto
+    chamado `head`, que nao existe -- e o erro seria "no such service", longe
+    da causa.
+    """
+    try:
+        return any(p.name != ".git" for p in raiz.iterdir())
+    except OSError:
+        return False
+
+
 _wt_base = WORKTREES / "base"
-RAIZ_DO_PROJETO = _wt_base if (_wt_base / "veredito.yml").is_file() else DESAFIO
+RAIZ_DO_DESCRITOR = (
+    DESAFIO if _tem_arvore(DESAFIO)
+    else (_wt_base if (_wt_base / "veredito.yml").is_file() else DESAFIO))
+
+# 🚨 E O APP VEM DO HEAD -- sao DUAS raizes, de proposito. 18/08.
+#
+# O primeiro conserto de hoje usou uma raiz so' para as duas coisas, e a rodada
+# abortava no pre-voo com "o app no ar NAO serve o head": `subir: true`
+# construia o container a partir da arvore do BASE, e a sonda `app_serve_o_head`
+# -- ESSENCIAL quando ha app -- comparava o diff do PR com um container que
+# servia o codigo de antes dele.
+#
+# A sonda estava certa. Ela custou tres rodadas pagas para existir, em 15/08, e
+# o que ela impede e' o pior modo de falha do produto: medir o commit errado e
+# devolver parecer limpo. Quem estava errado era a raiz unica.
+#
+# A linha e' entre CONFIGURACAO e CODIGO SOB REVISAO:
+#
+#   descritor (veredito.yml)  ->  BASE.  Diz o que NOS executamos e com quais
+#                                 credenciais. Le-lo do head deixaria quem abre
+#                                 o PR escolher isso.
+#   app (compose, Dockerfile) ->  HEAD.  E' o codigo que esta sendo revisado.
+#                                 Construir do base e' revisar outra coisa.
+#
+# ⚠️ E rodar o head nao e' risco novo nosso: a CI do cliente ja roda o head a
+# cada push -- e' o argumento de 11/08, e e' por isso que a contencao de rede se
+# aplica so' ao lado BASE, que ninguem mais roda. O workflow ja recusa PR de
+# fork, entao o head aqui vem de quem tem acesso de escrita ao repositorio.
+_wt_head = WORKTREES / "head"
+RAIZ_DO_APP = (DESAFIO if _tem_arvore(DESAFIO)
+               else (_wt_head if _wt_head.is_dir() else DESAFIO))
 
 # Carregado AQUI, logo depois de DESAFIO, porque quase tudo abaixo consome.
 PROJETO_YML = projeto.caminho(DESAFIO, _s("VEREDITO_YML", ""),
-                              no_worktree=RAIZ_DO_PROJETO)
+                              no_worktree=RAIZ_DO_DESCRITOR)
 PROJETO = projeto.carrega(PROJETO_YML)
 
 _app = PROJETO.get("app") or {}
 _banco = PROJETO.get("banco") or {}
 
-# O compose vem da mesma raiz do descritor: um aponta para o outro, e resolver
-# os dois em lugares diferentes e' como a chave da API acabou em dois lugares.
-COMPOSE = RAIZ_DO_PROJETO / (_app.get("compose") or "docker-compose.yml")
+# ⚠️ O NOME vem do descritor (base); o ARQUIVO vem do app (head). Nao sao a
+# mesma informacao em dois lugares -- sao um ponteiro e um alvo. O descritor diz
+# "o compose se chama X"; o conteudo de X em cada commit e' codigo sob revisao,
+# e e' o do head que tem que subir.
+COMPOSE = RAIZ_DO_APP / (_app.get("compose") or "docker-compose.yml")
 
 # --- nossas saidas ----------------------------------------------------------
 #
