@@ -1,0 +1,134 @@
+# O Veredito revisando um PR, na CI, com o parecer voltando como comentario.
+#
+# 🚨 POR QUE ACTION E NAO BOT HOSPEDADO
+#
+# O produto precisa RODAR o app do cliente. Um bot hospedado exigiria clonar o
+# codigo e subir o stack de cada cliente na nossa infra -- pesadelo de seguranca
+# para dois socios, e o comprador que mais precisa e' justo quem nao deixa o
+# codigo sair. A CI dele ja faz checkout de base e head, ja sobe o app, ja roda
+# testes: a Action inverte a restricao em vantagem.
+#
+# ⚠️ ESTE workflow roda a versao SEM app: `read_file` e `grep`, que sao as duas
+# ferramentas ESSENCIAIS do pre-voo. E' o caminho de um PR de terceiro, e desde
+# 17/08 ele e' honesto -- as ferramentas que o projeto nao declara RECUSAM
+# dizendo isso, em vez de falhar e contaminar o veredito. Sem prova ponta a
+# ponta, a R2 limita a severidade a MEDIA.
+#
+# Para ganhar as ferramentas todas, o repositorio revisado precisa de um
+# `veredito.yml` na raiz (como um Dockerfile) e de um passo que suba o app.
+
+name: Veredito
+
+on:
+  # O PR deste proprio repositorio.
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # E qualquer PR, a mao -- e' o modo de demonstrar sem depender de abrir PR.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "URL do PR (vazio = o PR deste repositorio que disparou)"
+        required: false
+        type: string
+      top_n:
+        description: "Quantas acusacoes vao ao advogado (o passo caro)"
+        required: false
+        default: "2"
+        type: string
+      postar:
+        description: "Comentar no PR de verdade (desmarcado = so' imprime)"
+        required: false
+        default: true
+        type: boolean
+
+# Sem isto o comentario da 403. `contents: read` e' o checkout.
+permissions:
+  contents: read
+  pull-requests: write
+
+# Push novo cancela a rodada anterior do mesmo PR: cada rodada custa dinheiro, e
+# revisar um commit que ja foi substituido e' pagar para medir o passado.
+concurrency:
+  group: veredito-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+jobs:
+  revisar:
+    runs-on: ubuntu-latest
+    # 🚫 PR vindo de FORK nao recebe secrets, e o GITHUB_TOKEN dele e' somente
+    # leitura -- e' politica do GitHub, nao configuracao nossa. A rodada
+    # comecaria sem a chave da API e morreria no meio, gastando minuto de CI
+    # para nao dizer nada. Melhor nem comecar.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar
+        run: pip install -r requirements.txt
+
+      # 🚨 Antes de gastar: chave ausente falha AQUI, com a causa dita. Sem este
+      # passo o erro aparece no meio da rodada, depois dos promotores, e le como
+      # defeito do produto em vez de secret faltando.
+      - name: Conferir a chave
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY nao esta nos secrets deste repositorio."
+            echo "Settings -> Secrets and variables -> Actions -> New repository secret"
+            exit 1
+          fi
+
+      - name: Revisar o PR
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # O mesmo caminho de token do entrada.py. Serve para a API do GitHub
+          # resolver o merge-base e para clonar repositorio privado.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TOP_N: ${{ inputs.top_n || '2' }}
+        run: |
+          PR="${{ inputs.pr }}"
+          if [ -z "$PR" ]; then
+            PR="${{ github.event.pull_request.html_url }}"
+          fi
+          echo "revisando $PR"
+          python revisa_pr.py "$PR"
+
+      - name: Comentar no PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ inputs.pr }}"
+          if [ -z "$PR" ]; then
+            PR="${{ github.event.pull_request.html_url }}"
+          fi
+          # `workflow_dispatch` com a caixa desmarcada so' imprime. O evento de
+          # `pull_request` sempre posta: quem instalou o workflow no repositorio
+          # ja disse que quer o comentario.
+          if [ "${{ inputs.postar }}" = "false" ]; then
+            python posta_parecer.py "$PR"
+          else
+            python posta_parecer.py "$PR" --postar
+          fi
+
+      # 🚨 O rastro sobe SEMPRE, inclusive quando a rodada falha -- e' quando ele
+      # mais vale. `chamadas.json`, os artefatos de prova, o escopo gravado antes
+      # do laco caro: e' o que responde auditabilidade, custo e latencia de uma
+      # vez, e o que permite reajustar o parecer sem re-executar o advogado.
+      - name: Guardar o rastro da rodada
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: veredito-rodada
+          path: saidas/rodadas/
+          retention-days: 14
+          if-no-files-found: warn
