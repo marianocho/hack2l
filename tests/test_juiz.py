@@ -537,3 +537,58 @@ def test_sem_medicao_o_parecer_sai_igual(tmp_path, monkeypatch):
     """Rodada antiga, ou medicao que falhou, nao pode quebrar o parecer."""
     monkeypatch.setattr(cfg, "RODADA", tmp_path)
     assert juiz._secao_efeito_no_banco() == []
+
+
+# ------------------------------------------- 🚨 R0 e o artefato de RECUSA
+
+def _recusa():
+    """O artefato que a `prova_diferencial` grava quando o projeto nao a declara."""
+    return {"estado": "INCONCLUSIVO", "provado": False, "erro": None,
+            "indisponivel": "o projeto revisado nao declara o bloco `codigo` "
+                            "... Prove por leitura (read_file/grep)."}
+
+
+def test_R0_nao_derruba_PROVADO_com_artefato_de_recusa():
+    """🚨 O caso real do primeiro run da Action contra a bancada, 18/08.
+
+    O advogado achou o IDOR plantado, disse PROVADO nas TRES acusacoes, e o
+    parecer saiu "Nenhum achado sustentado por evidencia -- 3 inconclusivas".
+    Atestado de limpeza para uma vulnerabilidade real: o pior desfecho que este
+    produto pode produzir.
+
+    A recusa nao e' um exit code discordando, e' a ausencia de medicao. E o
+    texto dela manda provar por leitura -- o advogado obedeceu, e o juiz o
+    derrubou por ter obedecido.
+    """
+    v = juiz.aplica_regras(
+        {"veredito": "PROVADO", "severidade": "ALTA", "ferramentas_ok": 3},
+        {}, _recusa())
+    assert v["veredito"] == "PROVADO", (
+        "a R0 derrubou um PROVADO usando um artefato que nunca chegou a rodar")
+    # A R2 e' quem cuida da forca: sem prova ponta a ponta, no maximo MEDIA.
+    assert v["severidade"] == "MEDIA"
+
+
+def test_R0_continua_derrubando_quando_o_artefato_RODOU():
+    """🚫 O controle, e a metade que nao pode afrouxar.
+
+    Sem ele o teste acima passaria com a R0 desligada -- e a R0 e' o que impede
+    o LLM de sobrescrever o exit code, que a arquitetura inteira pressupoe.
+    """
+    rodou = {"estado": "REFUTADO", "provado": False, "erro": None,
+             "indisponivel": None, "motivo": "passou nos dois lados"}
+    v = juiz.aplica_regras(
+        {"veredito": "PROVADO", "severidade": "ALTA", "ferramentas_ok": 3},
+        {}, rodou)
+    assert v["veredito"] == "REFUTADO"
+    assert any("R0" in r for r in v["regras_aplicadas"])
+
+
+def test_R3_continua_convertendo_erro_de_verdade_mesmo_com_recusa_no_campo():
+    """Os dois campos coexistem: `erro` preenchido manda, venha o que vier."""
+    misto = {"estado": "INCONCLUSIVO", "erro": "docker: connection refused",
+             "indisponivel": "tambem nao declarado"}
+    v = juiz.aplica_regras(
+        {"veredito": "REFUTADO", "severidade": "BAIXA", "ferramentas_ok": 2},
+        {}, misto)
+    assert v["veredito"] == "INCONCLUSIVO"

@@ -57,7 +57,29 @@ def aplica_regras(
     # arquitetura inteira depende disto: se o advogado afirma PROVADO e o exit
     # code diz que nao, quem ganha e' o exit code. Sem esta regra, "o LLM nao
     # pode sobrescrever o veredito" e' so uma intencao.
-    if artefato is not None:
+    #
+    # 🚨 MAS ARTEFATO DE RECUSA NAO E' ARTEFATO -- 18/08, e e' a mesma distincao
+    # que a R3 aprendeu na vespera, uma regra acima.
+    #
+    # Quando `prova_diferencial` recusa por o projeto nao declarar o bloco
+    # `codigo`, ela grava um artefato com `estado: INCONCLUSIVO`. Isso nao e' um
+    # exit code discordando: e' a ausencia de qualquer medicao. A R0 lia so'
+    # `estado` e derrubava por igual.
+    #
+    # Medido no primeiro run da Action contra a bancada: o advogado achou o IDOR
+    # plantado, disse PROVADO nas TRES acusacoes, e o parecer saiu "Nenhum
+    # achado sustentado por evidencia -- 3 inconclusivas". Atestado de limpeza
+    # para uma vulnerabilidade real e explorada, que e' o pior desfecho que este
+    # produto pode produzir.
+    #
+    # E a incoerencia fechava o circulo: o texto da recusa diz "Prove por
+    # leitura (read_file/grep)". O advogado obedeceu, provou por leitura, e o
+    # juiz o derrubou POR TER OBEDECIDO.
+    #
+    # 🚫 O que NAO afrouxou: artefato que RODOU e discordou continua mandando --
+    # e' a regra inteira, e ela e' o que impede o LLM de sobrescrever o exit
+    # code. So' deixou de valer para o artefato que nunca chegou a existir.
+    if artefato is not None and not artefato.get("indisponivel"):
         if v.get("veredito") == "PROVADO" and artefato.get("estado") != "PROVADO":
             v["veredito"] = artefato.get("estado", "INCONCLUSIVO")
             v["motivo"] = artefato.get("motivo") or v.get("motivo")

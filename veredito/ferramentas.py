@@ -279,6 +279,35 @@ def commit_base() -> str:
     return r.stdout.strip()
 
 
+def monta_os_dois(base: str, head: str) -> None:
+    """Cria base e head ANTES de a rodada comecar. Chamado pelo `revisa_pr.py`.
+
+    🚨 POR QUE ISTO PRECISA SER EXPLICITO, e nao preguicoso como era.
+
+    Os worktrees nasciam sob demanda, na primeira ferramenta que precisasse
+    deles -- ou seja, ja dentro do laco do advogado. Mas desde 18/08 o
+    `veredito.yml` do projeto e' lido do WORKTREE DO BASE, e o `config` resolve
+    isso NA IMPORTACAO. Resultado no primeiro run da Action contra a bancada:
+
+        projeto: (sem veredito.yml -- usando os padroes)
+
+    A bancada TEM `veredito.yml`. O que faltava era ele existir em disco no
+    instante em que o config perguntou. O projeto foi revisado como se fosse
+    mudo -- sem app, sem prova diferencial, sem contas -- e o defeito plantado
+    escapou por falta de ferramenta, num repositorio que declara todas.
+
+    E' o cabecalho do `revisa_pr.py` ao pe da letra: AMBIENTE PRIMEIRO,
+    IMPORTACAO DEPOIS. Ele ja montava metade do ambiente.
+
+    ⚠️ Reusa `_garante_worktree` de proposito, em vez de um `git worktree add`
+    proprio: aquela funcao confere o que ficou no disco, e uma segunda
+    implementacao divergiria dela em silencio -- a licao que a chave da API
+    custou em 14/08.
+    """
+    _garante_worktree(base, "base")
+    _garante_worktree(head, "head")
+
+
 def _garante_worktree(commit: str, nome: str) -> Path:
     """Worktree idempotente, e CONFERIDO. O advogado chama isto em loop.
 

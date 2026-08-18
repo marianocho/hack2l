@@ -213,3 +213,66 @@ def test_o_compose_roda_na_raiz_do_APP_e_nao_no_clone():
     assert not sobraram, (
         "compose apontado para uma raiz que nao e' a do app sob revisao: "
         + ", ".join(sobraram))
+
+
+# ------------------------------------------- 🚨 e os worktrees existem A TEMPO
+
+def test_monta_os_dois_monta_OS_DOIS():
+    """Um lado so' nao serve: o descritor sai do base, o app sai do head."""
+    from veredito import ferramentas as f
+
+    pedidos = []
+    original = f._garante_worktree
+    try:
+        f._garante_worktree = lambda commit, nome: pedidos.append((commit, nome))
+        f.monta_os_dois("shabase", "shahead")
+    finally:
+        f._garante_worktree = original
+    assert pedidos == [("shabase", "base"), ("shahead", "head")], (
+        f"nem os dois lados foram montados: {pedidos}")
+
+
+def test_revisa_pr_monta_os_worktrees_ANTES_de_subir_o_orquestrador(monkeypatch):
+    """🚨 A trava do bug que custou o primeiro run da Action, 18/08.
+
+    Os worktrees nasciam sob demanda, ja dentro do laco do advogado. Mas o
+    `veredito.yml` e' lido do worktree do BASE e o `config` resolve isso NA
+    IMPORTACAO -- entao o subprocesso importava o config antes de qualquer
+    worktree existir, e a bancada foi revisada como se nao se descrevesse:
+
+        projeto: (sem veredito.yml -- usando os padroes)
+
+    Sem app, sem prova diferencial, sem contas. O defeito plantado escapou por
+    falta de ferramenta num repositorio que declara todas.
+
+    ⚠️ A asserção e' sobre a ORDEM, e nao sobre "monta_os_dois foi chamado":
+    chamar depois de subir o orquestrador nao consertaria nada, e um teste que
+    so' confere a chamada passaria igual.
+    """
+    import subprocess
+    import sys as _sys
+
+    _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+    import revisa_pr
+    from veredito import entrada
+    from veredito import ferramentas as f
+
+    ordem = []
+    monkeypatch.setattr(_sys, "argv", ["revisa_pr.py", "https://github.com/d/r/pull/1"])
+    monkeypatch.setattr(entrada, "resolve", lambda url: {
+        "repo": "d/r", "numero": 1, "titulo": "t", "adicoes": 1, "remocoes": 0,
+        "arquivos": 1, "merge_base": "b" * 40, "head": "h" * 40,
+        "base_do_ramo": "b" * 40, "base_deslocou": False,
+        "repo_local": pathlib.Path("."), "worktrees": pathlib.Path("."),
+    })
+    monkeypatch.setattr(entrada, "ambiente", lambda info: {})
+    monkeypatch.setattr(f, "monta_os_dois",
+                        lambda base, head: ordem.append("worktrees"))
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *a, **k: ordem.append("orquestrador") or
+        subprocess.CompletedProcess(args=[], returncode=0))
+
+    revisa_pr.main()
+    assert ordem == ["worktrees", "orquestrador"], (
+        f"o orquestrador subiu antes de os worktrees existirem: {ordem}")

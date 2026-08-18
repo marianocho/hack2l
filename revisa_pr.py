@@ -69,7 +69,31 @@ def main() -> int:
               f"({info['base_do_ramo'][:8]})")
     print(f"  clone: {info['repo_local']}")
 
-    # 🚨 No WORKTREE DO BASE, nunca no clone. O clone e' `git init` + `fetch`:
+    # 🚨 AMBIENTE PRIMEIRO, IMPORTACAO DEPOIS -- e "ambiente" inclui os
+    # WORKTREES, o que este arquivo nao fazia.
+    #
+    # Ate' 18/08 eles nasciam sob demanda, na primeira ferramenta que
+    # precisasse -- ja dentro do laco do advogado. Mas o `veredito.yml` do
+    # projeto e' lido do worktree do BASE, e o `config` resolve isso NA
+    # IMPORTACAO. No primeiro run da Action contra a bancada, o subprocesso
+    # importou o config antes de qualquer worktree existir e imprimiu
+    # "projeto: (sem veredito.yml -- usando os padroes)" num repositorio que
+    # declara tudo. A rodada revisou a bancada como se fosse muda, e o defeito
+    # plantado escapou por falta de ferramenta.
+    #
+    # ⚠️ O `os.environ` e' atualizado ANTES do import de `ferramentas`, que
+    # arrasta o `config`: e' a mesma razao pela qual o orquestrador roda em
+    # subprocesso, aplicada aqui dentro.
+    os.environ.update(entrada.ambiente(info))
+    from veredito import ferramentas  # noqa: E402  (depois do ambiente, sempre)
+    try:
+        ferramentas.monta_os_dois(info["merge_base"], info["head"])
+    except Exception as e:
+        print(f"[!] nao consegui montar os worktrees: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        return 2
+
+    # 🚫 No WORKTREE DO BASE, nunca no clone. O clone e' `git init` + `fetch`:
     # ele nao tem working tree, entao `<clone>/veredito.yml` e' uma condicao que
     # NAO PODE ser verdadeira -- em repositorio nenhum do mundo. Esta linha
     # imprimia "sem veredito.yml" para todo PR, inclusive para projeto que se
@@ -77,7 +101,7 @@ def main() -> int:
     # (pallets/flask) de fato nao tem um.
     #
     # 🚫 Do BASE e nao do head: `preparar` e' lista de argumentos que NOS
-    # executamos. Ver o comentario em `config.RAIZ_DO_PROJETO`.
+    # executamos. Ver o comentario em `config.RAIZ_DO_DESCRITOR`.
     tem_yml = (info["worktrees"] / "base" / "veredito.yml").is_file()
     if tem_yml:
         print("  [i] o projeto tem veredito.yml: ferramentas completas")
@@ -91,13 +115,14 @@ def main() -> int:
         print("\n--so-preparar: montado e nao rodado.")
         return 0
 
-    # 🚨 O ambiente ANTES do import. Ver o cabecalho.
-    env = dict(os.environ, **entrada.ambiente(info))
+    # O ambiente ja foi aplicado acima, antes dos worktrees. O subprocesso o
+    # herda inteiro -- e agora importa o config com os worktrees JA EM DISCO,
+    # que e' a diferenca entre achar o `veredito.yml` do projeto e nao achar.
     cmd = [sys.executable, "-m", "veredito.orquestrador"]
     if args.top_n is not None:
         cmd += ["--top-n", str(args.top_n)]
     print()
-    return subprocess.run(cmd, cwd=RAIZ, env=env).returncode
+    return subprocess.run(cmd, cwd=RAIZ).returncode
 
 
 if __name__ == "__main__":
