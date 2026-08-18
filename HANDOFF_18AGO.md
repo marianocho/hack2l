@@ -183,8 +183,12 @@ redações são: mesmo arquivo em linhas vizinhas, e mesma **procedência**.
 Mora **depois** do laço caro, de propósito: fundir antes do advogado
 economizaria dinheiro (3 vagas → 1), mas ali uma fusão errada custa uma
 *verificação*. Na apresentação, fundir errado não esconde prova nenhuma.
-⚠️ A chave de `promotores.deduplica` **continua rígida** e é um item em aberto —
-medí-la é o que economizaria API de verdade.
+⚠️ A chave de `promotores.deduplica` **continua rígida**, e é um item em aberto.
+🚨 **Corrigindo o que este handoff dizia antes:** afrouxá-la **não economiza
+API**. `TOP_N` é teto DURO (`promotores.py:536`) — a vaga que o dedup libera é
+preenchida pela próxima da fila, e a rodada custa o mesmo. O que ela compra é
+**cobertura**: o mesmo dinheiro verificando suspeitas mais distintas. Medido em
+18/08 sobre 606 acusações de 27 rodadas — ver `MEDICAO_CHAVE_PRE_ADVOGADO.md`.
 
 Reusa `_faixa` / `TOLERANCIA_LINHAS` / `LARGURA_MAX_PARA_CORROBORAR` de
 `fontes.py`, já calibrados contra este mesmo fenômeno.
