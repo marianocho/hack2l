@@ -69,7 +69,16 @@ def main() -> int:
               f"({info['base_do_ramo'][:8]})")
     print(f"  clone: {info['repo_local']}")
 
-    tem_yml = (info["repo_local"] / "veredito.yml").is_file()
+    # 🚨 No WORKTREE DO BASE, nunca no clone. O clone e' `git init` + `fetch`:
+    # ele nao tem working tree, entao `<clone>/veredito.yml` e' uma condicao que
+    # NAO PODE ser verdadeira -- em repositorio nenhum do mundo. Esta linha
+    # imprimia "sem veredito.yml" para todo PR, inclusive para projeto que se
+    # descreve inteiro, e a mensagem parecia certa porque o primeiro alvo real
+    # (pallets/flask) de fato nao tem um.
+    #
+    # 🚫 Do BASE e nao do head: `preparar` e' lista de argumentos que NOS
+    # executamos. Ver o comentario em `config.RAIZ_DO_PROJETO`.
+    tem_yml = (info["worktrees"] / "base" / "veredito.yml").is_file()
     if tem_yml:
         print("  [i] o projeto tem veredito.yml: ferramentas completas")
     else:

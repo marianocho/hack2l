@@ -86,18 +86,48 @@ BRANCH_BASE = _s("BASE_BRANCH", "main")
 # Precedencia: variavel de ambiente > veredito.yml > padrao daqui. Assim
 # `APP_API_URL=... py -3.12 ...` continua servindo para um teste pontual.
 #
+# Worktrees ficam FORA dos dois repos: dentro do nosso virariam commit, dentro
+# do deles sujariam a arvore que o app esta servindo.
+#
+# ⚠️ Subiu para ANTES do descritor em 18/08: e' de um worktree que ele passa a
+# ser lido. Ver `RAIZ_DO_PROJETO` logo abaixo.
+WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolve()
+
+# 🚨 DE ONDE O PROJETO SE DESCREVE -- e nao e' do clone. 18/08.
+#
+# `revisa_pr.py` monta o alvo com `git init` + `fetch` dos dois commits: o clone
+# NUNCA tem working tree, so' os worktrees `base/` e `head/` tem arquivos.
+# Entao `<clone>/veredito.yml` nao existe em repositorio nenhum do mundo, e
+# `revisa_pr.py` forcava TODO PR pela porta da frente para o caminho so'-leitura
+# -- inclusive um projeto que se descreve por inteiro. Metade do produto (a
+# prova ponta a ponta, que 14-15/08 construiram) ficava desligada, em silencio.
+#
+# E a checagem que deveria avisar era `(repo_local / "veredito.yml").is_file()`
+# no proprio `revisa_pr.py`: uma condicao que NAO PODE ser verdadeira. Guarda
+# condicionada ao sinal que ela deveria vigiar, mais uma vez.
+#
+# 🚫 DO BASE, NUNCA DO HEAD, e isso nao e' detalhe. O descritor e' configuracao
+# EXECUTAVEL: `preparar` e' lista de argumentos que nos rodamos, e `app.api`
+# diz para onde mandamos chamada autenticada. Le-lo do head deixaria qualquer
+# pessoa que abre um PR escolher o que a nossa CI executa. O base e' o codigo
+# ja revisado e mesclado -- e' o unico lado em que confiar e' defensavel.
+#
+# ⚠️ O preco, dito em voz alta: o PR que ADICIONA um veredito.yml so' vale
+# depois de mesclado. E' o lado seguro do erro.
+_wt_base = WORKTREES / "base"
+RAIZ_DO_PROJETO = _wt_base if (_wt_base / "veredito.yml").is_file() else DESAFIO
+
 # Carregado AQUI, logo depois de DESAFIO, porque quase tudo abaixo consome.
-PROJETO_YML = projeto.caminho(DESAFIO, _s("VEREDITO_YML", ""))
+PROJETO_YML = projeto.caminho(DESAFIO, _s("VEREDITO_YML", ""),
+                              no_worktree=RAIZ_DO_PROJETO)
 PROJETO = projeto.carrega(PROJETO_YML)
 
 _app = PROJETO.get("app") or {}
 _banco = PROJETO.get("banco") or {}
 
-COMPOSE = DESAFIO / (_app.get("compose") or "docker-compose.yml")
-
-# Worktrees ficam FORA dos dois repos: dentro do nosso virariam commit, dentro
-# do deles sujariam a arvore que o app esta servindo.
-WORKTREES = Path(_s("WORKTREES_DIR", str(DESAFIO.parent / ".worktrees"))).resolve()
+# O compose vem da mesma raiz do descritor: um aponta para o outro, e resolver
+# os dois em lugares diferentes e' como a chave da API acabou em dois lugares.
+COMPOSE = RAIZ_DO_PROJETO / (_app.get("compose") or "docker-compose.yml")
 
 # --- nossas saidas ----------------------------------------------------------
 #

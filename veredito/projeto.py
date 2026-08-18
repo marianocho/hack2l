@@ -34,20 +34,31 @@ class ProjetoInvalido(ValueError):
     """
 
 
-def caminho(raiz_do_projeto: Path, explicito: str = "") -> Path | None:
+def caminho(raiz_do_projeto: Path, explicito: str = "",
+            no_worktree: Path | None = None) -> Path | None:
     """Onde esta o `veredito.yml` deste projeto.
 
     Ordem: o que o operador mandou > o do proprio projeto > o nosso, em
     `projetos/`. A do meio e' a que vale para o produto -- o arquivo mora junto
     do codigo que descreve, e e' assim que a Action vai achar. `projetos/` so'
     existe porque o `desafio` e' de terceiro e nao da' para commitar dentro.
+
+    🚨 `no_worktree` entrou em 18/08 e e' o que faz "o arquivo mora junto do
+    codigo" virar verdade pela porta da frente. `revisa_pr.py` monta o alvo com
+    `git init` + `fetch`: o clone nao tem working tree, entao procurar em
+    `<clone>/veredito.yml` nunca acha nada -- em repositorio nenhum. Quem tem
+    os arquivos e' o worktree do BASE.
+
+    ⚠️ O `projetos/<nome>.yml` continua sendo procurado pelo nome do CLONE, e
+    nao pelo do worktree: o worktree se chama `base`, e `projetos/base.yml` nao
+    quer dizer nada.
     """
     if explicito:
         p = Path(explicito).expanduser()
         return p if p.is_file() else None
-    no_projeto = raiz_do_projeto / "veredito.yml"
-    if no_projeto.is_file():
-        return no_projeto
+    for raiz in (no_worktree, raiz_do_projeto):
+        if raiz is not None and (raiz / "veredito.yml").is_file():
+            return raiz / "veredito.yml"
     nosso = Path(__file__).resolve().parents[1] / "projetos" / f"{raiz_do_projeto.name}.yml"
     return nosso if nosso.is_file() else None
 
