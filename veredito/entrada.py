@@ -37,6 +37,7 @@ elas a possibilidade de CRITICA. `projeto.caminho()` ja procura la' primeiro.
 """
 from __future__ import annotations
 
+import base64
 import os
 import re
 import subprocess
@@ -137,12 +138,34 @@ def _garante_clone(dono: str, repo: str) -> Path:
     if r.returncode != 0:
         raise EntradaFalhou(f"git init falhou em {clone}: {r.stderr.strip()[:200]}")
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    # 🚫 O token vai na chamada, NUNCA no remote: `git remote -v` e o
-    # `.git/config` guardariam a credencial em texto no disco.
+    # 🚫 O token nao vai no REMOTE: `git remote -v` imprime a URL inteira, e ela
+    # vaza em qualquer log de rodada.
     _git(clone, "remote", "add", "origin",
          f"https://github.com/{dono}/{repo}.git")
     if token:
-        _git(clone, "config", "http.extraheader", f"Authorization: Bearer {token}")
+        # 🚨 `Basic`, NUNCA `Bearer` -- medido em 18/08, no primeiro repositorio
+        # PRIVADO que passou por aqui:
+        #
+        #   Bearer -> remote: invalid credentials
+        #   Basic  -> fetch exit 0, commit no clone
+        #
+        # `Bearer` funciona na `api.github.com` e NAO no transporte git sobre
+        # HTTPS, que quer `x-access-token:<token>` em base64. E como o git caiu
+        # de volta para pedir senha, o erro saiu `could not read Username for
+        # 'https://github.com'` -- que se le como "faltou configurar credencial",
+        # e nao como "o cabecalho que eu mesmo montei foi recusado".
+        #
+        # ⚠️ E o codigo nunca tinha tocado num repositorio privado: os alvos
+        # ate' aqui (pallets/flask, psf/requests) sao publicos e nem chegam a
+        # usar este ramo. Mais uma vez, o que so' existe num caso nao e' testado
+        # pelo caso que existe -- e desta vez o caso novo foi "o dono do repo
+        # e' voce mesmo".
+        #
+        # E' o que o `actions/checkout` faz, pelo mesmo motivo.
+        credencial = base64.b64encode(
+            f"x-access-token:{token}".encode()).decode()
+        _git(clone, "config", "http.extraheader",
+             f"Authorization: Basic {credencial}")
     return clone
 
 

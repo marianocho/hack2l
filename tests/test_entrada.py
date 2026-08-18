@@ -195,3 +195,74 @@ def test_404_explica_a_ambiguidade_de_repo_privado(monkeypatch):
         entrada._pega("https://api.github.com/x")
     msg = str(e.value).lower()
     assert "privado" in msg and "gh_token" in msg
+
+
+# ------------------------------------------- 🚨 o cabecalho de autenticacao
+
+def test_o_git_recebe_BASIC_e_nunca_BEARER(tmp_path, monkeypatch):
+    """🚨 Medido em 18/08, no primeiro repositorio PRIVADO que passou por aqui.
+
+    O primeiro run da Action contra a bancada morreu em 30 segundos com
+
+        fatal: could not read Username for 'https://github.com'
+
+    e a mensagem enganava: le como "faltou configurar credencial", quando o que
+    houve foi o cabecalho ser RECUSADO e o git cair de volta para pedir senha.
+
+        Bearer -> remote: invalid credentials
+        Basic  -> fetch exit 0, commit no clone
+
+    `Bearer` vale na `api.github.com` e NAO no transporte git sobre HTTPS, que
+    quer `x-access-token:<token>` em base64 -- e' o que o `actions/checkout`
+    monta. E o ramo nunca tinha rodado: os alvos ate' aqui (pallets/flask,
+    psf/requests) sao PUBLICOS e nem chegam a usar token.
+    """
+    import base64
+
+    chamadas = []
+    monkeypatch.setattr(entrada, "RAIZ", tmp_path)
+    monkeypatch.setenv("GH_TOKEN", "t0ken-de-teste")
+    monkeypatch.setattr(entrada, "_git",
+                        lambda clone, *a, **k: chamadas.append(a) or _ok())
+
+    entrada._garante_clone("dono", "repo")
+
+    cfgs = [a for a in chamadas if a and a[0] == "config"]
+    assert cfgs, "nenhum cabecalho de autenticacao foi configurado"
+    valor = cfgs[0][2]
+    assert valor.startswith("Authorization: Basic "), (
+        f"o git nao aceita este esquema para HTTPS: {valor.split()[1]}")
+    esperado = base64.b64encode(b"x-access-token:t0ken-de-teste").decode()
+    assert valor.endswith(esperado), "o par usuario:token nao e' o do GitHub"
+
+
+def test_sem_token_nao_configura_cabecalho_nenhum(tmp_path, monkeypatch):
+    """Repo publico nao precisa, e configurar a toa poe credencial vazia no
+    `.git/config` -- que e' pior que nao ter."""
+    chamadas = []
+    monkeypatch.setattr(entrada, "RAIZ", tmp_path)
+    monkeypatch.delenv("GH_TOKEN", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(entrada, "_git",
+                        lambda clone, *a, **k: chamadas.append(a) or _ok())
+
+    entrada._garante_clone("dono", "repo")
+    assert not [a for a in chamadas if a and a[0] == "config"]
+
+
+def test_o_token_nunca_vai_para_o_remote(tmp_path, monkeypatch):
+    """`git remote -v` imprime a URL inteira, e ela vaza em qualquer log."""
+    chamadas = []
+    monkeypatch.setattr(entrada, "RAIZ", tmp_path)
+    monkeypatch.setenv("GH_TOKEN", "t0ken-de-teste")
+    monkeypatch.setattr(entrada, "_git",
+                        lambda clone, *a, **k: chamadas.append(a) or _ok())
+
+    entrada._garante_clone("dono", "repo")
+    remotes = [a for a in chamadas if a and a[0] == "remote"]
+    assert remotes and "t0ken-de-teste" not in " ".join(remotes[0])
+
+
+def _ok():
+    import subprocess
+    return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
