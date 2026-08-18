@@ -101,3 +101,80 @@ gabarito.
   acusações são o mesmo defeito.
 - Ou tornar o teto do `TOP_N` **mole para duplicatas** — aí o dedup passaria a
   economizar de verdade, e a conta muda inteira.
+
+---
+
+# A prova empírica: medida em 18/08, e funciona
+
+> **"Mesmo defeito" não precisa ser inferido. Dá para provar por exit code.**
+> Custo: zero de API, três execuções de container de menos de um segundo.
+
+## A pergunta
+
+A fusão que subiu hoje decide por **endereço + procedência** — é inferência.
+O produto inteiro recusa esse tipo de argumento em todo lugar menos aqui.
+
+O teste empírico: duas acusações são o mesmo defeito se **a mesma mudança faz
+os dois testes pararem de falhar**. Os artefatos já guardam o que isso precisa —
+o arquivo de teste e os dois commits.
+
+## O caso: `luisfelp07/bancada#1`
+
+Diff de um trecho, com **uma** mudança de comportamento:
+
+```python
+-    if t is None or t.project_id not in _projetos_visiveis(db, user):
++    if t is None:
+```
+
+O resto é docstring. Três acusações (`correcao_01`, `padroes_01`,
+`performance_01`), três arquivos de teste diferentes.
+
+| versão | correcao | padroes | performance | |
+|---|---|---|---|---|
+| head (o PR) | falha | falha | falha | as três acusam |
+| head **− docstring** | falha | falha | falha | ⬅ **controle negativo** |
+| head **− a condição** | **passa** | **passa** | **passa** | ⬅ um trecho explica as três |
+
+`4 failed, 1 passed` → `5 passed`, revertendo uma linha.
+
+🚨 **O controle negativo é o que dá sentido ao resultado.** Sem ele, "reverter o
+diff conserta" seria trivialmente verdade e não diria nada sobre serem o mesmo
+defeito. Com ele, a falha fica atribuída **àquela linha**.
+
+**Veredito: as três acusações são um defeito, provado por exit code.** Sem
+modelo, sem limiar, sem os meus rótulos. A heurística que subiu hoje acertou
+este caso — mas agora isso é sabido, e não suposto.
+
+## 🚨 A correção que este experimento forçou
+
+Este documento dizia que a seleção "nunca vai poder provar, por necessidade".
+**Só vale para a primeira acusação.**
+
+`prova_diferencial` é uma FERRAMENTA (`ferramentas.py:1143`) e grava o artefato
+no instante da chamada (`:829`) — no meio do laço, não no fim. Então na acusação
+#3 já existem artefatos de #1 e #2.
+
+O que impede o uso disso não é a natureza do problema, é uma linha:
+
+```python
+acusacoes, escopo = promotores.seleciona_com_escopo(brutas, teto)  # :323, UMA vez
+for i, a in enumerate(acusacoes, 1):                               # :360, o laço caro
+```
+
+A fila é montada uma vez e congela. **Re-ranquear a cada artefato** faria a
+evidência voltar para a seleção — e encaixa no *teto MOLE* que o `CLAUDE.md` já
+descreve: "o excedente vai para o fim da fila, nunca para o lixo".
+
+| | evidência | como decidir |
+|---|---|---|
+| acusação #1 | nenhuma | heurística, inevitável |
+| acusações #2..#N | artefatos das anteriores | **provável — hoje desperdiçado** |
+| apresentação | tudo | **provável** |
+
+## Onde não alcança
+
+Precisa de artefato e de Docker: só onde a `prova_diferencial` funciona, isto é,
+projeto que declara `codigo` no `veredito.yml`. Em PR de terceiro com só
+`read_file` e `grep` não há teste para rodar, e a fusão cai na heurística — a
+mesma degradação honesta do resto do produto.
