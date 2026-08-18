@@ -337,9 +337,20 @@ def _garante_worktree(commit: str, nome: str) -> Path:
 
     conferido = _git("rev-parse", "HEAD", cwd=destino)
     if conferido.returncode != 0 or conferido.stdout.strip() != commit:
+        obtido = conferido.stdout.strip()
+        # 🚨 SEM truncar os dois lados em 7. A comparacao acima e' de string
+        # INTEIRA, entao pedir um sha curto e receber o completo e' divergencia
+        # legitima -- e truncando ambos ela se imprimia como "nao ficou em
+        # 61cc0a7 (esta em 61cc0a7)", uma mensagem que manda o leitor procurar
+        # onde nao ha nada. A guarda estava certa; o texto dela sabotava o
+        # proprio proposito.
+        dica = ""
+        if obtido.startswith(commit) or commit.startswith(obtido):
+            dica = (" -- um e' prefixo do outro: passe o sha COMPLETO, "
+                    "a conferencia compara a string inteira")
         raise RuntimeError(
-            f"worktree '{nome}' nao ficou em {commit[:7]} "
-            f"(esta em {conferido.stdout.strip()[:7] or 'nada'}). "
+            f"worktree '{nome}' nao ficou em {commit!r} "
+            f"(esta em {obtido or 'nada'!r}){dica}. "
             f"add: {r.stderr.strip()[:200]} | conferencia: {conferido.stderr.strip()[:200]}"
         )
     return destino
