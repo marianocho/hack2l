@@ -363,6 +363,9 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
                            entrada={"categoria": a.get("categoria"),
                                     "arbitro": a.get("arbitro"),
                                     "local": a.get("local")}) as et:
+                # O caminho normalizado e' fato DESTA rodada, gravado
+                # aqui e nunca re-derivado na hora de formatar.
+                ferramentas.carimba_local(a)
                 v = advogado.julga(a, diff, contexto_arquivos)
                 et.evento("veredito", veredito=v.get("veredito"), voltas=v.get("voltas"),
                           severidade=v.get("severidade"), cache_read=v.get("cache_read"))
@@ -410,6 +413,9 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
                                     "arbitro": a.get("arbitro"),
                                     "local": a.get("local"),
                                     "_expansao": True}) as et:
+                # O caminho normalizado e' fato DESTA rodada, gravado
+                # aqui e nunca re-derivado na hora de formatar.
+                ferramentas.carimba_local(a)
                 v = advogado.julga(a, diff, contexto_arquivos)
                 v["_por_expansao"] = True      # rastro: nao veio da cota
                 et.evento("veredito", veredito=v.get("veredito"),

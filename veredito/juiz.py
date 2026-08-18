@@ -299,12 +299,23 @@ def _local(acusacao: dict) -> str:
     pacote, que e' a propriedade que permite reajustar o parecer trinta vezes
     lendo so o disco.
     """
+    # 🚨 O carimbo da RODADA ganha, sempre. Normalizar na hora de formatar
+    # resolve o caminho contra a worktree que estiver montada AGORA -- e
+    # re-renderizar o parecer do `pallets/flask` com o desafio montado
+    # transformava `tests/conftest.py:9` em `app/api/tests/conftest.py:9`, um
+    # arquivo que nao existe no repo do autor. Em silencio, porque
+    # `normaliza_local` acha um sufixo plausivel em qualquer arvore.
+    #
+    # Passou a doer agora porque a saida virou COMENTARIO DE PR: o parecer e'
+    # formatado longe da rodada, e manda uma pessoa de verdade procurar o
+    # arquivo. Ver `ferramentas.carimba_local`.
+    carimbado = acusacao.get("local_normalizado")
+    if carimbado:
+        return carimbado
     bruto = acusacao.get("local") or "?"
-    try:
-        from .ferramentas import normaliza_local
-    except ImportError:
-        return bruto
-    return normaliza_local(bruto)
+    # 🚫 Sem carimbo (rodada gravada antes de 17/08) devolve o CRU. Normalizar
+    # aqui seria adivinhar contra outra arvore, que e' exatamente o defeito.
+    return bruto
 
 
 def _evidencia_http(art: dict | None) -> str | None:

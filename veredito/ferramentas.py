@@ -855,6 +855,26 @@ def _resolve_caminho(raiz: Path, caminho: str) -> Path | None:
 _CACHE_LOCAL: dict[str, str] = {}
 
 
+def carimba_local(acusacao: dict) -> dict:
+    """Grava o caminho normalizado NA ACUSACAO, no ambiente da rodada.
+
+    🚨 O caminho normalizado e' FATO DA RODADA, e re-deriva-lo depois reescreve
+    o achado contra o repositorio que estiver montado NAQUELE momento.
+
+    Descoberto em 17/08 montando a saida como comentario de PR: re-renderizando
+    o parecer do `pallets/flask` com a worktree do desafio montada,
+    `tests/conftest.py:9` virou `app/api/tests/conftest.py:9` -- um arquivo que
+    NAO EXISTE no repositorio do autor, e o comentario mandaria ele procurar la'.
+    Em silencio, porque `normaliza_local` acha um sufixo plausivel em qualquer
+    arvore.
+
+    Mesma doutrina de "prova ponta a ponta e' fato do artefato, nunca
+    autodeclaracao": o que foi observado grava-se quando e onde foi observado.
+    """
+    acusacao["local_normalizado"] = normaliza_local(acusacao.get("local") or "")
+    return acusacao
+
+
 def normaliza_local(local: str) -> str:
     """Reescreve `app/routers/shares.py:31` no caminho que existe de verdade.
 
