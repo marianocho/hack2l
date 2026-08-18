@@ -401,7 +401,7 @@ def _garante_banco_descartavel() -> None:
     try:
         subprocess.run(
             ["docker", "compose", "-f", str(cfg.COMPOSE),
-             "--project-directory", str(cfg.DESAFIO),
+             "--project-directory", str(cfg.RAIZ_DO_PROJETO),
              "exec", "-T", "db", "psql", "-U", "kb", "-d", "postgres",
              "-c", f'CREATE DATABASE "{cfg.BANCO_DESCARTAVEL}"'],
             capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
@@ -464,7 +464,7 @@ def _garante_rede_isolada() -> bool:
                        capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S)
         r = subprocess.run(
             ["docker", "compose", "-f", str(cfg.COMPOSE),
-             "--project-directory", str(cfg.DESAFIO), "ps", "-q", "db"],
+             "--project-directory", str(cfg.RAIZ_DO_PROJETO), "ps", "-q", "db"],
             capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
         )
         db = (r.stdout or "").strip().splitlines()
@@ -497,7 +497,7 @@ def _imagem_da_api() -> str | None:
     try:
         r = subprocess.run(
             ["docker", "compose", "-f", str(cfg.COMPOSE),
-             "--project-directory", str(cfg.DESAFIO), "images", "-q", "api"],
+             "--project-directory", str(cfg.RAIZ_DO_PROJETO), "images", "-q", "api"],
             capture_output=True, text=True, timeout=cfg.TIMEOUT_GIT_S,
         )
         return (r.stdout or "").strip().splitlines()[0] or None
@@ -562,7 +562,7 @@ def _roda_pytest(worktree: Path, alvo: str = "tests",
 
     cmd = [
         "docker", "compose", "-f", str(cfg.COMPOSE),
-        "--project-directory", str(cfg.DESAFIO),
+        "--project-directory", str(cfg.RAIZ_DO_PROJETO),
         "run", "--rm",
         # 🚨 O ALVO E' IMPOSTO DE FORA, e e' o conserto do incidente de 11/08.
         #
@@ -1331,7 +1331,7 @@ def _confere_imagem_do_head() -> dict:
 def _compose_exec(servico: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["docker", "compose", "-f", str(cfg.COMPOSE),
-         "--project-directory", str(cfg.DESAFIO), "exec", "-T", servico, *args],
+         "--project-directory", str(cfg.RAIZ_DO_PROJETO), "exec", "-T", servico, *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=cfg.TIMEOUT_GIT_S,
     )

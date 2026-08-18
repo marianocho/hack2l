@@ -47,7 +47,7 @@ def _compose(*args: str, timeout: int = 600) -> subprocess.CompletedProcess:
     # criaria dependencia onde nao ha relacao.
     return subprocess.run(
         ["docker", "compose", "-f", str(cfg.COMPOSE),
-         "--project-directory", str(cfg.DESAFIO), *args],
+         "--project-directory", str(cfg.RAIZ_DO_PROJETO), *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout,
     )

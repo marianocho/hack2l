@@ -138,3 +138,24 @@ def test_revisa_pr_confere_o_worktree_e_nao_o_clone():
     assert 'info["repo_local"] / "veredito.yml"' not in fonte, (
         "voltou a conferir o descritor no clone, que nunca tem working tree")
     assert 'info["worktrees"] / "base" / "veredito.yml"' in fonte
+
+
+def test_o_compose_roda_na_raiz_do_descritor_e_nao_no_clone():
+    """`--project-directory` resolve `build: .` e volume relativo do compose.
+
+    Apontado para o clone -- que nao tem working tree -- nao ha contexto de
+    build nem caminho relativo para resolver. Sao oito chamadas em tres modulos,
+    e uma sobrando ja quebraria a rodada num alvo montado por `revisa_pr.py`.
+    """
+    import re
+
+    raiz = pathlib.Path(__file__).resolve().parents[1] / "veredito"
+    sobraram = []
+    for arq in ("contencao_app.py", "ferramentas.py", "subida.py"):
+        fonte = (raiz / arq).read_text(encoding="utf-8")
+        for m in re.finditer(r'"--project-directory",\s*str\(cfg\.(\w+)\)', fonte):
+            if m.group(1) != "RAIZ_DO_PROJETO":
+                sobraram.append(f"{arq}: cfg.{m.group(1)}")
+    assert not sobraram, (
+        "compose apontado para uma raiz que pode nao ter arquivos: "
+        + ", ".join(sobraram))

@@ -56,7 +56,7 @@ class ContencaoFalhou(RuntimeError):
 def _compose(*args: str, timeout: int = 180) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["docker", "compose", "-f", str(cfg.COMPOSE),
-         "--project-directory", str(cfg.DESAFIO), *args],
+         "--project-directory", str(cfg.RAIZ_DO_PROJETO), *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout,
     )
@@ -66,7 +66,7 @@ def _compose_com_override(override: Path, *args: str,
                           timeout: int = 180) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["docker", "compose", "-f", str(cfg.COMPOSE), "-f", str(override),
-         "--project-directory", str(cfg.DESAFIO), *args],
+         "--project-directory", str(cfg.RAIZ_DO_PROJETO), *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout,
     )
