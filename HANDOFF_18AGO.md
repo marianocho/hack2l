@@ -237,13 +237,22 @@ derrubou as 5 — zero falso positivo.
 `http_request` não deixa teste para reexecutar, e o grupo sai INCONCLUSIVO com
 essa causa — dito em voz alta, não escondido.
 
-**3. Repo de demonstração público** *(1 dia)* ← **comece aqui** — a medição de 15/08 refeita
-pela porta da frente. **O PR limpo é o que mais importa:** se ele condenar
-alguma coisa, há falso positivo na Action, e isso é pior que tudo que foi
-consertado hoje.
+**→ PRÓXIMO: repo de demonstração público** *(1 dia)*. É o que converte, e o
+único jeito de mostrar isto sem dar acesso à bancada — que é privada, e cujo
+404 mente ("not found" se lê como "não existe").
 
-*(era o item 4; promovido acima.)* É o que converte, e o único
-jeito de mostrar isto sem dar acesso à bancada privada.
+🚨 **Precisa de um PR limpo, e é ele que mais importa.** A bancada acabou de
+mostrar por quê: `pr/contagem-de-tarefas` levantou 5 suspeitas e derrubou as 5.
+Falso positivo na Action é pior do que defeito não encontrado — o autor que
+recebe acusação falsa desinstala, e não volta.
+
+O **canário de egresso** vai junto: a contenção de rede é a única camada sem
+validação empírica em nenhuma direção, e o lugar de demonstrá-la é um repo
+nosso, público, com um endpoint que tenta sair para um coletor nosso. 🚫 Não um
+envio de e-mail de verdade, e 🚫 não detectando `smtplib` nem mantendo lista de
+API perigosa — isso é predição, e predição já perdeu duas vezes.
+
+*(era o item 4; promovido quando os quatro PRs da bancada fecharam.)*
 
 ## Mapa rápido do que é novo no código
 
