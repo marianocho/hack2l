@@ -25,6 +25,14 @@ hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 > alguns pontos.** Não saía por causa de uma coisa só, e o texto é anterior à
 > medição.
 
+> 🎯 **A sessão de 18–19/08 tem handoff próprio: `HANDOFF_18AGO.md`. Comece por
+> lá — é o mais recente.** O parecer virou comentário de PR e foi publicado de
+> verdade; a fusão de achados existe e é **provada por exit code**; os quatro
+> PRs da bancada foram refeitos pela porta da frente (4 de 4 com o gabarito).
+>
+> **Próximo passo:** repo de demonstração público — é o que converte, e o único
+> jeito de mostrar isto sem dar acesso à bancada privada.
+
 ## Onde o produto está
 
 **O motor está medido nos dois sentidos.** Ele condena com artefato quando há o
@@ -36,11 +44,55 @@ que condenar, e absolve com motivo quando não há:
 | PR sem defeito | 8 de 8 refutados | US$1,23 |
 | PRs de terceiro (10 reais) | 68% refutados | US$0,071/alegação |
 
+### 🆕 19/08 — os quatro PRs da bancada, pela porta da frente
+
+Refeito com a Action e o pipeline de hoje. **4 de 4 bateram com o gabarito:**
+
+| ramo | defeito | esperado | veio |
+|---|---|---|---|
+| `pr/tarefa-por-link` | CWE-639 | PROVADO | **PROVADO** (via Action, comentado no PR) |
+| `pr/filtro-de-projetos` | CWE-89 | PROVADO | **PROVADO:3** |
+| `pr/reconvite-de-membro` | CWE-367 | PROVADO | **PROVADO:4, REFUTADO:1** |
+| **`pr/contagem-de-tarefas`** | **nenhum** | REFUTADO | **REFUTADO:5** ← zero falso positivo |
+
+O PR limpo é o que mais importa: 5 suspeitas levantadas, 5 derrubadas. Falso
+positivo na Action seria pior que qualquer defeito não encontrado.
+
+⚠️ **Isto mede o INSTRUMENTO, não a capacidade de achar defeito.** Com n=4 o
+segundo não se conclui, e o `roda_bancada.py` imprime esse aviso sozinho.
+
 **O que impede uso real** — sobrou UM:
 
 1. ~~**Não tem onde entregar.**~~ ✅ **Saiu em 18/08, e foi verificado
    publicando de verdade.** Ver abaixo.
 2. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
+
+### 🆕 E o comentário parou de exagerar — 18–19/08
+
+Um defeito visto por três lentes saía como **"3 achados com evidência"**. Era o
+único lugar em que este produto inflava acusação, e justamente no texto que o
+cliente lê. Agora sai como **1**, com as três provas preservadas no bloco.
+
+| peça | o que faz |
+|---|---|
+| `veredito/fusao.py` | agrupa por endereço + procedência — **inferência** |
+| `veredito/prova_de_fusao.py` | **mede**: reverte um trecho do diff, vê quais testes param de falhar |
+| `fusao.json` | o orquestrador grava; o juiz e o comentário só **leem** (pureza intacta) |
+
+Sem Docker ou sem `codigo` declarado, o comentário diz *"indício e não prova"* —
+nunca cala a diferença.
+
+🚨 **A prova de fusão NUNCA tinha rodado até 19/08**, e só apareceu ao conferir
+os PRs restantes: um `NameError` de import e um `_por_id("prova_{}.json")` (que
+faz *glob* — `{}` é literal). O `try/except` degradava honestamente e **por isso
+mesmo** escondia que a peça não executava. Ver `HANDOFF_18AGO.md`.
+
+🚫 **Quatro ideias foram MEDIDAS e engavetadas** — não reconstruir sem ler
+`MEDICAO_CHAVE_PRE_ADVOGADO.md`: afrouxar a chave do pré-advogado (~metade das
+fusões erradas), portão de similaridade por Jaccard (caudas sobrepostas),
+re-ranquear a fila (0,12 vaga/rodada — a vaga da duplicata não é recuperável
+antes de ser gasta) e `MAX_POR_LOCAL` por proximidade (11 de 27 rodadas mudam,
+e a troca perde diversidade de lente).
 
 > ✅ **Saiu em 18/08: o parecer chega ao PR.** Duas rodadas da Action contra
 > `luisfelp07/bancada#1`, as duas com `postar=true`:

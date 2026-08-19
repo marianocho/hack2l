@@ -11,7 +11,7 @@
 
 ## Estado verificado
 
-**634 testes verdes** (`py -3.12 -m pytest -q`, ~100s, com Docker e o app do
+**635 testes verdes** (`py -3.12 -m pytest -q`, ~100s, com Docker e o app do
 desafio de pé). Sem Docker, use `-m "not lento"` — 6 testes são deselecionados.
 
 `main == origin/main` nos dois repos. ✅ O commit local da bancada (o bump dos
@@ -226,12 +226,23 @@ sintoma no cabeçalho (o grupo assume o rótulo da lente líder) mas não resolv
 suspeitas, trio condenado diferente. A fusão faz as duas rodadas convergirem no
 mesmo *achado*, mas as acusações que chegam ao advogado seguem variando.
 
-**3. Os outros três PRs da bancada** *(~US$1,20)* — a medição de 15/08 refeita
+~~**3. Os outros três PRs da bancada**~~ ✅ **FEITO em 19/08 — 4 de 4 com o
+gabarito**, e a rodada paga se pagou: foi ela que expôs que a prova de fusão
+nunca tinha executado (`NameError` de import + `_por_id` com `{}` em vez de `*`
+num **glob**). O PR limpo (`pr/contagem-de-tarefas`) levantou 5 suspeitas e
+derrubou as 5 — zero falso positivo.
+
+⚠️ Limite do método que só o dado real mostrou: a bissecção exige prova
+**diferencial** de todos os membros do grupo. Achado provado só por
+`http_request` não deixa teste para reexecutar, e o grupo sai INCONCLUSIVO com
+essa causa — dito em voz alta, não escondido.
+
+**3. Repo de demonstração público** *(1 dia)* ← **comece aqui** — a medição de 15/08 refeita
 pela porta da frente. **O PR limpo é o que mais importa:** se ele condenar
 alguma coisa, há falso positivo na Action, e isso é pior que tudo que foi
 consertado hoje.
 
-**4. Repo de demonstração público** *(1 dia)* — é o que converte, e o único
+*(era o item 4; promovido acima.)* É o que converte, e o único
 jeito de mostrar isto sem dar acesso à bancada privada.
 
 ## Mapa rápido do que é novo no código
