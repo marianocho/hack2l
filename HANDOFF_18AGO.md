@@ -11,7 +11,7 @@
 
 ## Estado verificado
 
-**600 testes verdes** (`py -3.12 -m pytest -q`, ~95s, com Docker e o app do
+**634 testes verdes** (`py -3.12 -m pytest -q`, ~100s, com Docker e o app do
 desafio de pé). Sem Docker, use `-m "not lento"` — 6 testes são deselecionados.
 
 `main == origin/main` nos dois repos. ✅ O commit local da bancada (o bump dos
@@ -85,7 +85,7 @@ errado.
 `status_leitura` e `status_escrita` são separados agora, e são três testes:
 recusa no LISTAR, no CRIAR e no ATUALIZAR.
 
-Suíte: **577 verdes** (eram 563) — e **600** depois da fusão, abaixo.
+Suíte: **577 verdes** (eram 563) — e **634** no fim do dia, com a fusão e a prova.
 
 ## Os doze bugs, e o que cada um ensinou
 
