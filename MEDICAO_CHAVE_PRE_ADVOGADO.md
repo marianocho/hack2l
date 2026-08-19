@@ -178,3 +178,76 @@ Precisa de artefato e de Docker: só onde a `prova_diferencial` funciona, isto �
 projeto que declara `codigo` no `veredito.yml`. Em PR de terceiro com só
 `read_file` e `grep` não há teste para rodar, e a fusão cai na heurística — a
 mesma degradação honesta do resto do produto.
+
+---
+
+# Re-ranquear a fila: medido, e NÃO construído
+
+> **18/08, fim do dia.** 27 rodadas no disco, custo zero. Duas ideias medidas,
+> as duas engavetadas — e o que sobra são dois resultados negativos que impedem
+> alguém de reconstruí-las por intuição.
+
+## Ideia 1 — devolver a vaga da duplicata para a fila
+
+A evidência chega no meio do laço (a `prova_diferencial` grava no instante da
+chamada), então em tese a fila poderia ser re-ranqueada a cada artefato.
+
+| conta | vagas recuperáveis em 17 rodadas |
+|---|---|
+| ingênua (toda duplicata é vaga perdida) | 8 |
+| **honesta** | **2** |
+
+🚨 **A conta ingênua superestima em 4×, e o motivo é estrutural: para saber que
+uma vaga foi gasta em duplicata, é preciso gastá-la.** A prova só existe depois
+do advogado. As duas primeiras acusações de um local são o *custo de descobrir*
+que são um defeito só; só da terceira em diante há o que recuperar — e em 17
+rodadas isso aconteceu duas vezes.
+
+**0,12 vaga por rodada, contra um dia de trabalho e uma mudança no laço caro.**
+
+## Ideia 2 — `MAX_POR_LOCAL` contando por proximidade
+
+Achado real de passagem: `_local_chave` é **casamento exato de string**
+(`promotores.py:394`). Então `app/main.py:103` e `:104` são baldes diferentes, e
+o teto de 2 nunca dispara entre eles — foi assim que a rodada da bancada levou
+**três** acusações do mesmo ponto ao advogado.
+
+É a mesma fragilidade da chave do dedup, num terceiro lugar. Mas aqui a
+consequência é outra: **o teto por local é MOLE** — o excedente vai para o fim
+da fila, nunca para o lixo — então errar não descarta nada.
+
+⚠️ **E medi errado na primeira tentativa.** Contei quantas acusações seriam
+*empurradas para o fim*: 27 de 27 rodadas, 5 a 20 por rodada. Parecia enorme.
+Mas o teto é mole: elas voltam a entrar se a fila for curta. O que importa é o
+`TOP_N` final:
+
+| | rodadas afetadas | trocas |
+|---|---|---|
+| empurradas para o fim (medida errada) | 27 de 27 | 5–20 por rodada |
+| **`TOP_N` de verdade** | **11 de 27** | **1 cada** |
+
+**E a troca não é claramente melhor:**
+
+```
+exato: [correcao_01, performance_01, prd_01]
+perto: [correcao_01, performance_01, correcao_02]
+```
+
+Perdeu a lente `prd` e ganhou uma `correcao` repetida. O sistema de cotas existe
+para proteger diversidade de lente; o teto por proximidade compra diversidade de
+**local** pagando com diversidade de **lente**. Sem gabarito, não dá para dizer
+qual das duas vale mais.
+
+## O que fica registrado
+
+1. `_local_chave` usa string exata, e isso **é conhecido, não é descuido**.
+   Trocar por proximidade muda 11 de 27 rodadas e o saldo é indeterminado.
+2. A vaga da duplicata **não é recuperável** antes de ser gasta. Quem propuser
+   re-ranqueamento de novo tem que responder isso primeiro.
+3. O que sobrou de valor real do dia foi a divulgação: a fundida agora aparece
+   **com hipótese**, então errar no dedup deixou de esconder a suspeita.
+
+> Três vezes hoje a medição impediu uma mudança plausível: a chave afrouxada
+> (~metade das fusões erradas), o portão de similaridade (caudas sobrepostas) e
+> estas duas. O padrão é o mesmo dos 45% de árbitro — **o número que anima é
+> quase sempre o número que mede outra coisa.**
