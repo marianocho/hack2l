@@ -141,6 +141,52 @@ e a troca perde diversidade de lente).
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
 | 🆕 **Detector de `veredito.yml`** | 1 dia | **medido em 19/08: 12 campos saem de compose+Dockerfile com 0 erro.** Encolhe o onboarding de 26 campos para 2 perguntas — mas os 2 que sobram são os que sustentam CRÍTICA. Ver abaixo |
 | ✅ **`senha_em`** *(19/08)* | | a senha sai do yml commitado e vira **nome de variável**. 🚨 Não era questão de UX: `read_file` não bloqueia nada, não há redação em lugar nenhum, e o parecer vai para o PR. Ver abaixo |
+| ✅ **Segredo: entrada e saída** *(19/08)* | | `veredito/segredo.py`. `read_file`/`grep` recusam convenção universal de arquivo de segredo — **recusando o conteúdo e confirmando a existência**, que é o que preserva a acusação legítima; e o corpo do comentário passa por redação. 50 travas, 5 mutações. Ver abaixo |
+
+#### ✅ Segredo: as duas frentes *(19/08)*
+
+O buraco estava aberto desde sempre: `read_file` e `grep` **sem restrição de
+caminho nenhuma**, **zero redação** no pipeline inteiro, e o parecer postado
+como comentário no PR. E a lente `padroes` procura *"credencial em código"* —
+ou seja, ela **leva** o advogado até o `.env` do cliente.
+
+| frente | onde | o que impede |
+|---|---|---|
+| `caminho_sensivel()` | `read_file` / `grep` | o conteúdo nunca chega à API |
+| `redige()` | `comentario.monta()` | o que entrou pelo **diff** não sai no comentário |
+
+**Nenhuma basta sozinha:** a da saída sozinha não resolve (o segredo já foi para
+a API); a da entrada sozinha também não (o diff do PR entra no prompt inteiro, e
+credencial commitada *nele* passa por fora do `read_file`).
+
+🚨 **Recusa o conteúdo, confirma a existência.** Para acusar "segredo
+commitado", o fato é o arquivo estar versionado — o valor lá dentro não
+acrescenta prova e é justamente o que não pode viajar. Sem essa divisão a guarda
+destruiria a acusação legítima.
+
+🚨 **E a recusa não é falha.** Não passa por `_marca_falha` nem
+`_marca_indisponivel`: nada quebrou e a ferramenta existe. Marcar falha faria a
+**R3 converter em INCONCLUSIVO** um veredicto que se sustenta.
+
+🚨 **Pulado não pode ser mudo.** O `grep` nomeia o que não varreu — sumir com o
+arquivo faria o advogado ler *"nenhum resultado"* como *"não há credencial neste
+repositório"*: absolvição falsa fabricada pela própria guarda de segurança.
+
+⚠️ **As duas são estreitas, e metade das travas é de silêncio** (lição 0):
+`.env.example` continua legível — é o arquivo que o revisor mais precisa — e o
+conserto sugerido (*"troque o literal por `${VAR}`"*) não pode ser mutilado.
+
+**Dois defeitos meus, os dois pegos no smoke test e não na leitura:**
+`lstrip("./")` removia *qualquer* um daqueles caracteres, então `.env` virava
+`env` e a guarda ficava muda no arquivo mais óbvio de todos; e `\b(password)`
+não casa em `DB_PASSWORD`, porque `_` é caractere de palavra. Duas das cinco
+mutações reintroduzem exatamente esses dois.
+
+⚠️ **O que NÃO foi feito:** a lista de padrões é *mantida*. O que a torna
+aceitável é serem **convenções universais de ecossistema** (`.env` é dotenv em
+qualquer lugar do mundo), nunca layout de um projeto. O projeto **acrescenta**
+por `sensiveis:` no yml e **nunca substitui** — deixar desligar seria dar a ele
+o direito de mandar o próprio `.env` para a API por engano de uma linha.
 
 #### ✅ `senha_em` — a senha sai do arquivo commitado *(19/08)*
 
@@ -858,6 +904,66 @@ conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
   injetando a violação de propósito
 - ✅ **A cópia do quadro que envelhecia em silêncio** *(19/08)* —
   `scripts/sync_vault.py` + `tests/test_sync_vault.py`. Ver abaixo
+- 🆕 **A corrida do bind-mount na prova diferencial** *(19/08)* — falha
+  **intermitente**, falha para o lado seguro, e o custo é inconclusivo espúrio.
+  Ver abaixo
+
+#### 🆕 A corrida do bind-mount — diagnosticada em 19/08, NÃO consertada
+
+**O sintoma, capturado:** `_prova_diferencial` volta com `exit_head = 4` e a
+saída do container diz
+
+```
+ERROR: file or directory not found: tests/test_selftest_nao.py
+```
+
+O arquivo de teste é gravado no worktree do host e o container **não o enxerga**
+pelo bind-mount. O lado `base` roda normal; o `head` erra.
+
+**É intermitente, e isso foi medido — não inferido.** Três execuções do
+`tests/test_ferramentas.py`, mesma ordem, **sem tocar em código**:
+
+| execução | falhas |
+|---|---|
+| dentro da suíte inteira | 1 (`ja_falha_no_base`) |
+| arquivo sozinho | 2 (`ja_falha_no_base` + `passa_dos_dois_lados`) |
+| arquivo sozinho, de novo | **0** |
+
+Conjuntos **diferentes** ⇒ não é ordem entre testes, é corrida. A hipótese de
+isolamento foi levantada e **descartada**: os testes que mexem em worktree
+rodaram junto com os `@lento` e passaram 6 de 6.
+
+⚠️ Só apareceu com o **app do desafio de pé**. Ontem os mesmos `@lento` passaram
+com o app parado. Mais containers disputando a camada de compartilhamento de
+arquivos do Docker Desktop no Windows torna a janela maior — o que é consistente
+com corrida entre a escrita no host e a visibilidade dentro do container, e não
+com defeito de lógica.
+
+✅ **Ela falha para o lado SEGURO, e isso é o que impede que seja urgente.**
+Exit 4 não produz linha de resumo do pytest ⇒ `rodou_head = False` ⇒ o contrato
+preenche `erro` ⇒ a R3 devolve **INCONCLUSIVO**. Nunca REFUTADO. A absolvição
+falsa continua barrada; o canário das montagens e a R3 fazem o trabalho.
+
+🚨 **O custo é o outro:** numa rodada paga, essa corrida converte uma prova
+legítima em INCONCLUSIVO **e o motivo aponta para o PR**, não para a
+infraestrutura do host. É a mesma família do `isolamento_bloqueou` de 14/08 —
+inconclusivo por causa NOSSA que se disfarça de limite do código revisado. Lá a
+solução foi rotular; aqui ainda não há rótulo.
+
+**Duas linhas de conserto, e nenhuma é óbvia:**
+
+1. **Conferir visibilidade antes de rodar** — depois de gravar o arquivo, um
+   `test -f` dentro do container antes de chamar o pytest, com uma reconferência
+   curta. É o canário das montagens aplicado ao ARQUIVO, não à montagem.
+   ⚠️ Vira espera embutida no caminho quente: +1 container por prova.
+2. **Rotular quando acontecer** — `ERROR: file or directory not found` na saída
+   com o arquivo presente no worktree é assinatura reconhecível. Vira
+   `corrida_do_mount: true` no artefato e o parecer diz que foi a bancada, não o
+   PR. Mais barato, e honesto — mas não evita o inconclusivo.
+
+🚫 **Não "resolver" com retry cego.** Repetir o pytest esconderia também o caso
+em que o arquivo realmente não foi gravado — que é defeito de verdade, e é
+justamente o que a recusa de 17/08 (`testes_no_repo` errado) existe para gritar.
 
 #### ✅ O sync do vault, e a trava — 19/08
 
