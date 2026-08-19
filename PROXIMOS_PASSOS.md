@@ -1,6 +1,6 @@
 <!-- tag: hack2l -->
 
-# Próximos passos — atualizado em 16/08/2026
+# Próximos passos — atualizado em 19/08/2026
 
 Quadro geral e fila completa. **Esta é a fila viva** — o `ESTADO.md` é do dia do
 hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
@@ -139,6 +139,132 @@ e a troca perde diversidade de lente).
 | 🎯 **Parecer como comentário de PR** | 1–2 dias | com a entrada pronta, é o que falta para a Action. Ver os cinco pontos em "A Action não é só seguir passo a passo" |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
+| 🆕 **Detector de `veredito.yml`** | 1 dia | **medido em 19/08: 12 campos saem de compose+Dockerfile com 0 erro.** Encolhe o onboarding de 26 campos para 2 perguntas — mas os 2 que sobram são os que sustentam CRÍTICA. Ver abaixo |
+
+#### 🆕 O detector de `veredito.yml` — medido em 19/08
+
+**A proposta veio de fora** (outra IA, na conversa do dia): em repositório
+corporativo a configuração de ambiente é caótica ou mal documentada, e exigir
+que o cliente escreva um `veredito.yml` à mão **antes de ver valor** derruba a
+conversão. Solução proposta: um gerador/auto-detector.
+
+**Medido antes de decidir, porque os dois `veredito.yml` escritos à mão são
+gabarito.** Detector mecânico mais óbvio possível — ~90 linhas, sem LLM, sem
+subir o app, custo zero de API, lê só `docker-compose.yml` + `Dockerfile` + a
+árvore — comparado campo a campo:
+
+| repo | acertou | **errou** | não detectou |
+|---|---|---|---|
+| `bancada` | 11 | **0** | 11 |
+| `desafio` | 12 | **0** | 12 |
+
+🚨 **Acertou `codigo.montagens` e `codigo.testes` nos dois**, inclusive o caso
+divergente do desafio (`app/api/tests` no disco → `tests` dentro do container).
+São exatamente os campos que causaram o falso negativo silencioso de 08/08 e
+regrediram **duas vezes** (15/08, 17/08). E saem por **derivação** —
+`build.context` + `COPY` + `WORKDIR` — que é a troca que o comentário do
+`config.py:517` já prescreve: *lista mantida → critério derivado*.
+
+##### A distribuição dos ~26 campos não é uniforme
+
+| classe | nº | como se obtém |
+|---|---|---|
+| lidos de compose+Dockerfile | 12 | medido, 0 erro |
+| nossos, inventados | 5 | `subir`, `espera_s`, `descartavel_*`, `rede_isolada` — não há o que detectar |
+| sondagem com o app no ar | 5 | `saude` + os 4 de `auth`, via `/openapi.json`. **Verificável**: o login devolve token ou não |
+| rodar a suíte duas vezes | 1 | `banco_de_teste_semeado` |
+| **autorais — não detectáveis** | **2** | `contas`, `contexto` |
+
+##### 🚨 Os 2 que sobram são os que fecham as DUAS vias da R1
+
+Conferido no código, não deduzido:
+
+- `juiz.py:109` — `prova_ponta_a_ponta` é um **AND** com
+  `artefato_http.alcancou_a_api`. **Prova diferencial não conta como ponta a
+  ponta.**
+- `juiz.py:265` — a R1 aceita árbitro com procedência (⟵ `contexto`) **ou**
+  prova ponta a ponta (⟵ `contas`, porque `http_request` autenticado precisa de
+  token).
+- `juiz.py:278` — a R2 rebaixa todo o resto para MEDIA.
+
+**Um gerador perfeito nos 24 campos entrega uma rodada onde nada passa de
+MEDIA.** O que os 12 campos de `codigo.*` compram é real — escapar do
+INCONCLUSIVO da R3/R3b, artefato reproduzível, refutação com motivo — mas não é
+a demo que converte.
+
+##### 🚨 A armadilha: auto-registrar contas passa por TODAS as guardas
+
+O atalho óbvio para `contas` é registrar contas pela API. Mas `possui` é lido em
+**um único lugar** — `projeto.py:117`, `if c.get("possui") == 0` — e **nada em
+`avisos()` confere que alguma conta possui alguma coisa**.
+
+Três contas recém-registradas, todas vazias:
+
+- passam `len(contas) >= 3` ✅
+- passam `controle_negativo is not None` ✅
+- e produzem uma rodada onde **vazamento não pode ser demonstrado, porque não há
+  o que vazar**
+
+É o padrão de bug do projeto **dentro da ferramenta de onboarding**: a guarda
+está condicionada ao mesmo sinal que o gerador fabrica, e fica muda exatamente
+onde ele introduz o risco.
+
+⚠️ E o atalho nem é geral: o `desafio` tem `POST /auth/register`; a `bancada`
+**não tem**. 1 de 2.
+
+##### ⚠️ A premissa do "caos corporativo" corta ao contrário
+
+O detector funciona porque compose e Dockerfile são **contratos legíveis por
+máquina**. Repositório sem compose funcional não dá nada a ele — e é o mesmo
+repositório onde um humano também não escreveria o yml. **Acelera o caso fácil;
+não converte o difícil.** Isso é diferente de "aumenta conversão de SaaS".
+
+##### ⚠️ E o zero-erro não exercitou os ramos onde o protótipo JÁ está errado
+
+`n=2`, os dois Python/FastAPI/compose, e **os dois são single-stage com um único
+diretório de teste**. Os dois bugs latentes do protótipo — WORKDIR do estágio
+`builder` vazando num multi-stage, e `sorted(candidatos)[0]` quando há mais de um
+diretório de teste — **nunca dispararam**. É a lição 5 do *"como procurar"*
+valendo contra a nossa própria medição: o que só existe num caso não é testado
+pelo caso que existe.
+
+##### O plano — quatro fases, e a ordem É a defesa
+
+| fase | o que | tamanho |
+|---|---|---|
+| **0** | **O contrato: só escreve o que derivou.** Campo não derivado fica AUSENTE, nunca chutado. Cada campo emitido carrega a procedência em comentário (`# de docker-compose.yml:12`) | 2h |
+| **1** | Detector estático (compose + Dockerfile + árvore) → os 12 campos | 3h |
+| **2** | Os 5 nossos, derivados de nome (`<banco.nome>_veredito`, `_veredito_app`, `veredito_isolada`) | 30min |
+| **3** | Sondagem com o app no ar: `saude` por lista de candidatos, `auth` por `/openapi.json` — emitidos como **proposta não verificada**, confirmados no pré-voo pelo login de verdade | 2h |
+| **4** | O pedido humano **reduzido**: *"três logins, e um deles não pode ser dono de nada"* + o caminho do `contexto`. Não é mais um arquivo de 26 campos; são 2 perguntas | 1h |
+
+🚨 **A fase 0 não é preâmbulo, é a fase que impede a regressão.** O `projeto.py`
+trata **ausente** como limite honesto (o pré-voo diz o que perdeu) e **torto**
+como `raise`. Um campo chutado não levanta — ele *parece* declarado. Um gerador
+que chuta converte a categoria honesta na categoria perigosa, e o produto inteiro
+existe para impedir exatamente isso.
+
+##### 🚨 O mapa de bugs — o que este detector pode gerar
+
+| # | bug | por que fica mudo | trava |
+|---|---|---|---|
+| 1 | **Chuta em vez de deixar ausente** | campo chutado não levanta, *parece* declarado | `test_detector_nu`: repo vazio → yml vazio. Irmão do `test_projeto_nu` |
+| 2 | **O `or <valor do vizinho>` volta pela porta do detector** | os 14 fallbacks que 17/08 removeu voltariam **gerados** em vez de chumbados — e o `test_projeto_nu` testa o *config*, não o detector | fixture sintético em `tmp_path`, que não é nem o desafio nem a bancada |
+| 3 | 🚨 **`preparar` auto-emitido** | é **execução de comando arbitrário do repo do cliente**, e `preparar` roda sempre que nós subimos. Serviço chamado `seed` não é promessa de que ele semeia | **nunca auto-emitir.** Fica ausente com aviso: *"achei o serviço `seed`, confirme"* |
+| 4 | **`montagens` errado → falso negativo silencioso** | pytest roda o código **assado na imagem**, os dois lados dão igual, e a prova diferencial absolve. É o canário de 08/08 | 🎯 **canário mecânico**: gravar sentinela no worktree e conferir que aparece dentro do container. Vale sozinho, mesmo sem detector |
+| 5 | **Heurística de nome de serviço** (`api`/`backend`/`server`/`app`) | é lista mantida — o mecanismo do bug. `core`, `gateway`, `rest` não casam; e com dois serviços expondo porta, escolhe o errado | derivar do **diff**: a API é o serviço cujo `build.context` contém o código que o PR toca. Ambiguidade → ausente + pergunta |
+| 6 | **Multi-stage: WORKDIR do `builder` vaza** | nenhum dos dois repos é multi-stage — o teste que temos não alcança | só considerar do **último `FROM`** em diante |
+| 7 | **`${API_PORT}` sem default** | vira literal na URL, e a URL malformada só falha na sondagem | sem default e sem `.env` → ausente |
+| 8 | **Mais de um diretório de teste** | `sorted()[0]` escolhe em ordem alfabética e ninguém confere | >1 candidato → ausente + lista para o humano |
+| 9 | **Sobrescrever um `veredito.yml` ajustado à mão** | o ajuste some sem sinal | escrever em `veredito.yml.detectado` + imprimir o diff. **Nunca sobrescrever** |
+| 10 | **`app.api` errado + `.env` persistente** | 15/08 de novo, agora com **três** fontes (env, yml gerado, yml humano) | `ensombrado_pelo_env` já cobre duas; falta o caso *gerado ≠ humano* |
+| 11 | **`contexto` apontando para o arquivo errado** | `avisos()` só confere que o arquivo **existe**. README no lugar do CONTRIBUTING dá procedência a texto não-normativo | **nunca auto-detectar `contexto`.** Fica humano |
+
+**Onde o código vai:** `veredito/detector.py` + CLI `detecta.py` na raiz (irmão do
+`revisa_pr.py`); travas em `tests/test_detector.py` e `tests/test_detector_nu.py`.
+
+⚠️ E cada trava precisa ser **vista falhando** com a violação injetada — a do
+`ERRO`, em 13/08, passou com o defeito presente.
 
 #### 🚨 A contenção do `http_request` — medido em 14/08
 
