@@ -27,6 +27,7 @@ from anthropic import beta_tool
 
 from . import config as cfg
 from . import llm_alvo
+from . import segredo
 
 # O orquestrador carimba isto antes de soltar o advogado em cada acusacao, para
 # que o nome do artefato case com a acusacao sem mudar a assinatura da tool --
@@ -1295,6 +1296,22 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
             f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho).")
     if raiz.resolve() not in alvo.parents:
         return _marca_falha(f"ERRO: {caminho} sai da raiz do repo.")
+
+    # 🚨 Recusa o CONTEUDO, confirma a EXISTENCIA. Ver `segredo.recusa_de_leitura`:
+    # para acusar "segredo commitado" o fato e' o arquivo estar versionado, e o
+    # valor la' dentro nao acrescenta prova -- e' so' o que nao pode viajar para
+    # a API e para o comentario do PR.
+    #
+    # ⚠️ NAO passa por `_marca_falha`: a chamada nao falhou e a ferramenta
+    # existe. Marcar falha faria a R3 converter em INCONCLUSIVO um veredicto que
+    # se sustenta.
+    rel = alvo.relative_to(raiz.resolve()).as_posix()
+    motivo = segredo.caminho_sensivel(rel, cfg.CAMINHOS_SENSIVEIS)
+    if motivo:
+        bruto = alvo.read_bytes()
+        return segredo.recusa_de_leitura(
+            rel, motivo, len(bruto), bruto.count(b"\n") + 1)
+
     texto = alvo.read_text(encoding="utf-8", errors="replace")
     # numerado, porque a acusacao pede 'arquivo:linha' e chute de linha nao cola
     numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(texto.splitlines(), 1))
@@ -1304,6 +1321,23 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
 _IGNORA = {".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build"}
 
 
+def _com_pulados(corpo: str, pulados: list[str]) -> str:
+    """O grep diz o que NAO varreu.
+
+    🚨 Omissao muda vira absolvicao falsa fabricada pela propria guarda de
+    seguranca: o advogado leria "nenhum resultado" como "nao ha credencial neste
+    repositorio", e essa e' justamente a conclusao que o arquivo pulado poderia
+    contradizer. Nada e' descartado em silencio -- vale para a acusacao e vale
+    para o byte.
+    """
+    if not pulados:
+        return corpo
+    nomes = ", ".join(sorted(set(pulados))[:10])
+    return (f"{corpo}\n\n[NAO VARRIDO -- convencao de arquivo de segredo: "
+            f"{nomes}. O conteudo nao entra no contexto do modelo; a presenca "
+            f"do arquivo no repositorio e' o fato que voce pode citar.]")
+
+
 def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> str:
     raiz = _worktree_de(lado)
     try:
@@ -1311,8 +1345,22 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
     except re.error as e:
         return _marca_falha(f"ERRO: regex invalida: {e}")
     achados: list[str] = []
+    pulados: list[str] = []
     for p in raiz.rglob(glob or "*"):
         if not p.is_file() or _IGNORA & set(p.relative_to(raiz).parts):
+            continue
+        # O grep devolve A LINHA INTEIRA. Num `.env` isso e' o valor da
+        # credencial, entao a mesma regra do `read_file` vale aqui -- e vale com
+        # mais forca: um `grep` por `KEY` varre o repo todo sem que ninguem
+        # tenha pedido aquele arquivo.
+        #
+        # 🚨 PULADO NAO PODE SER MUDO. Sumir com o arquivo faria o advogado ler
+        # "nenhum resultado" como "nao ha credencial no repo" -- absolvicao
+        # falsa fabricada pela propria guarda de seguranca. Os pulados vao no
+        # rodape, nomeados.
+        rel_p = p.relative_to(raiz).as_posix()
+        if segredo.caminho_sensivel(rel_p, cfg.CAMINHOS_SENSIVEIS):
+            pulados.append(rel_p)
             continue
         try:
             texto = p.read_text(encoding="utf-8", errors="replace")
@@ -1323,8 +1371,10 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
                 achados.append(f"{p.relative_to(raiz).as_posix()}:{i}: {linha.strip()[:200]}")
                 if len(achados) >= teto:
                     achados.append(f"[... cortado no teto de {teto} ...]")
-                    return "\n".join(achados)
-    return "\n".join(achados) if achados else f"nenhum resultado para /{padrao}/ em {lado}."
+                    return _com_pulados("\n".join(achados), pulados)
+    corpo = ("\n".join(achados) if achados
+             else f"nenhum resultado para /{padrao}/ em {lado}.")
+    return _com_pulados(corpo, pulados)
 
 
 # ---------------------------------------------------------------------- http

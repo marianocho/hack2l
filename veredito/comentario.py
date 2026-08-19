@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from . import fusao
 from . import prova_de_fusao as pfus
+from . import segredo
 from . import juiz
 
 # Achada pela rodada seguinte para atualizar este mesmo comentario. Invisivel no
@@ -205,7 +206,28 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
                        [l for l in banco if l.strip() and not l.startswith("## ")])
 
     corpo, _ = corta("\n".join(p), TETO - FOLGA_RODAPE)
-    return corpo + "\n".join(_rodape(meta)) + "\n"
+    corpo = corpo + "\n".join(_rodape(meta)) + "\n"
+
+    # 🚨 A ULTIMA PORTA ANTES DO PUBLICO -- 19/08.
+    #
+    # A frente da ENTRADA (`segredo.caminho_sensivel` no `read_file`/`grep`)
+    # impede o advogado de ABRIR um `.env`. Ela nao alcanca o que chegou por
+    # outro caminho: o diff do PR entra no prompt inteiro, e credencial
+    # commitada NAQUELE diff passa por fora da leitura de arquivo. Se o parecer
+    # citar o trecho, ele vira comentario publico.
+    #
+    # Por isso a redacao mora AQUI, no que vira `body` do comentario, e nao em
+    # `posta()`: tudo que renderiza o comentario passa por este ponto, inclusive
+    # o `do_disco` usado para reajustar formato sem gastar API.
+    #
+    # ⚠️ A contagem e' DITA, nunca silenciosa: "0 redacoes" e' informacao tanto
+    # quanto "3", e redacao muda nao da' para auditar.
+    corpo, n = segredo.redige(corpo)
+    if n:
+        corpo += (f"\n<sub>🔒 {n} trecho(s) com forma de credencial foram "
+                  "mascarados neste comentario. O artefato local guarda o "
+                  "original.</sub>\n")
+    return corpo
 
 
 def do_disco(meta: dict | None = None) -> str:
