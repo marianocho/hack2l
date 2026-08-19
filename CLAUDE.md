@@ -441,6 +441,7 @@ justamente o caso perigoso.
 | **a recusa na aritmética** | `indisponivel` fora da conta de erro | 🆕 e quase mudo: `_consolida_ferramentas` deduz "bloco sem registro" de `blocos - (ok + erro)`. Sem somar os indisponíveis ali, cada recusa voltaria para a conta de erro **pela porta dos blocos**, e o conserto seria no-op. O padrão de bug mora na aritmética também. |
 | **o alarme do banco** | `NAO MEDIDO` contra efeito colateral | 🆕 **a guarda morrendo de EXCESSO, e é a variação nova.** Sem banco declarado o retrato falhava, e todo PR de terceiro fechava com *"a rodada pode ter criado ou removido linhas"* — falso: nenhuma ferramenta ali alcança banco. Alarme que dispara sempre ensina a pular a linha que existe para o caso de 14/08. ✅ 17/08: `ALCANCA_BANCO`, e `NAO SE APLICA` ≠ `NAO MEDIDO`. |
 | **a chave em dois lugares** | — | `load_dotenv` não sobrescreve o ambiente: a do Windows vencia o `.env` **em silêncio**, e trocar o arquivo não mudava nada. Custou 4 tentativas. |
+| **a guarda lendo variável sombreada** | 🆕 `if prova is not None` decidia se o bloco dizia "provado" | o parâmetro novo se chamava `prova`, e o corpo da função **já tinha uma local `prova`** (a evidência de cada membro do laço). A local sobrescrevia o parâmetro antes da guarda rodar, então ela lia a string do último membro e `frase(prova[0], prova[1])` recebia dois **caracteres soltos** — o bloco sairia com uma frase de fusão fabricada de lixo, rumo ao comentário de PR de alguém. A guarda existia, estava certa, e olhava para um valor que outro código tinha trocado. ✅ 18/08, renomeada para `evidencia`; só os testes de render pegaram. |
 
 **Um primo, na mesma família:** métrica que mede a coisa errada. O diagnóstico
 contava *"árbitro preenchido"*, e 94 de 94 estavam preenchidos **com lixo
@@ -470,7 +471,17 @@ reciclado**. Preenchido não é válido.
    rodar sem `veredito.yml` nenhum — acha por ser a *ausência* de exemplo, em
    milissegundos, sem repo nem container. `tests/test_projeto_nu.py`.
 
-7. 🆕 **Toda chave: ela é feita de FATO ou de PARÁFRASE?** Campo que o modelo
+7. 🆕 **Dá para PROVAR em vez de inferir?** A dedup e a fusão decidiam "é o
+   mesmo defeito?" por semelhança de texto — o único lugar do pipeline que
+   argumentava em vez de testar, num produto cuja tese é o contrário. Depois do
+   advogado existe artefato executável, e a pergunta vira medição: *reverte um
+   trecho do diff, quais testes param de falhar?* Medido em 18/08 no PR da
+   bancada — 21s, zero de API, `veredito/prova_de_fusao.py`.
+   ⚠️ **A granularidade é TRECHO, nunca hunk.** Aquele PR é um hunk só com duas
+   mudanças dentro; revertê-lo inteiro é reverter o PR, tudo passa, e isso é
+   trivialmente verdade. Diff de um trecho só ⇒ INCONCLUSIVO, nunca "provado".
+
+8. 🆕 **Toda chave: ela é feita de FATO ou de PARÁFRASE?** Campo que o modelo
    redige em prosa — a regra, o conserto, a hipótese — muda de redação a cada
    rodada, e chave feita dele não casa duas vezes. `local` e `arbitro.onde` são
    fatos do repositório; `arbitro.regra` e `conserto` são opinião do modelo
