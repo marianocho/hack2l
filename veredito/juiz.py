@@ -580,6 +580,27 @@ def _secao_nao_testadas(escopo: dict | None) -> list[str]:
     if fundidas:
         p.append(f"(Outras {fundidas} eram duplicatas e foram fundidas na "
                  "acusacao equivalente, antes da fila.)")
+    # 🚨 Com HIPOTESE, e nao so' a contagem acima. A fundida por engano some da
+    # verificacao; se ela sumir tambem do texto, o autor do PR nunca fica
+    # sabendo que aquela suspeita existiu. A cortada por orcamento sempre teve
+    # esse tratamento -- dar menos a esta invertia a gravidade das duas.
+    detalhe_fundidas = escopo.get("fundidas") or []
+    if fundidas and not detalhe_fundidas:
+        # Rodada anterior a 18/08: o escopo gravou a contagem e nao a lista.
+        # Dizer que nao se sabe e' o unico desfecho honesto -- e' o mesmo
+        # tratamento que `fora_do_orcamento` ja da' ao caso equivalente.
+        p.append("_o detalhamento das fundidas nao foi gravado nesta rodada._")
+    if detalhe_fundidas:
+        p.append("")
+        p.append("_Fundidas como duplicata (mesmo local e mesma regra citada). "
+                 "Nao foram verificadas em separado:_")
+        for f in detalhe_fundidas:
+            rotulo = _CATEGORIA_DO_DESAFIO.get(f.get("categoria"), f.get("categoria", "?"))
+            hip = str(f.get("hipotese") or "-")
+            if len(hip) > 140:
+                hip = hip[:137] + "..."
+            p.append(f"- {rotulo} em {f.get('local', '?')}: {hip} "
+                     f"_(fundida em `{f.get('fundida_em')}`)_")
     p.append("")
     if not fora:
         # Rodada anterior ao registro do escopo. A contagem se reconstroi do

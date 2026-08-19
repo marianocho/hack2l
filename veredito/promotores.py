@@ -658,6 +658,27 @@ def escopo(brutas: list[dict], fila: list[dict], teto: int,
     return {
         "levantadas": len(brutas),
         "fundidas_por_duplicata": len(brutas) - len(fila),
+        # 🚨 A lista, e nao so' a contagem. Ate' 18/08 a fundida virava
+        # "(Outras N eram duplicatas)" -- um numero -- enquanto a que ficou de
+        # fora por ORCAMENTO saia com hipotese, local e motivo. Ou seja: a
+        # acusacao que o dedup engoliu por engano ficava MENOS visivel que a que
+        # simplesmente nao coube, e "nada e' descartado em silencio" nao vale
+        # com meia divulgacao. Aqui as duas listas passam a ter o mesmo peso.
+        #
+        # ⚠️ O `local` vem da sobrevivente de proposito: a chave do dedup exige
+        # local IDENTICO, entao e' o mesmo endereco -- e ler do proprio
+        # `_duplicatas`, que nao guarda local, daria None.
+        "fundidas": [
+            {
+                "id": d.get("id"),
+                "categoria": d.get("categoria"),
+                "hipotese": d.get("hipotese"),
+                "confianca": d.get("confianca"),
+                "local": a.get("local"),
+                "fundida_em": a.get("id"),
+            }
+            for a in fila for d in (a.get("_duplicatas") or [])
+        ],
         "testadas": len(testadas),
         "nao_testadas": len(de_fora),
         "teto": teto,
