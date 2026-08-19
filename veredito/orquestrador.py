@@ -117,6 +117,46 @@ def _carrega_acusacoes(manual: bool, reusar: bool, diff: str,
     return brutas
 
 
+def _prova_as_fusoes(veredictos: list[dict], acusacoes_por_id: dict) -> None:
+    """Mede, por exit code, quais achados agrupados sao mesmo UM defeito.
+
+    Roda DEPOIS do laco caro e grava `fusao.json`. O juiz e o comentario apenas
+    LEEM esse arquivo -- e' a disciplina no 2 do CLAUDE.md: sem isso, reajustar
+    o parecer passaria a subir container, e a propriedade de o juiz rodar em
+    milissegundos sem rede morreria em troca de nada.
+
+    🚨 NUNCA derruba a rodada. Um tropeco aqui vira ausencia do arquivo, e
+    ausencia do arquivo vira "agrupado por heuristica" dito em voz alta no
+    parecer -- nunca um agrupamento que se apresenta como provado sem ser.
+    """
+    if not cfg.TEM_PROVA_DIFERENCIAL:
+        print("  [prova de fusao] o projeto nao declara `codigo`: "
+              "o agrupamento fica por heuristica, e o parecer diz isso")
+        return
+    try:
+        organizado = juiz.organiza(
+            veredictos, acusacoes_por_id,
+            juiz._por_id("prova_{}.json"), {}, juiz._por_id("http_{}.json"))
+        grupos = [g for g in fusao.agrupa(organizado["condenados"], acusacoes_por_id)
+                  if len(g) > 1]
+        if not grupos:
+            return
+        base, head = ferramentas.commit_base(), ferramentas.commit_head()
+        print(f"\n  [prova de fusao] {len(grupos)} agrupamento(s) a medir "
+              f"(container, sem custo de API)")
+        fora = []
+        for g in grupos:
+            ids = [v["id"] for v in g]
+            ver, det = prova_de_fusao.prova_o_grupo(
+                g, juiz._por_id("prova_{}.json"), base, head)
+            print(f"    {'+'.join(ids)} -> {ver}")
+            fora.append({"ids": ids, "veredito": ver, "detalhe": det})
+        prova_de_fusao.grava(fora)
+    except Exception as e:  # noqa: BLE001 -- medicao nunca derruba a rodada
+        print(f"  [prova de fusao] nao mediu ({type(e).__name__}: {e}); "
+              "o agrupamento fica por heuristica")
+
+
 def _registra_efeito_no_banco(antes: dict) -> dict:
     """O que a rodada deixou no banco do app. Grava, e diz em voz alta.
 
@@ -429,6 +469,7 @@ def _roda(manual: bool, top_n: int | None, reusar: bool, com_scanner: bool,
             print(f"    -> {v['veredito']} em {v['segundos']}s, {v['voltas']} voltas")
 
     _registra_efeito_no_banco(antes_do_banco)
+    _prova_as_fusoes(veredictos, {a['id']: a for a in acusacoes})
 
     with rod.etapa("juiz") as et:
         texto = juiz.sentencia()

@@ -261,3 +261,60 @@ def prova_o_grupo(grupo: list[dict], artefatos: dict, base: str, head: str
             (destino_testes / f"pf_{id_}_{nome}").unlink(missing_ok=True)
 
     return classifica(passaram_por_trecho, set(testes))
+
+
+# --------------------------------------------------------------- o disco
+#
+# 🚨 A prova roda no ORQUESTRADOR e grava aqui; o juiz e o comentario apenas
+# LEEM. E' a disciplina no 2 do CLAUDE.md ("Juiz le do arquivo"): sem isso,
+# reajustar o parecer passaria a subir container, e a propriedade de o juiz
+# rodar em milissegundos sem rede -- que e' o que permite ajusta-lo trinta
+# vezes -- morreria em troca de nada.
+
+ARQUIVO = "fusao.json"
+
+
+def grava(resultados: list[dict]) -> None:
+    """`[{ids, veredito, detalhe}]` -> `fusao.json` da rodada."""
+    import json
+    from . import config as cfg
+    (cfg.RODADA / ARQUIVO).write_text(
+        json.dumps({"grupos": resultados}, indent=2, ensure_ascii=False),
+        encoding="utf-8")
+
+
+def do_disco() -> dict:
+    """`{frozenset(ids): (veredito, detalhe)}`. Vazio quando nao houve prova.
+
+    ⚠️ Ausente NAO e' erro: rodada sem Docker, projeto sem `codigo`, ou rodada
+    anterior a esta mudanca. O consumidor cai na heuristica e DIZ que caiu.
+    """
+    import json
+    from . import config as cfg
+    try:
+        d = json.loads((cfg.RODADA / ARQUIVO).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    fora = {}
+    for g in d.get("grupos") or []:
+        ids = frozenset(g.get("ids") or ())
+        if ids:
+            fora[ids] = (g.get("veredito") or INCONCLUSIVO, g.get("detalhe") or {})
+    return fora
+
+
+def aplica(grupos: list[list[dict]], resultados: dict
+           ) -> list[tuple[list[dict], str, dict]]:
+    """Os grupos da heuristica, refinados pela prova. `(grupo, veredito, detalhe)`.
+
+    Grupo sem resultado medido sai como INCONCLUSIVO com a causa "nao medido" --
+    e nao como provado. Silencio nunca vira prova.
+    """
+    fora = []
+    for g in grupos:
+        chave = frozenset(v.get("id") for v in g)
+        veredito, detalhe = resultados.get(
+            chave, (INCONCLUSIVO, {"causa": "a fusao nao foi medida nesta rodada"}))
+        for pedaco in parte(g, veredito, detalhe):
+            fora.append((pedaco, veredito, detalhe))
+    return fora

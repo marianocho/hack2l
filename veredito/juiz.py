@@ -18,6 +18,7 @@ from pathlib import Path
 
 from . import arbitro
 from . import fusao
+from . import prova_de_fusao as pfus
 from . import config as cfg
 from . import llm_alvo
 
@@ -456,7 +457,8 @@ def _principal(grupo: list[dict], artefatos: dict, http: dict) -> dict:
 
 
 def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
-                   http: dict | None = None) -> str:
+                   http: dict | None = None,
+                   prova: tuple[str, dict] | None = None) -> str:
     """Um defeito, com toda a prova que as lentes juntaram nele.
 
     🚨 O grupo NAO descarta os outros membros. Cada um continua com id, arquivo
@@ -472,6 +474,8 @@ def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
         v = grupo[0]
         return _bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
                       http.get(v["id"]))
+    # `prova` chega do disco (fusao.json). Sem ela o bloco continua saindo -- so'
+    # que dizendo que o agrupamento foi indicio, nunca calando a diferenca.
 
     chefe = _principal(grupo, artefatos, http)
     linhas = _bloco(chefe, acusacoes.get(chefe["id"], {}), artefatos.get(chefe["id"]),
@@ -493,13 +497,18 @@ def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
         if v is chefe:
             continue
         art = artefatos.get(v["id"]) or {}
+        # ⚠️ `evidencia`, e nao `prova`: chamar esta local de `prova` sombreava o
+        # PARAMETRO `prova` da funcao, e a guarda `if prova is not None` passava
+        # a ler a string do ultimo membro do laco. O bloco saia com uma frase de
+        # fusao fabricada a partir de caracteres soltos -- e sem os testes de
+        # render isso teria ido para o comentario de PR de alguem.
         if art.get("estado") == "PROVADO":
-            prova = (f"{art.get('arquivo_do_teste')} passa em {art.get('commit_base')} "
-                     f"e falha em {art.get('commit_head')}")
+            evidencia = (f"{art.get('arquivo_do_teste')} passa em {art.get('commit_base')} "
+                         f"e falha em {art.get('commit_head')}")
         else:
-            prova = _evidencia_http(http.get(v["id"])) or v.get("motivo") or "sem artefato"
-            prova = str(prova).replace("EVIDENCIA: ", "").replace("\n", " ")[:160]
-        extras.append(f"  E TAMBEM ({v['id']}): {prova}")
+            evidencia = _evidencia_http(http.get(v["id"])) or v.get("motivo") or "sem artefato"
+            evidencia = str(evidencia).replace("EVIDENCIA: ", "").replace("\n", " ")[:160]
+        extras.append(f"  E TAMBEM ({v['id']}): {evidencia}")
 
     # O cabecalho passa a mostrar a extensao do DEFEITO, e nao a linha do membro
     # que por acaso liderou: o autor recebe um lugar so' para olhar, e ele cobre
@@ -515,7 +524,10 @@ def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
         return next((n for n, l in enumerate(linhas) if l.startswith(prefixo)), None)
 
     pos = _indice("O QUE:")
-    linhas.insert(pos + 1 if pos is not None else len(linhas), convergencia)
+    onde = pos + 1 if pos is not None else len(linhas)
+    linhas.insert(onde, convergencia)
+    if prova is not None:
+        linhas.insert(onde + 1, pfus.frase(prova[0], prova[1], len(grupo)))
     fim = _indice("CONSERTO SUGERIDO:")
     if fim is None:
         fim = _indice("REGRAS:")
@@ -597,9 +609,12 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
     p: list[str] = ["# PARECER", ""]
     c, d, i = organizado["condenados"], organizado["descartados"], organizado["inconclusivos"]
 
+    # Antes do cabecalho: a contagem "com parecer" e' de DEFEITOS refinados pela
+    # prova, e o cabecalho e' impresso primeiro.
+    refinados = pfus.aplica(fusao.agrupa(c, acusacoes), pfus.do_disco())
     p += _cabecalho_do_escopo(escopo, len(c) + len(d) + len(i))
     p += [
-        f"Das examinadas: {len(fusao.agrupa(c, acusacoes))} com parecer, "
+        f"Das examinadas: {len(refinados)} com parecer, "
         f"{len(d)} descartados com motivo, "
         f"{len(i)} inconclusivos com causa.",
         "",
@@ -607,8 +622,8 @@ def formata_parecer(organizado: dict, acusacoes: dict, artefatos: dict,
     ]
     if not c:
         p.append("_nenhum achado sobreviveu a pericia._")
-    for grupo in fusao.agrupa(c, acusacoes):
-        p += [bloco_agrupado(grupo, acusacoes, artefatos, http), ""]
+    for grupo, ver, det in refinados:
+        p += [bloco_agrupado(grupo, acusacoes, artefatos, http, (ver, det)), ""]
 
     p += ["## DESCARTADOS, COM MOTIVO", ""]
     if not d:

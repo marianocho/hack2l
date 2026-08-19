@@ -37,6 +37,7 @@ precisam ser enquadradas em voz alta OU VIRAM ACUSACAO.
 from __future__ import annotations
 
 from . import fusao
+from . import prova_de_fusao as pfus
 from . import juiz
 
 # Achada pela rodada seguinte para atualizar este mesmo comentario. Invisivel no
@@ -167,7 +168,9 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
     # publicaram "3 achados com evidencia" para UM defeito visto por tres
     # lentes -- o unico lugar em que este produto inflava acusacao, e no texto
     # que o cliente le.
-    grupos = fusao.agrupa(c, acusacoes)
+    # Refinado pela PROVA quando ela existe no disco; senao, a heuristica --
+    # e o bloco diz qual das duas foi. Ler do arquivo mantem esta funcao pura.
+    grupos = pfus.aplica(fusao.agrupa(c, acusacoes), pfus.do_disco())
     p: list[str] = [MARCA, "", "## Veredito", ""]
     p += [_resumo(len(grupos), len(d), len(i)), ""]
     p += _legenda()
@@ -178,8 +181,8 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
               "desta rodada.</sub>", ""]
 
     # Condenados ABERTOS e por extenso: e' o que o autor precisa agir.
-    for grupo in grupos:
-        p += [juiz.bloco_agrupado(grupo, acusacoes, artefatos, http), ""]
+    for grupo, ver, det in grupos:
+        p += [juiz.bloco_agrupado(grupo, acusacoes, artefatos, http, (ver, det)), ""]
 
     # E o resto colapsado. Presente, nunca omitido -- as duas listas sao a peca
     # que o produto tem e ninguem mais tem -- mas sem competir com o achado.
