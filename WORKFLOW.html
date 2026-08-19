@@ -1,0 +1,1675 @@
+<title>Veredito por dentro</title>
+<style>
+:root{
+  --paper:#EBEEF2; --sheet:#FAFBFD; --inset:#E1E6ED; --rule:#C6CFDA;
+  --ink:#141A22; --ink-2:#4B5665; --ink-3:#7B8797;
+  --accent:#1B4A8F; --accent-soft:#DBE5F6; --accent-line:#9FBBE4;
+  --prova:#166B4B; --prova-soft:#D6EBE0;
+  --duvida:#8A5A08; --duvida-soft:#F5E8CF;
+  --descarte:#59636F; --descarte-soft:#E3E8ED;
+  --perigo:#9C2B2B; --perigo-soft:#F5DEDE;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"Cascadia Mono","SF Mono","Segoe UI Mono",Consolas,monospace;
+  --w-texto:70ch;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1319; --sheet:#161D25; --inset:#1C232D; --rule:#2B343F;
+    --ink:#E4E9F0; --ink-2:#A5B0BE; --ink-3:#77838F;
+    --accent:#84ACE9; --accent-soft:#17253C; --accent-line:#2F4A72;
+    --prova:#5FC79B; --prova-soft:#12291F;
+    --duvida:#D9A648; --duvida-soft:#2A2213;
+    --descarte:#94A0AE; --descarte-soft:#1D242C;
+    --perigo:#E08282; --perigo-soft:#2C1919;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1319; --sheet:#161D25; --inset:#1C232D; --rule:#2B343F;
+  --ink:#E4E9F0; --ink-2:#A5B0BE; --ink-3:#77838F;
+  --accent:#84ACE9; --accent-soft:#17253C; --accent-line:#2F4A72;
+  --prova:#5FC79B; --prova-soft:#12291F;
+  --duvida:#D9A648; --duvida-soft:#2A2213;
+  --descarte:#94A0AE; --descarte-soft:#1D242C;
+  --perigo:#E08282; --perigo-soft:#2C1919;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:16.5px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.folha{max-width:1180px; margin:0 auto; padding:0 clamp(18px,4vw,44px) 96px}
+
+.capa{
+  border-bottom:1px solid var(--rule); padding:clamp(40px,7vw,76px) 0 34px;
+  margin-bottom:44px;
+}
+.selo{
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-3); display:flex; flex-wrap:wrap; gap:10px 22px; margin-bottom:26px;
+}
+.selo b{color:var(--accent); font-weight:600}
+h1{
+  font-family:var(--serif); font-weight:600; font-size:clamp(38px,7vw,66px);
+  line-height:1.04; letter-spacing:-.02em; margin:0 0 18px; text-wrap:balance;
+}
+.tese{
+  font-family:var(--serif); font-size:clamp(19px,2.4vw,23px); line-height:1.5;
+  color:var(--ink-2); max-width:60ch; margin:0 0 26px;
+}
+.tese em{color:var(--ink); font-style:italic}
+.fichas{display:flex; flex-wrap:wrap; gap:8px}
+.ficha{
+  font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
+  border:1px solid var(--rule); background:var(--sheet); color:var(--ink-2);
+  padding:5px 10px; border-radius:2px;
+}
+
+.grade{display:grid; grid-template-columns:1fr; gap:0}
+@media (min-width:1000px){
+  .grade{grid-template-columns:11rem minmax(0,1fr); column-gap:40px}
+}
+.trilho{display:none}
+@media (min-width:1000px){
+  .trilho{
+    display:block; position:sticky; top:24px; align-self:start;
+    font-family:var(--mono); font-size:11.5px; line-height:1.9; color:var(--ink-3);
+    border-right:1px solid var(--rule); padding-right:18px; text-align:right;
+  }
+  .trilho a{display:block; color:var(--ink-3); text-decoration:none; padding:1px 0}
+  .trilho a:hover,.trilho a:focus-visible{color:var(--accent)}
+  .trilho .tn{color:var(--accent-line); margin-right:6px}
+  .trilho hr{border:0; border-top:1px solid var(--rule); margin:14px 0}
+}
+.corpo{min-width:0}
+.corpo p, .corpo ul, .corpo ol, .corpo .nota, .corpo .regra-central, .corpo h3, .corpo h4{max-width:var(--w-texto)}
+
+section{padding:14px 0 10px; scroll-margin-top:20px}
+.etapa{display:flex; align-items:baseline; gap:14px; margin:56px 0 6px; flex-wrap:wrap}
+.etapa .num{
+  font-family:var(--mono); font-size:12px; letter-spacing:.14em; color:var(--accent);
+  border:1px solid var(--accent-line); background:var(--accent-soft);
+  padding:3px 8px; border-radius:2px; white-space:nowrap;
+}
+h2{
+  font-family:var(--serif); font-weight:600; font-size:clamp(26px,3.6vw,36px);
+  line-height:1.14; letter-spacing:-.015em; margin:0; text-wrap:balance;
+}
+h3{
+  font-family:var(--sans); font-weight:650; font-size:17px; letter-spacing:-.005em;
+  margin:34px 0 8px; color:var(--ink);
+}
+h4{
+  font-family:var(--mono); font-weight:600; font-size:12px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-3); margin:28px 0 10px;
+}
+p{margin:0 0 16px}
+.olho{color:var(--ink-2); font-size:17px; margin-top:12px}
+ul,ol{margin:0 0 18px; padding-left:1.25em}
+li{margin:0 0 7px}
+li::marker{color:var(--ink-3)}
+a{color:var(--accent); text-underline-offset:2px}
+strong{font-weight:650}
+code{
+  font-family:var(--mono); font-size:.875em; background:var(--inset);
+  border:1px solid var(--rule); border-radius:2px; padding:1px 4px; word-break:break-word;
+}
+pre{
+  font-family:var(--mono); font-size:13px; line-height:1.65; background:var(--sheet);
+  border:1px solid var(--rule); border-left:3px solid var(--accent-line);
+  border-radius:2px; padding:16px 18px; overflow-x:auto; margin:0 0 20px;
+}
+pre code{background:none; border:0; padding:0; font-size:inherit}
+.cmt{color:var(--ink-3)}
+.kw{color:var(--accent)}
+
+.nota{
+  border-left:3px solid var(--rule); background:var(--sheet);
+  padding:14px 18px; margin:0 0 20px; font-size:15.5px; color:var(--ink-2);
+}
+.nota p{margin:0}
+.nota p + p{margin-top:10px}
+.nota strong{color:var(--ink)}
+.nota.risco{border-left-color:var(--perigo); background:var(--perigo-soft)}
+.nota.risco strong{color:var(--perigo)}
+.nota.chave{border-left-color:var(--accent); background:var(--accent-soft)}
+.nota.chave strong{color:var(--accent)}
+.rot{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  display:block; margin-bottom:6px; color:var(--ink-3);
+}
+.nota.risco .rot{color:var(--perigo)}
+.nota.chave .rot{color:var(--accent)}
+
+.regra-central{
+  border:1px solid var(--accent-line); background:var(--accent-soft);
+  padding:24px 26px; margin:26px 0 30px; border-radius:3px;
+}
+.regra-central p{
+  font-family:var(--serif); font-size:20px; line-height:1.45; margin:0; color:var(--ink);
+}
+
+.tabela{overflow-x:auto; margin:0 0 24px; border:1px solid var(--rule); border-radius:3px; background:var(--sheet)}
+table{border-collapse:collapse; width:100%; font-size:14.5px; min-width:540px}
+th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--rule); vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{
+  font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-3); font-weight:600; background:var(--inset); white-space:nowrap;
+}
+td code{font-size:13px}
+.nw{white-space:nowrap}
+.num-col{font-variant-numeric:tabular-nums; white-space:nowrap}
+
+.grade-cartoes{display:grid; gap:16px; margin:0 0 24px}
+@media (min-width:780px){.grade-cartoes.duas{grid-template-columns:1fr 1fr}}
+.cartao{
+  border:1px solid var(--rule); background:var(--sheet); border-radius:3px;
+  padding:18px 20px; display:flex; flex-direction:column; gap:9px;
+}
+.cartao h5{
+  font-family:var(--mono); font-size:14.5px; font-weight:650; margin:0; color:var(--ink);
+}
+.cartao p{margin:0; font-size:15px; color:var(--ink-2)}
+.cartao .assin{font-family:var(--mono); font-size:12px; color:var(--ink-3); word-break:break-word}
+.tags{display:flex; flex-wrap:wrap; gap:6px; margin-top:2px}
+.tag{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+  padding:3px 7px; border-radius:2px; border:1px solid var(--rule); color:var(--ink-2);
+  background:var(--inset);
+}
+.tag.prova{color:var(--prova); background:var(--prova-soft); border-color:var(--prova)}
+.tag.risco{color:var(--perigo); background:var(--perigo-soft); border-color:var(--perigo)}
+.tag.aviso{color:var(--duvida); background:var(--duvida-soft); border-color:var(--duvida)}
+
+.pill{
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em; font-weight:600;
+  padding:2px 7px; border-radius:2px; border:1px solid; white-space:nowrap;
+}
+.p-prova{color:var(--prova); background:var(--prova-soft); border-color:var(--prova)}
+.p-desc{color:var(--descarte); background:var(--descarte-soft); border-color:var(--descarte)}
+.p-inc{color:var(--duvida); background:var(--duvida-soft); border-color:var(--duvida)}
+
+figure{margin:26px 0 30px}
+.quadro{
+  border:1px solid var(--rule); background:var(--sheet); border-radius:3px;
+  padding:20px; overflow-x:auto;
+}
+.quadro svg{display:block; min-width:680px; width:100%; height:auto}
+figcaption{
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-top:10px;
+  letter-spacing:.03em; line-height:1.7;
+}
+.d-cx{fill:var(--sheet); stroke:var(--rule); stroke-width:1}
+.d-cx-i{fill:var(--inset); stroke:var(--rule); stroke-width:1}
+.d-cx-a{fill:var(--accent-soft); stroke:var(--accent-line); stroke-width:1}
+.d-cx-p{fill:var(--prova-soft); stroke:var(--prova); stroke-width:1}
+.d-cx-d{fill:var(--duvida-soft); stroke:var(--duvida); stroke-width:1}
+.d-t{fill:var(--ink); font-family:var(--sans); font-size:13px; font-weight:600}
+.d-t2{fill:var(--ink-2); font-family:var(--sans); font-size:11.5px}
+.d-m{fill:var(--ink-3); font-family:var(--mono); font-size:10.5px; letter-spacing:.05em}
+.d-ma{fill:var(--accent); font-family:var(--mono); font-size:10.5px; letter-spacing:.05em}
+.d-ln{stroke:var(--ink-3); stroke-width:1; fill:none}
+.d-setas{color:var(--ink-3)}
+.d-ln-t{stroke:var(--rule); stroke-width:1; fill:none; stroke-dasharray:3 3}
+
+.passos{list-style:none; padding:0; margin:0 0 22px; counter-reset:passo; max-width:var(--w-texto)}
+.passos li{counter-increment:passo; position:relative; padding-left:40px; margin-bottom:15px}
+.passos li::before{
+  content:counter(passo,decimal-leading-zero); position:absolute; left:0; top:3px;
+  font-family:var(--mono); font-size:11px; color:var(--accent); letter-spacing:.06em;
+  border-bottom:1px solid var(--accent-line); padding-bottom:1px;
+}
+.passos b{font-weight:650}
+.passos .arq{font-family:var(--mono); font-size:12.5px; color:var(--ink-3); display:block; margin-top:3px}
+
+.rodape{
+  border-top:1px solid var(--rule); margin-top:70px; padding-top:22px;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-3); line-height:1.9;
+}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+
+<div class="folha">
+
+<header class="capa">
+  <div class="selo">
+    <span><b>hack2l</b> / veredito</span>
+    <span>revisor de código autônomo</span>
+    <span>workflow de execução</span>
+    <span>18 · 08 · 2026</span>
+  </div>
+  <h1>Veredito por dentro</h1>
+  <p class="tese">
+    Um pull request entra. Seis promotores <em>acusam</em>, um advogado <em>testa</em> cada
+    acusação com ferramenta de verdade, e um juiz determinístico <em>sentencia</em>.
+    Sai um parecer em que cada linha aponta para um artefato que outra pessoa consegue
+    rodar — e o que não foi provado aparece nomeado, nunca em silêncio.
+  </p>
+  <div class="fichas">
+    <span class="ficha">promotores · claude-haiku-4-5</span>
+    <span class="ficha">advogado · claude-opus-5</span>
+    <span class="ficha">juiz · python puro, sem LLM</span>
+    <span class="ficha">≈ US$0,071 por acusação verificada</span>
+  </div>
+</header>
+
+<div class="grade">
+<nav class="trilho" aria-label="Índice">
+  <a href="#leitura"><span class="tn">§</span>como ler</a>
+  <a href="#mapa"><span class="tn">§</span>o pipeline</a>
+  <hr>
+  <a href="#e0"><span class="tn">00</span>entrada</a>
+  <a href="#e1"><span class="tn">01</span>pré-voo</a>
+  <a href="#e2"><span class="tn">02</span>promotores</a>
+  <a href="#e3"><span class="tn">03</span>seleção</a>
+  <a href="#e4"><span class="tn">04</span>advogado</a>
+  <a href="#e5"><span class="tn">05</span>juiz</a>
+  <a href="#e6"><span class="tn">06</span>entrega</a>
+  <hr>
+  <a href="#ferramentas"><span class="tn">§</span>ferramentas</a>
+  <a href="#regras"><span class="tn">§</span>regras R0–R4</a>
+  <a href="#contencao"><span class="tn">§</span>contenção</a>
+  <a href="#yml"><span class="tn">§</span>veredito.yml</a>
+  <a href="#disco"><span class="tn">§</span>o que fica em disco</a>
+  <a href="#rodar"><span class="tn">§</span>como rodar</a>
+  <a href="#glossario"><span class="tn">§</span>glossário</a>
+</nav>
+
+<main class="corpo">
+
+<section id="leitura">
+  <h2>Como ler este documento</h2>
+  <p class="olho">
+    Ele acompanha uma rodada do começo ao fim, na ordem em que o código executa.
+    Cada etapa traz <strong>o que roda</strong> (as funções, com arquivo),
+    <strong>o que entra e o que sai</strong>, <strong>o que fica gravado em disco</strong>
+    e <strong>por que aquela peça existe</strong> — quase toda decisão aqui foi comprada
+    por um erro real, e sem o motivo a regra parece arbitrária.
+  </p>
+
+  <h3>A ideia em uma frase</h3>
+  <p>
+    Revisor de código que trata cada suspeita como <strong>acusação</strong>: nada vira
+    parecer sem prova reproduzível. O modelo caro nunca decide sozinho — ele produz um
+    artefato, e quem decide se aquilo provou alguma coisa é código determinístico que
+    um humano consegue ler.
+  </p>
+
+  <div class="regra-central">
+    <span class="rot">A regra central</span>
+    <p>
+      Veredito + confiança + evidência. A severidade acompanha a <strong>força da prova</strong>,
+      não a gravidade teórica. E <strong>nada é descartado em silêncio</strong>.
+    </p>
+  </div>
+
+  <h3>Os três estados, e por que o terceiro é obrigatório</h3>
+  <p>
+    Todo desfecho cai em um de três baldes. O terceiro é o que impede o produto de
+    mentir quando a infraestrutura falha.
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Estado</th><th>Significa</th><th>Vai para</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nw"><span class="pill p-prova">PROVADO</span></td>
+          <td>Existe artefato: um teste que passa no código de hoje e quebra com a mudança, ou chamadas HTTP contra o app rodando.</td>
+          <td>Condenados</td>
+        </tr>
+        <tr>
+          <td class="nw"><span class="pill p-desc">REFUTADO</span></td>
+          <td>Foi testado, o teste rodou, a acusação não se sustentou. É um resultado <em>forte</em>.</td>
+          <td>Descartados, com motivo</td>
+        </tr>
+        <tr>
+          <td class="nw"><span class="pill p-inc">INCONCLUSIVO</span></td>
+          <td>Timeout, parse quebrado, ferramenta que falhou, recusa do classificador, LLM do app alvo dublê. <strong>Ausência de observação não é refutação.</strong></td>
+          <td>Inconclusivos, com a causa</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota risco">
+    <span class="rot">O erro que o produto existe para impedir</span>
+    <p>
+      Num veredito binário, "não consegui provar" vira <strong>absolvição limpa</strong> —
+      e a categoria carro-chefe se esvazia sozinha parecendo rigor. Somar inconclusivos
+      com refutados e anunciar "refutou tudo" quando nenhuma ferramenta funcionou é
+      absolvição falsa. Já foi cometido duas vezes nos relatórios do próprio projeto,
+      e é por isso que hoje isso é código com teste, não disciplina.
+    </p>
+  </div>
+</section>
+
+<section id="mapa">
+  <div class="etapa"><span class="num">MAPA</span><h2>O pipeline em uma tela</h2></div>
+  <p class="olho">
+    Um orquestrador e três tipos de chamada. Repare onde o dinheiro é gasto: seis
+    chamadas baratas geram hipóteses, um funil corta, e só então o modelo caro entra —
+    uma acusação por vez, isolado, com ferramenta na mão.
+  </p>
+
+  <figure>
+    <div class="quadro">
+      <svg viewBox="0 0 760 712" role="img" aria-label="Diagrama do pipeline: entrada, pré-voo, seis promotores em paralelo mais scanner, funil de seleção, laço do advogado com cinco ferramentas, prova de fusão por exit code, juiz determinístico e quatro listas de saída.">
+        <defs>
+          <marker id="seta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g class="d-setas">
+
+        <!-- 0 entrada -->
+        <rect class="d-cx-i" x="20" y="14" width="200" height="46" rx="2"/>
+        <text class="d-m" x="32" y="33">00 · ENTRADA</text>
+        <text class="d-t2" x="32" y="50">URL do PR → base + head</text>
+        <path class="d-ln" d="M120 60 L120 84" marker-end="url(#seta)"/>
+
+        <!-- 1 pre-voo -->
+        <rect class="d-cx" x="20" y="86" width="200" height="58" rx="2"/>
+        <text class="d-m" x="32" y="105">01 · PRÉ-VOO</text>
+        <text class="d-t2" x="32" y="122">API responde? ferramentas</text>
+        <text class="d-t2" x="32" y="136">funcionam? senão nem começa</text>
+        <path class="d-ln" d="M120 144 L120 172" marker-end="url(#seta)"/>
+
+        <!-- 2 promotores -->
+        <rect class="d-cx-a" x="20" y="174" width="330" height="128" rx="2"/>
+        <text class="d-ma" x="32" y="193">02 · PROMOTORES — 6 lentes em paralelo</text>
+        <g class="d-t2">
+          <rect class="d-cx" x="32" y="204" width="94" height="24" rx="2"/><text x="40" y="220">injection</text>
+          <rect class="d-cx" x="134" y="204" width="94" height="24" rx="2"/><text x="142" y="220">vazamento</text>
+          <rect class="d-cx" x="236" y="204" width="94" height="24" rx="2"/><text x="244" y="220">prd</text>
+          <rect class="d-cx" x="32" y="234" width="94" height="24" rx="2"/><text x="40" y="250">correção</text>
+          <rect class="d-cx" x="134" y="234" width="94" height="24" rx="2"/><text x="142" y="250">padrões</text>
+          <rect class="d-cx" x="236" y="234" width="94" height="24" rx="2"/><text x="244" y="250">performance</text>
+        </g>
+        <text class="d-m" x="32" y="284">haiku · acusar é barato · queremos VOLUME</text>
+
+        <!-- scanner -->
+        <rect class="d-cx" x="380" y="174" width="180" height="72" rx="2"/>
+        <text class="d-m" x="392" y="193">FONTES EXTERNAS</text>
+        <text class="d-t2" x="392" y="211">bandit · semgrep</text>
+        <text class="d-t2" x="392" y="228">grátis, determinístico</text>
+        <path class="d-ln-t" d="M380 210 L352 210"/>
+        <text class="d-m" x="392" y="264">em PARALELO, nunca em série</text>
+
+        <path class="d-ln" d="M185 302 L185 326" marker-end="url(#seta)"/>
+        <path class="d-ln" d="M470 246 L470 314 L200 314" marker-end="url(#seta)"/>
+
+        <!-- 3 selecao -->
+        <rect class="d-cx" x="20" y="328" width="540" height="76" rx="2"/>
+        <text class="d-m" x="32" y="347">03 · SELEÇÃO — o funil, e ele é TETO MOLE</text>
+        <g class="d-t2">
+          <rect class="d-cx-i" x="32" y="358" width="118" height="30" rx="2"/><text x="42" y="377">dedup</text>
+          <rect class="d-cx-i" x="158" y="358" width="118" height="30" rx="2"/><text x="168" y="377">cota por categoria</text>
+          <rect class="d-cx-i" x="284" y="358" width="118" height="30" rx="2"/><text x="294" y="377">máx. 2 por local</text>
+          <rect class="d-cx-i" x="410" y="358" width="138" height="30" rx="2"/><text x="420" y="377">orçamento da lente</text>
+        </g>
+        <path class="d-ln" d="M185 404 L185 428" marker-end="url(#seta)"/>
+        <path class="d-ln-t" d="M560 366 L620 366 L620 470"/>
+        <text class="d-m" x="586" y="358">sobra</text>
+
+        <!-- 4 advogado -->
+        <rect class="d-cx-a" x="20" y="430" width="330" height="122" rx="2"/>
+        <text class="d-ma" x="32" y="449">04 · ADVOGADO — 1 acusação por vez, isolado</text>
+        <text class="d-t" x="32" y="472">pensa → ferramenta → resultado → decide</text>
+        <g class="d-t2">
+          <rect class="d-cx" x="32" y="482" width="86" height="22" rx="2"/><text x="39" y="497">read_file</text>
+          <rect class="d-cx" x="124" y="482" width="60" height="22" rx="2"/><text x="131" y="497">grep</text>
+          <rect class="d-cx" x="190" y="482" width="86" height="22" rx="2"/><text x="197" y="497">run_tests</text>
+          <rect class="d-cx-p" x="32" y="510" width="140" height="22" rx="2"/><text x="39" y="525">prova_diferencial</text>
+          <rect class="d-cx-p" x="178" y="510" width="112" height="22" rx="2"/><text x="185" y="525">http_request</text>
+        </g>
+        <text class="d-m" x="32" y="546">opus · ≤10 voltas · NÃO argumenta, TESTA</text>
+
+        <!-- prova de fusao -->
+        <path class="d-ln" d="M350 466 L390 466" marker-end="url(#seta)"/>
+        <rect class="d-cx-p" x="392" y="430" width="168" height="80" rx="2"/>
+        <text class="d-m" x="404" y="449">04b · PROVA DE FUSÃO</text>
+        <text class="d-t2" x="404" y="468">reverte UM trecho do diff</text>
+        <text class="d-t2" x="404" y="484">e mede por exit code</text>
+        <text class="d-m" x="404" y="502">container · zero de API</text>
+
+        <!-- juiz -->
+        <path class="d-ln" d="M476 510 L476 530" marker-end="url(#seta)"/>
+        <rect class="d-cx" x="392" y="532" width="168" height="112" rx="2"/>
+        <text class="d-m" x="404" y="551">05 · JUIZ</text>
+        <text class="d-t2" x="404" y="570">sem LLM, sem rede.</text>
+        <text class="d-t2" x="404" y="586">regras em código:</text>
+        <text class="d-m" x="404" y="608">R0 · R0b · R4 · R3b</text>
+        <text class="d-m" x="404" y="624">R3 · R1 · R2</text>
+
+        <!-- saidas -->
+        <path class="d-ln" d="M476 644 L476 666" marker-end="url(#seta)"/>
+        <g class="d-t2">
+          <rect class="d-cx-p" x="20" y="668" width="168" height="30" rx="2"/><text x="30" y="687">condenados, com prova</text>
+          <rect class="d-cx-i" x="196" y="668" width="180" height="30" rx="2"/><text x="206" y="687">descartados, com motivo</text>
+          <rect class="d-cx-d" x="384" y="668" width="176" height="30" rx="2"/><text x="394" y="687">inconclusivos, com causa</text>
+          <rect class="d-cx" x="568" y="668" width="180" height="30" rx="2"/><text x="578" y="687">levantadas e não testadas</text>
+        </g>
+        <path class="d-ln-t" d="M620 470 L620 668"/>
+
+        <!-- disco -->
+        <rect class="d-cx-i" x="596" y="86" width="152" height="58" rx="2"/>
+        <text class="d-m" x="608" y="105">DISCO</text>
+        <text class="d-t2" x="608" y="122">cada etapa grava antes</text>
+        <text class="d-t2" x="608" y="137">de a próxima começar</text>
+        <path class="d-ln-t" d="M672 144 L672 366 L560 366"/>
+        </g>
+      </svg>
+    </div>
+    <figcaption>
+      As linhas tracejadas são caminhos que não gastam modelo: o scanner grátis entra pela
+      lateral, a sobra da fila vai para o parecer em vez do lixo, e o disco recebe cada etapa
+      antes de a próxima começar.
+    </figcaption>
+  </figure>
+
+  <h3>O esqueleto, em pseudocódigo</h3>
+  <pre><code><span class="cmt"># veredito/orquestrador.py :: roda()</span>
+pre_voo()                          <span class="cmt"># senão a rodada nem começa</span>
+
+acusacoes = []
+para cada lente em [injection, vazamento, prd, correcao, padroes, performance]:
+    acusacoes += chamada_de_modelo(diff + contexto + orçamento, lente)   <span class="cmt"># Haiku</span>
+
+acusacoes = cruza(acusacoes, scanner_gratis(diff))    <span class="cmt"># bandit/semgrep EM PARALELO</span>
+
+veredictos = []
+para cada acusacao em seleciona(acusacoes, TOP_N, COTAS, MAX_POR_LOCAL):
+    veredictos.append( advogado(acusacao) )           <span class="cmt"># ← o laço caro, Opus</span>
+
+prova_as_fusoes(veredictos)                           <span class="cmt"># container, zero de API → fusao.json</span>
+parecer = juiz(veredictos)                            <span class="cmt"># regras determinísticas + formato</span></code></pre>
+
+  <h3>Os três modelos, e por quê</h3>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Peça</th><th>Modelo</th><th>Trabalho</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">Promotores</td><td class="nw"><code>claude-haiku-4-5</code></td><td>gerar hipóteses, em volume</td><td>acusar é barato e essa lista ninguém vê</td></tr>
+        <tr><td class="nw">Advogado</td><td class="nw"><code>claude-opus-5</code></td><td>verificar com ferramenta</td><td>é onde a decisão acontece</td></tr>
+        <tr><td class="nw">Juiz</td><td class="nw">—</td><td>aplicar regra e formatar</td><td>regra em prosa não acontece sob pressão: vira código ou não existe</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota">
+    <p>
+      <strong>O juiz não chama modelo nenhum.</strong> Existe um <code>MODEL_JUIZ</code>
+      (<code>claude-sonnet-5</code>) no config, mas ele só é consumido por um experimento
+      à parte (<code>experimento_adaptador.py</code>, um revisor externo dublê). A síntese
+      em linguagem natural do parecer <em>ainda não existe</em> — o que está no ar é
+      determinístico e roda em milissegundos, sem rede.
+    </p>
+  </div>
+</section>
+
+<section id="e0">
+  <div class="etapa"><span class="num">ETAPA 00</span><h2>Entrada: virar um endereço em dois commits</h2></div>
+  <p class="olho">
+    A maquinaria toda sabe trabalhar com <code>(repositório local, commit base, commit head)</code>.
+    A entrada é a porta que produz esses três a partir de um link de PR.
+  </p>
+
+  <h4>Três portas</h4>
+  <div class="grade-cartoes duas">
+    <div class="cartao">
+      <h5>revisa_pr.py</h5>
+      <p class="assin">py -3.12 revisa_pr.py &lt;url do PR&gt; [--top-n N] [--so-preparar]</p>
+      <p>A porta da frente. Resolve o PR, monta os worktrees e sobe o orquestrador apontado para eles.</p>
+    </div>
+    <div class="cartao">
+      <h5>python -m veredito.orquestrador</h5>
+      <p class="assin">--manual · --top-n N · --reusar · --sem-scanner</p>
+      <p>Roda contra um repositório já em disco, usando os ramos declarados em <code>PR_BRANCH</code> e <code>BASE_BRANCH</code>.</p>
+    </div>
+    <div class="cartao">
+      <h5>GitHub Action</h5>
+      <p class="assin">.github/workflows/veredito.yml</p>
+      <p>Dispara em <code>pull_request</code> ou à mão. Chama <code>revisa_pr.py</code> e depois <code>posta_parecer.py</code>.</p>
+    </div>
+    <div class="cartao">
+      <h5>roda_bancada.py</h5>
+      <p class="assin">a bancada de medição interna</p>
+      <p>Aponta o produto para um segundo projeto com defeitos plantados — é como se mede se o motor ainda funciona.</p>
+    </div>
+  </div>
+
+  <h4>O que acontece dentro</h4>
+  <ol class="passos">
+    <li><b>Resolve o endereço.</b> Regex do PR, chamada à API do GitHub, título, adições, remoções, arquivos.
+      <span class="arq">veredito/entrada.py :: resolve() · partes() · commits_do_pr()</span></li>
+    <li><b>Descobre o base certo.</b> <code>pulls/{n}</code> devolve o topo do ramo de destino <em>agora</em>. Se a <code>main</code> andou desde a abertura do PR, esse commit carrega mudanças que não são do PR — e a prova diferencial passaria a medir o PR <em>somado</em> ao que entrou depois. O commit certo é o <code>merge_base_commit</code>, do endpoint <code>compare</code>.
+      <span class="arq">uma chamada a mais, e é a diferença entre provar o PR e provar outra coisa junto</span></li>
+    <li><b>Clona raso.</b> <code>git init</code> + <code>fetch</code> dos <em>dois</em> commits, em <code>.repos/&lt;dono&gt;_&lt;repo&gt;</code>. Não traz o repositório inteiro.
+      <span class="arq">veredito/entrada.py :: _garante_clone() · busca_os_dois()</span></li>
+    <li><b>Monta os worktrees.</b> Duas árvores de trabalho lado a lado, <code>base/</code> e <code>head/</code>, fora dos repositórios.
+      <span class="arq">veredito/ferramentas.py :: monta_os_dois() · _garante_worktree()</span></li>
+    <li><b>Exporta o ambiente e chama o orquestrador em <em>subprocesso</em>.</b>
+      <span class="arq">revisa_pr.py :: main()</span></li>
+  </ol>
+
+  <div class="nota risco">
+    <span class="rot">Ordem que não é opcional</span>
+    <p>
+      O <code>config</code> resolve o projeto inteiro <strong>na importação</strong>: contas,
+      rota de login, banco, layout dos testes — tudo sai do ambiente no instante em que o
+      módulo carrega. Por isso duas coisas acontecem antes de qualquer <code>import</code>:
+      o ambiente é atualizado, e os worktrees são criados.
+    </p>
+    <p>
+      Já mordeu duas vezes. Trocar o alvo depois da importação deixa metade da configuração
+      apontando para o projeto anterior — uma rodada revisando um repositório e conversando
+      com o app de <em>outro</em>, com o pré-voo dizendo verde. E quando os worktrees nasciam
+      sob demanda, o <code>veredito.yml</code> do projeto (que é lido do worktree do base)
+      ainda não existia: a rodada revisou um projeto que se descreve inteiro como se ele
+      fosse mudo.
+    </p>
+  </div>
+
+  <div class="nota">
+    <p>
+      <strong>O que esperar de um PR de terceiro.</strong> Sem <code>veredito.yml</code> na
+      raiz do repositório revisado, o advogado tem <code>read_file</code> e <code>grep</code>,
+      e mais nada: sem app no ar não há <code>http_request</code>, sem compose declarado não há
+      <code>prova_diferencial</code>. O parecer sai com refutação fundamentada e severidade
+      no máximo <strong>MEDIA</strong> — a regra R2 rebaixa o que não é prova ponta a ponta.
+      Isso é dito <em>antes</em> de gastar, não descoberto no fim.
+    </p>
+  </div>
+</section>
+
+<section id="e1">
+  <div class="etapa"><span class="num">ETAPA 01</span><h2>Pré-voo: descobrir a rodada condenada antes de pagar por ela</h2></div>
+  <p class="olho">
+    Segundos, uma vez, antes de gastar cerca de US$0,07 por acusação. Nasceu de um dia em
+    que a worktree estava corrompida e o advogado devolveu <span class="pill p-prova">PROVADO</span>
+    com <em>todas</em> as chamadas falhando — infraestrutura podre virando veredito positivo.
+    O juiz pega isso depois (regra R3b); o pré-voo pega antes.
+  </p>
+
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Confere</th><th>Função</th><th>Se falhar</th></tr></thead>
+      <tbody>
+        <tr><td>chave da API presente</td><td><code>cfg.ANTHROPIC_API_KEY</code></td><td class="nw">aborta</td></tr>
+        <tr><td>o <code>.env</code> está sobrepondo o <code>veredito.yml</code> do projeto?</td><td><code>projeto.ensombrado_pelo_env()</code></td><td class="nw">aborta</td></tr>
+        <tr><td>o que este projeto não vai conseguir provar</td><td><code>projeto.avisos()</code></td><td class="nw">avisa</td></tr>
+        <tr><td>variável do sistema vencendo o <code>.env</code></td><td><code>cfg.variaveis_ensombradas()</code></td><td class="nw">avisa</td></tr>
+        <tr><td>a API da Anthropic responde (1 token)</td><td><code>advogado.sonda_api()</code></td><td class="nw">aborta</td></tr>
+        <tr><td>as ferramentas funcionam de verdade</td><td><code>ferramentas.autoteste()</code></td><td class="nw">aborta se faltar <code>read_file</code>/<code>grep</code></td></tr>
+        <tr><td>o container serve o <em>head</em>, não um build antigo</td><td><code>ferramentas._confere_imagem_do_head()</code></td><td class="nw">aborta (com app no ar)</td></tr>
+        <tr><td>o LLM do app alvo responde ou está dublê</td><td><code>llm_alvo.registra()</code></td><td class="nw">grava e segue</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Por que "o app serve o head" é fatal e não um aviso</h3>
+  <p>
+    Se o container estiver servindo o commit base, o <code>http_request</code> exercita
+    código que não é o do PR — e o defeito simplesmente não existe de fora. Não é degradação:
+    é medir a coisa errada achando que se está medindo a certa, e o parecer sai limpo e
+    mentiroso. Custou uma rodada inteira.
+  </p>
+
+  <h3>O app de pé, e as duas regras que protegem quem roda</h3>
+  <p>
+    Se o projeto declara <code>subir: true</code>, o orquestrador levanta o app antes de tudo,
+    dentro de um context manager que envolve a rodada inteira
+    (<code>subida.app_no_ar()</code>). Duas regras:
+  </p>
+  <ul>
+    <li><strong>Não derruba o que não subiu.</strong> App de pé é do operador — talvez com o navegador aberto nele.</li>
+    <li><strong>O <code>preparar</code> (o seed) só roda se <em>nós</em> levantamos os containers.</strong> Seed reseta banco; rodá-lo num app que já servia apagaria dado que não é nosso.</li>
+  </ul>
+  <p>
+    Consequência: <code>subir: true</code> num app já no ar é <strong>no-op completo</strong>,
+    verificado com zero comandos ao Docker. É isso que torna a opção segura de deixar ligada.
+  </p>
+
+  <h3>O prefixo que vai ser cacheado</h3>
+  <p>
+    Ainda no pré-voo, duas coisas são montadas <strong>uma vez por rodada</strong> porque são
+    o prefixo compartilhado por todas as chamadas seguintes:
+  </p>
+  <ul>
+    <li><code>advogado.diff_do_pr()</code> — o <code>git diff base..head</code>. Nunca é impresso: o time não pode ver o diff antes do agente trabalhar.</li>
+    <li><code>advogado.contexto_dos_arquivos(diff)</code> — o conteúdo integral dos arquivos que o PR toca, para o advogado não gastar volta lendo o que já poderia ter.</li>
+  </ul>
+  <div class="nota chave">
+    <span class="rot">Cache de prompt</span>
+    <p>
+      O Opus 5 cacheia a partir de 512 tokens e a leitura custa ~10%. Como o diff é o mesmo
+      prefixo em toda chamada, ele entra <em>antes</em> da acusação, e o <code>cache_control</code>
+      marca o fim do trecho compartilhado. <code>cache_read</code> igual a zero na primeira
+      acusação é sinal de que algo varia no prefixo — timestamp, UUID, ordem de dicionário.
+    </p>
+  </div>
+</section>
+
+<section id="e2">
+  <div class="etapa"><span class="num">ETAPA 02</span><h2>Promotores: seis lentes, e o trabalho delas é cobertura</h2></div>
+  <p class="olho">
+    Seis prompts em texto puro, lidos da pasta <code>promotores/</code> — o código lê a pasta,
+    não importa nada dela. Cada um olha o mesmo diff sob uma lente diferente e devolve um
+    array JSON de acusações. Essa lista ninguém vê: acusar é barato.
+  </p>
+  <p class="assin"><span class="arq">veredito/promotores.py :: acusa() · _acusa_um() · _parse()</span></p>
+
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Arquivo</th><th>Categoria emitida</th><th>Bucket (para a cota)</th><th>Procura por</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><code>injection.md</code></td><td class="nw"><code>injection</code></td><td class="nw">seguranca_ia</td><td>texto controlado por quem não deveria mandar chegando ao contexto de instrução de um modelo</td></tr>
+        <tr><td class="nw"><code>vazamento_contexto.md</code></td><td class="nw"><code>vazamento_de_contexto</code></td><td class="nw">seguranca_ia</td><td>dado de um usuário aparecendo para outro; filtro de tenant ausente</td></tr>
+        <tr><td class="nw"><code>prd.md</code></td><td class="nw"><code>prd</code></td><td class="nw">prd</td><td>divergência entre o que o repositório documenta e o que o código faz</td></tr>
+        <tr><td class="nw"><code>correcao.md</code></td><td class="nw"><code>correcao</code></td><td class="nw">correcao</td><td>o código simplesmente errado — condição invertida, guarda removida</td></tr>
+        <tr><td class="nw"><code>padroes.md</code></td><td class="nw"><code>padroes</code></td><td class="nw">padroes</td><td>convenção do próprio repositório quebrada pela mudança</td></tr>
+        <tr><td class="nw"><code>performance.md</code></td><td class="nw"><code>performance</code></td><td class="nw">performance</td><td>consulta em laço, trabalho repetido, caminho quente</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Como a mensagem de cada promotor é montada</h3>
+  <pre><code>[ diff do PR ]                 <span class="cmt">← prefixo grande, IGUAL nos 6, com cache_control</span>
+[ bloco de orçamento ]         <span class="cmt">← derivado do diff, então idêntico nos 6</span>
+[ contexto do repositório ]    <span class="cmt">← opcional, também igual nos 6, com cache_control</span>
+[ conteúdo do arquivo .md ]    <span class="cmt">← a lente, específica de cada promotor</span></code></pre>
+  <p>
+    A primeira chamada roda <strong>sozinha</strong> e as outras cinco depois, em paralelo.
+    Não é estilo: uma entrada de cache só fica legível depois que a primeira resposta começa
+    a chegar — disparando as seis juntas, todas pagam preço cheio pelo diff. Medido: cinco
+    das seis voltavam com cache zero.
+  </p>
+
+  <h3>O esquema da acusação</h3>
+  <p>
+    JSON, nunca YAML — o Haiku quebra YAML e a acusação some em silêncio. O parse tem
+    <code>try/except</code> e devolve a saída crua no fallback: acusação nunca morre por
+    erro de formato.
+  </p>
+  <pre><code>{
+  "id": "vazamento_01",
+  "categoria": "vazamento_de_contexto",
+  "local": "search.py:112",
+  "hipotese": "retrieve_docs não filtra por tenant_id",
+  "arbitro": {"regra": "quem não é dono não pode ler",
+              "onde": "docs/PRD.md:43"},
+  "provado_se": "canário do usuário B aparece na resposta do usuário A",
+  "confianca": "media"
+}</code></pre>
+  <ul>
+    <li><strong><code>arbitro</code></strong> — o objeto acima <em>ou <code>null</code></em>. Nunca uma sigla solta. Só conta com o campo <code>onde</code> preenchido.</li>
+    <li><strong><code>provado_se</code></strong> — o advogado já começa sabendo o que procurar, em vez de gastar voltas do laço decidindo.</li>
+    <li><strong><code>hipotese</code></strong> — uma linha. Prosa longa ancora o advogado e o juiz.</li>
+  </ul>
+
+  <div class="nota risco">
+    <span class="rot">O erro mais caro do projeto</span>
+    <p>
+      Numa medição em 10 PRs reais, <strong>94 acusações vieram com árbitro preenchido e 93
+      citavam os critérios de aceite de um desafio</strong> — aplicados a repositórios que não
+      tinham nada a ver com ele. Os prompts chumbavam rótulos (<code>AC1</code>, <code>R1</code>,
+      <code>C8</code>) que <em>nunca existiram nem no desafio</em>: foram inventados e o modelo
+      foi mandado citá-los "verbatim".
+    </p>
+    <p>
+      A regra que isso comprou: <strong>regra sem procedência é opinião</strong>. Hoje o que o
+      repositório documenta entra por <code>CONTEXTO_REPO</code>, em tempo de execução, e
+      <code>null</code> é a resposta honesta para a maioria dos repositórios do mundo. Um teste
+      (<code>tests/test_prompts_limpos.py</code>) verifica isso mecanicamente — prompt regride
+      em silêncio, asserção não.
+    </p>
+  </div>
+
+  <div class="nota">
+    <span class="rot">Duas coisas que o prompt do promotor não pode fazer</span>
+    <p>
+      <strong>Não pode pedir seletividade.</strong> "Reporte apenas problemas relevantes" faz o
+      modelo se autocensurar e engolir achado real. O trabalho dele é cobertura; quem filtra é
+      o advogado, que tem ferramenta — e essa divisão é o produto inteiro.
+    </p>
+    <p>
+      <strong>Não pode chumbar critério de projeto nenhum.</strong> Ver o quadro acima.
+    </p>
+  </div>
+
+  <h3>O orçamento por lente: calibração de escala, não filtro</h3>
+  <p>
+    Medido nos 10 PRs: a contagem de acusações era praticamente <strong>constante</strong>
+    (de 7 a 29) enquanto o diff variava <strong>400×</strong> — 13 acusações para um PR de
+    <em>uma linha</em>. Os promotores não escalam, eles produzem "um punhado".
+  </p>
+  <pre><code>orcamento_por_lente(diff) = clamp(1, ceil((3 + linhas) / 6), 10)
+
+   1 linha  → 1 por lente     (antes: 13 no total)   MORDE
+  13 linhas → 3 por lente                            não morde
+ 389 linhas → 10 por lente (teto)                    não morde</code></pre>
+  <p>
+    A diferença importa: <em>"este diff muda 1 linha; emita até 1"</em> é escala.
+    <em>"Reporte só o relevante"</em> é filtro de qualidade, e é o que faz o modelo engolir
+    achado real. E o anteparo <strong>marca, não apaga</strong>: quem estourou ganha
+    <code>_excedente_orcamento</code> e vai para o fim da fila.
+  </p>
+
+  <h3>As fontes externas, em paralelo</h3>
+  <p class="assin"><span class="arq">veredito/fontes.py :: acusa() · cruza() · _mesmo_ponto()</span></p>
+  <p>
+    <code>bandit</code> e <code>semgrep</code> rodam sobre os arquivos do diff, e o resultado
+    encontra a lista dos promotores no cruzamento — que é código, não prompt:
+  </p>
+  <ul>
+    <li><strong>Coincide</strong> com um promotor (mesmo arquivo, faixa ±2 linhas, região ≤10 linhas) → <strong>corrobora</strong>: não gasta vaga, e o parecer cita a ferramenta verbatim.</li>
+    <li><strong>Ninguém viu</strong> → entra como acusação nova.</li>
+    <li>O <code>arbitro</code> do scanner é <strong>sempre <code>null</code></strong>: a regra é da ferramenta, não do repositório revisado.</li>
+  </ul>
+  <p>
+    Em <strong>paralelo</strong>, nunca em série. Mostrar o achado do scanner ao promotor
+    ancora a lente — dizer que a linha 31 "já está coberta" convida a ler "esse arquivo já
+    está coberto" — e destrói o sinal de corroboração, que só vale entre fontes independentes.
+    O teto é baixo: 2 ou 3 achados contra 45 dos promotores. É corroboração, não motor.
+  </p>
+</section>
+
+<section id="e3">
+  <div class="etapa"><span class="num">ETAPA 03</span><h2>Seleção: quem ganha uma vaga no laço caro</h2></div>
+  <p class="olho">
+    Cada acusação verificada custa dinheiro e tempo. Esta etapa decide quem passa —
+    e, tão importante quanto, <strong>registra quem não passou e por quê</strong>.
+  </p>
+  <p class="assin"><span class="arq">veredito/promotores.py :: seleciona_com_escopo() · deduplica() · consenso() · escopo()</span></p>
+
+  <h3>Primeiro, a deduplicação</h3>
+  <p>
+    Funde acusações que apontam o <strong>mesmo local</strong> e o <strong>mesmo árbitro</strong>,
+    e faz isso <em>antes</em> do advogado: deduplicar só no parecer limpa o texto com o dinheiro
+    já gasto. É conservador de propósito — sem árbitro ou sem local, não funde. Fundir dois
+    achados distintos é pior que gastar uma vaga a mais.
+  </p>
+  <p>
+    A sobrevivente é a de maior confiança; as outras viram <code>_duplicatas</code>. E existe
+    um campo que separa dois casos que parecem iguais e não são:
+    <code>_corroborado=True</code> significa que <em>promotores diferentes</em> chegaram ao
+    mesmo ponto — isso é sinal. <code>False</code> significa que o <em>mesmo</em> promotor se
+    repetiu — isso é redundância interna, e apresentar como "N lentes independentes apontaram"
+    seria falso.
+  </p>
+  <div class="nota risco">
+    <span class="rot">Esta chave é rígida de propósito — medido em 606 acusações</span>
+    <p>
+      A fusão do parecer (etapa 05) usa uma chave mais frouxa e funciona. A pergunta óbvia era se
+      ela poderia substituir esta também. Sobre 606 acusações de 27 rodadas em disco, custo zero
+      de API: a chave atual funde <strong>11</strong>, a da apresentação funde <strong>88</strong>.
+      Parece vitória — e é o padrão dos "45% de árbitro" outra vez, o número subindo porque mede
+      outra coisa. Lidos à mão, cerca de metade dos grupos novos funde defeitos genuinamente
+      distintos. O pior caso juntava "o limite nunca é verificado" (bug funcional real) com dois
+      achados de estilo, mesma linha, mesma regra citada.
+    </p>
+    <p>
+      <strong>A mesma chave é segura para apresentar e perigosa para selecionar.</strong> No
+      parecer, uma fusão errada não esconde nada — as hipóteses e as provas seguem no bloco. Na
+      seleção, o fundido <em>nunca é verificado</em>.
+    </p>
+    <p>
+      E afrouxar aqui <strong>não economizaria API</strong>: <code>TOP_N</code> é teto duro, então
+      a vaga que o dedup libera é preenchida pela próxima da fila e a rodada custa o mesmo. O que
+      compraria é <em>cobertura</em> — o mesmo dinheiro verificando suspeitas mais distintas.
+    </p>
+  </div>
+
+  <h3>Depois, as três camadas do funil</h3>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Camada</th><th>Valor</th><th>O que impede</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">Cota por categoria</td><td class="nw"><code>seguranca_ia 3 · prd 2 · correcao 2 · padroes 2 · performance 1</code></td><td>uma lente barulhenta engolir as vagas das outras</td></tr>
+        <tr><td class="nw">Máximo por local</td><td class="nw"><code>MAX_POR_LOCAL = 2</code></td><td>um ponto quente comer a rodada inteira</td></tr>
+        <tr><td class="nw">Orçamento da lente</td><td class="nw">o <code>clamp</code> da etapa anterior</td><td>13 acusações num PR de uma linha</td></tr>
+        <tr><td class="nw">Teto da rodada</td><td class="nw"><code>TOP_N</code> (2 no desenvolvimento)</td><td>o custo total — e este é o único teto <strong>duro</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota chave">
+    <span class="rot">Teto mole</span>
+    <p>
+      As três primeiras camadas <strong>despriorizam, não descartam</strong>: o excedente vai
+      para o fim da fila e ainda entra se sobrar orçamento. Teto duro sumiria com acusação sem
+      ninguém ver, e "nada é descartado em silêncio" vale para o arquivo que fica, não só para
+      o console que rola.
+    </p>
+  </div>
+
+  <h3>O consenso ordena, e nunca julga</h3>
+  <p>
+    <code>consenso()</code> conta <strong>quantas lentes distintas</strong> apontaram o mesmo
+    ponto (mesmo arquivo, faixas que se tocam com folga de 2 linhas). Medido em quatro rodadas
+    com gabarito: nos PRs com defeito, 5 ou 6 lentes convergem no mesmo ponto; no PR limpo,
+    nunca passa de 2 — apesar de o PR limpo ter <em>mais</em> acusações brutas. Não é volume,
+    é convergência.
+  </p>
+  <div class="nota risco">
+    <span class="rot">E ele decide só a ordem</span>
+    <p>
+      O advogado <strong>nunca vê esse número</strong>. Se visse, cinco lentes concordando
+      viraria pressão para confirmar, e o produto passaria a medir opinião de modelo em vez de
+      exit code. A severidade também não muda: ela segue a força da prova, e cinco lentes
+      concordando não são prova de nada. Dois testes travam isso.
+    </p>
+    <p>
+      Honestidade sobre o que ele não faz: a hipótese era que o consenso consertaria a seleção.
+      O contrafactual sobre dados reais deu <strong>nenhuma mudança</strong> nas vagas. O que fez
+      o defeito ser julgado foi orçamento, não ordem — então o campo ficou como sinal auditável,
+      e não como melhoria que a medição não sustenta.
+    </p>
+  </div>
+
+  <h3>O escopo, gravado antes do laço</h3>
+  <p>
+    <code>escopo()</code> produz o retrato do que a rodada olhou e do que ela levantou e não
+    olhou, com a conta fechando: <code>levantadas = fundidas + testadas + não testadas</code>.
+    Cada uma que ficou de fora carrega a <strong>posição na fila</strong> e o
+    <strong>motivo</strong> — e o motivo é escrito do ponto de vista de quem ficou de fora,
+    não da camada que a moveu ("abaixo do corte do teto", nunca "ganhou vaga de cota").
+  </p>
+  <p>
+    Isso nasceu de um parecer que abria com "3 com parecer, 0 descartados, 0 inconclusivos"
+    numa rodada de <strong>24 suspeitas levantadas</strong>. As 21 que não couberam sumiam do
+    arquivo. O console dizia, mas o console rola e o parecer fica.
+  </p>
+</section>
+
+<section id="e4">
+  <div class="etapa"><span class="num">ETAPA 04</span><h2>Advogado: a única peça que é agente de verdade</h2></div>
+  <p class="olho">
+    Laço: <strong>pensa → ferramenta → resultado → decide</strong>. Ele vê
+    <strong>uma acusação por vez, isolado</strong> — sem histórico compartilhado, para que uma
+    acusação fraca não contamine a próxima e para que o prefixo do diff fique idêntico em todas
+    as chamadas.
+  </p>
+  <p class="assin"><span class="arq">veredito/advogado.py :: julga() · _sistema() · _parse_veredicto() · _consolida_ferramentas()</span></p>
+
+  <div class="regra-central">
+    <p>Ele não argumenta, não opina e não avalia plausibilidade. <strong>Ele testa.</strong> Prova é um artefato que outra pessoa possa rodar e ver o mesmo resultado — nada mais.</p>
+  </div>
+
+  <h3>Como a chamada é armada</h3>
+  <pre><code>runner = cliente.beta.messages.tool_runner(
+    model            = <span class="kw">claude-opus-5</span>,
+    max_tokens       = 64000,          <span class="cmt"># cobre raciocínio + resposta SOMADOS</span>
+    max_iterations   = 10,             <span class="cmt"># teto do SDK</span>
+    stream           = True,           <span class="cmt"># obrigatório com max_tokens alto</span>
+    thinking         = {"type": "adaptive"},
+    output_config    = {"effort": "high",
+                        "task_budget": {"type": "tokens", "total": 30000}},
+    betas            = ["task-budgets-...", "server-side-fallback-..."],
+    fallbacks        = "default",      <span class="cmt"># recusa do classificador não derruba a rodada</span>
+    system           = [SISTEMA com cache_control],
+    tools            = [prova_diferencial, run_tests, read_file, grep, http_request],
+    messages         = [ diff · arquivos do PR (cache_control) · a acusação ],
+)</code></pre>
+  <ul>
+    <li><strong>Duas travas para o laço</strong>, de propósito: o <code>max_iterations</code> do SDK e um <code>break</code> no <code>for</code>. Uma das duas já falhou em teste.</li>
+    <li><strong>Timeout por acusação</strong>: 180 s.</li>
+    <li><strong><code>stop_reason</code> antes de <code>content</code>, sempre.</strong> Uma recusa do classificador de cibersegurança vem como HTTP 200 com <code>content</code> vazio — ler <code>content[0].text</code> vira <code>IndexError</code> no meio da rodada.</li>
+  </ul>
+
+  <h3>Bateu no teto? O fechamento forçado</h3>
+  <p>
+    Estourar as voltas não pode custar a perícia inteira. Uma chamada final <strong>sem
+    ferramentas</strong> (<code>tool_choice: none</code>, <code>effort: low</code>) obriga o
+    advogado a concluir a partir do que já descobriu — e, se não descobriu nada, a dizer
+    <span class="pill p-inc">INCONCLUSIVO</span> com <em>o que tentou</em>, que é exatamente o
+    texto de que o parecer precisa.
+  </p>
+
+  <h3>A contagem que alimenta o juiz</h3>
+  <p>
+    Cada chamada de ferramenta registra o próprio desfecho — não é o texto de retorno que é
+    farejado depois. Três contadores saem daqui, e a distinção entre os dois últimos foi uma
+    decisão cara:
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Contador</th><th>Significa</th><th>Efeito no juiz</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><code>ferramentas_ok</code></td><td>a ferramenta respondeu</td><td>é observação — sustenta veredito</td></tr>
+        <tr><td class="nw"><code>ferramentas_erro</code></td><td>existia, foi tentada, não respondeu</td><td><strong>converte</strong> para inconclusivo (R3)</td></tr>
+        <tr><td class="nw"><code>ferramentas_indisponivel</code></td><td>o projeto revisado não a declarou</td><td><strong>não converte</strong> — mas nunca contou como sucesso</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Uma dica de prompt que vale por uma feature</h3>
+  <p>
+    A prova diferencial só assina <span class="pill p-prova">PROVADO</span> se o teste passa no
+    base e falha no head — o que parece impedir provar defeito em endpoint <em>novo</em> (que dá
+    404 no base por ausência, não por defeito). A saída é escrever o teste sobre a
+    <strong>invariante</strong>, não sobre o endpoint:
+  </p>
+  <pre><code>ruim: "GET /shared/1 como carol devolve 200"     → 404 no base, inconclusivo
+bom:  "carol não alcança o documento de alice
+       por nenhuma rota"                        → passa no base (não havia como
+                                                  vazar), falha no head. PROVADO.</code></pre>
+  <p>
+    A invariante quase sempre já vale no commit base — é por isso que ela é invariante.
+  </p>
+
+  <h3>Expansão guiada por área cega</h3>
+  <p>
+    Terminado o laço, o orquestrador pergunta se vale gastar mais. O gatilho <em>não</em> é taxa
+    de acerto ("7 de 8 provaram, deve haver mais") — num PR real, oito acusações eram o
+    <em>mesmo</em> defeito visto por cinco lentes, e expandir assim gastaria reprovando o que já
+    se sabe. O gatilho é <strong>ausência de exame</strong>: um ponto que três ou mais lentes
+    viram e que <em>nenhuma acusação julgada tocou</em>.
+  </p>
+  <p class="assin"><span class="arq">promotores.aglomerados_nao_examinados() · EXPANSAO_MAX=3 · EXPANSAO_MIN_LENTES=3</span></p>
+
+  <h3>O efeito no banco, medido e dito</h3>
+  <p>
+    Um retrato do banco é tirado <strong>antes</strong> do laço e outro depois. O delta vai para
+    <code>efeito_no_banco.json</code> e para o parecer. Três desfechos, e eles não podem usar a
+    mesma frase:
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Desfecho</th><th>Quando</th><th>O que o parecer diz</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">NÃO SE APLICA</td><td>nenhuma ferramenta desta rodada alcança banco</td><td>diz isso, e diz que é diferente de não medido</td></tr>
+        <tr><td class="nw">NÃO MEDIDO</td><td>havia banco e o retrato falhou</td><td>"a rodada pode ter criado ou removido linhas, e este parecer não sabe"</td></tr>
+        <tr><td class="nw">medido</td><td>o retrato funcionou</td><td>silêncio se limpo; o que criou, se criou; alarme alto, se <strong>removeu</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota risco">
+    <span class="rot">Guarda que morre de excesso morre igual</span>
+    <p>
+      Antes, sem banco declarado o retrato falhava e <em>todo</em> PR de terceiro fechava com
+      "a rodada pode ter criado ou removido linhas" — falso, porque ali nenhuma ferramenta
+      alcança banco. Alarme que dispara sempre ensina o leitor a pular justamente a linha que
+      existe para o caso raro. E, antes disso, seis rodadas gravaram <code>"limpo": true</code>
+      sem terem conseguido conectar: a falha de medição usava <strong>a mesma frase do sucesso</strong>.
+    </p>
+  </div>
+</section>
+
+<section id="ferramentas">
+  <div class="etapa"><span class="num">FERRAMENTAS</span><h2>As cinco ferramentas do advogado</h2></div>
+  <p class="olho">
+    Declaradas com <code>@beta_tool</code> — a docstring é literalmente a descrição que o modelo
+    lê. Todas moram em <code>veredito/ferramentas.py</code>, que tem uma regra arquitetural:
+    <strong>zero chamada de LLM ali dentro</strong>. É isso que faz a perícia inteira ser
+    conferível com <code>pytest</code>.
+  </p>
+
+  <div class="grade-cartoes">
+    <div class="cartao">
+      <h5>prova_diferencial(codigo_do_teste, nome_do_arquivo)</h5>
+      <div class="tags"><span class="tag prova">a única que assina PROVADO</span><span class="tag risco">executa código</span></div>
+      <p>
+        Escreve um teste pytest nos <strong>dois</strong> worktrees, roda dentro do container e
+        compara. <strong>Provado</strong> significa uma coisa só: o teste passa no commit base e
+        falha no head. Qualquer outra combinação não é prova.
+      </p>
+      <p>
+        Antes de tocar em disco, recusa duas coisas: projeto que não declara o bloco
+        <code>codigo</code> no <code>veredito.yml</code> (marcado <em>indisponível</em>, não
+        <em>erro</em>) e código de teste com <code>DROP</code>/<code>DELETE</code>.
+      </p>
+      <p>
+        Quem seria condenado passa por uma <strong>confirmação</strong>: o base roda de novo,
+        <em>depois</em> do head. Custa ~7 s e mata dois falsos positivos — teste não determinístico
+        e poluição de estado, já que o head sempre roda por último.
+      </p>
+      <p class="assin">artefato: artefatos/prova_&lt;id&gt;.json + o teste escrito</p>
+    </div>
+
+    <div class="cartao">
+      <h5>http_request(metodo, caminho, corpo, como_usuario)</h5>
+      <div class="tags"><span class="tag prova">sustenta severidade alta</span><span class="tag risco">fala com o app real</span></div>
+      <p>
+        Chama a API do app rodando, autenticado como uma das contas declaradas no
+        <code>veredito.yml</code>. Prova <strong>alcance</strong>: dá para fazer isso de fora,
+        agora — o que vale mais que causalidade, e é a única via que sustenta severidade alta
+        junto com o árbitro.
+      </p>
+      <p>
+        As contas existem para testar isolamento: é preciso pelo menos três, e uma tem que ser
+        <strong>dona de nada</strong> — o controle negativo. Qualquer dado de outro usuário que
+        apareça para ela é vazamento, sem precisar interpretar.
+      </p>
+      <p>
+        Detecta sozinho quando o LLM do app alvo está dublê e registra isso por acusação, para o
+        juiz aplicar a regra R4 mecanicamente depois.
+      </p>
+      <p class="assin">artefato: artefatos/http_&lt;id&gt;.json</p>
+    </div>
+
+    <div class="cartao">
+      <h5>read_file(caminho)</h5>
+      <div class="tags"><span class="tag">essencial</span></div>
+      <p>
+        Lê um arquivo do código sob revisão (o worktree do head), com número de linha. Tolera
+        raiz errada: os promotores discordam entre si sobre onde a árvore começa, então o
+        caminho é resolvido por sufixo plausível em vez de exigir acerto exato.
+      </p>
+      <p>
+        O prompt do advogado diz explicitamente para <em>não</em> usá-la nos arquivos do PR —
+        eles já vieram no bloco cacheado, e a resposta seria idêntica com uma volta gasta.
+      </p>
+    </div>
+
+    <div class="cartao">
+      <h5>grep(padrao, glob)</h5>
+      <div class="tags"><span class="tag">essencial</span></div>
+      <p>
+        Regex sobre o código sob revisão, devolvendo <code>arquivo:linha: conteúdo</code>, com
+        teto de resultados. É com <code>read_file</code> a dupla mínima: sem elas não há
+        observação, e o pré-voo aborta.
+      </p>
+    </div>
+
+    <div class="cartao">
+      <h5>run_tests(expressao)</h5>
+      <div class="tags"><span class="tag aviso">recusa quando não sabe</span></div>
+      <p>
+        Roda a suíte já existente contra o código do PR — serve para ver se a mudança quebrou o
+        que já era testado, não para provar acusação nova.
+      </p>
+      <p>
+        Sem <code>codigo</code> declarado no <code>veredito.yml</code>, ela <strong>recusa
+        dizendo</strong>: rodar a suíte inteira do repositório de um desconhecido dentro do
+        container é exatamente o que apagou um banco em 11/08.
+      </p>
+    </div>
+  </div>
+
+  <h3>A tabela-verdade da prova diferencial</h3>
+  <p>
+    Esta é a regra central em código, e o LLM não participa da decisão.
+    <code>ferramentas._classifica()</code>:
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>exit base</th><th>exit head</th><th>Estado</th><th>Leitura</th></tr></thead>
+      <tbody>
+        <tr><td class="num-col">0</td><td class="num-col">1</td><td class="nw"><span class="pill p-prova">PROVADO</span></td><td>passa no código de hoje, quebra com a mudança</td></tr>
+        <tr><td class="num-col">0</td><td class="num-col">0</td><td class="nw"><span class="pill p-desc">REFUTADO</span></td><td>o teste passa nos dois lados: a mudança não quebra isto</td></tr>
+        <tr><td class="num-col">1</td><td class="num-col">—</td><td class="nw"><span class="pill p-inc">INCONCLUSIVO</span></td><td>já falha no base, então não isola a mudança</td></tr>
+        <tr><td class="num-col" colspan="2">sem linha de resumo</td><td class="nw"><span class="pill p-inc">INCONCLUSIVO</span></td><td>o pytest não chegou a rodar — o exit code veio do docker</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="nota risco">
+    <span class="rot">Por que a terceira coluna existe</span>
+    <p>
+      O <code>docker compose</code> devolve <strong>1</strong> quando o daemon falha — o
+      <em>mesmo</em> código de "teste falhou". Sem conferir que a saída tem linha de resumo do
+      pytest, um soluço do Docker entre as duas execuções vira acusação crítica falsa.
+    </p>
+  </div>
+</section>
+
+<section id="e5">
+  <div class="etapa"><span class="num">ETAPA 05</span><h2>Juiz: as regras que não podem ser opinião</h2></div>
+  <p class="olho">
+    Lê tudo do disco, aplica sete regras determinísticas sobre cada veredicto, agrupa os
+    achados que são o mesmo defeito e escreve o parecer. Roda em milissegundos, sem rede,
+    e tem teste — ajustar o formato pela trigésima vez não pode re-executar o advogado.
+  </p>
+  <p class="assin"><span class="arq">veredito/juiz.py :: sentencia() → carrega_do_disco() → organiza() → aplica_regras() → formata_parecer()</span></p>
+
+  <h3 id="regras">As regras, na ordem em que rodam</h3>
+  <p>
+    Os nomes (R0…R4) são históricos e não são a ordem de execução. Esta é a ordem real:
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>#</th><th>Regra</th><th>O que faz</th><th>Nasceu de</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nw"><strong>R0</strong></td>
+          <td>o artefato manda</td>
+          <td>advogado disse PROVADO e o exit code disse outra coisa? vale o exit code</td>
+          <td>sem ela, "o LLM não sobrescreve o veredito" é só intenção</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R0b</strong></td>
+          <td>prova ponta a ponta é fato do artefato</td>
+          <td><code>prova_ponta_a_ponta</code> só é verdadeira se o artefato HTTP registra que a chamada alcançou a API</td>
+          <td>morava dentro de <code>if artefato is not None</code> — e ficava muda justo na via que sustenta severidade alta</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R4</strong></td>
+          <td>LLM do app alvo dublê</td>
+          <td>REFUTADO em categoria que depende do modelo → INCONCLUSIVO</td>
+          <td>sem chave de API, o app responde a mesma coisa para qualquer pergunta — "não obedeceu" viraria absolvição falsa</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R3b</strong></td>
+          <td>zero observação não é veredito</td>
+          <td>PROVADO ou REFUTADO com nenhuma ferramenta bem-sucedida → INCONCLUSIVO, com a causa</td>
+          <td>com a worktree corrompida, o advogado disse PROVADO duas vezes escrevendo no próprio motivo que as ferramentas falharam</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R3</strong></td>
+          <td>execução falhou</td>
+          <td>artefato com <code>erro</code> → INCONCLUSIVO, nunca absolvido</td>
+          <td>e lê <em>só</em> <code>erro</code>: ferramenta que o projeto não declarou não converte</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R1</strong></td>
+          <td>CRÍTICA exige autoridade que não seja o modelo</td>
+          <td>duas vias, qualquer uma basta: árbitro com procedência <em>ou</em> prova ponta a ponta</td>
+          <td>o mesmo SQL injection saiu CRÍTICA por uma lente e SUSPEITA por outra — a severidade seguiu o acaso, não a prova</td>
+        </tr>
+        <tr>
+          <td class="nw"><strong>R2</strong></td>
+          <td>teto sem ponta a ponta</td>
+          <td>prova que não é ponta a ponta → severidade no máximo MEDIA</td>
+          <td>é o que limita todo PR de terceiro sem <code>veredito.yml</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Todo rebaixamento fica registrado em <code>regras_aplicadas</code>. Parecer que rebaixa sem
+    dizer por quê é tão opaco quanto um que não rebaixa.
+  </p>
+
+  <div class="nota chave">
+    <span class="rot">A distinção mais delicada do projeto</span>
+    <p>
+      <strong>Guarda que não consegue olhar tem que dizer que não olhou — e isso é diferente de
+      olhar e não achar nada.</strong> A R3 tratava as duas iguais. Numa revisão de PR de
+      terceiro, cinco refutações obtidas por leitura (com o <code>grep</code> funcionando)
+      viraram quatro inconclusivos, porque o advogado tinha <em>tentado</em> uma ferramenta que
+      aquele projeto não tem. E a que sobrou sobreviveu por acaso: naquela ele não chegou a
+      tentar. Mesma prova, desfecho decidido por qual ferramenta o modelo chamou.
+    </p>
+    <p>
+      Hoje: <code>erro</code> converte, <code>indisponivel</code> não. Mas
+      <strong>indisponível nunca passou a contar como observação</strong> — refutar a partir do
+      diff que já veio no prompt, sem abrir o repositório, é <em>argumentar</em>, e a R3b
+      continua disparando.
+    </p>
+  </div>
+
+  <h3>A fusão: três achados que são um defeito viram um</h3>
+  <p class="assin"><span class="arq">veredito/fusao.py :: agrupa() · chave() · procedencia()</span></p>
+  <p>
+    Duas rodadas reais publicaram <strong>três achados</strong> no comentário do PR, e os três
+    eram o mesmo defeito, com o mesmo conserto. A deduplicação anterior não pegava porque os
+    dois campos da chave oscilam:
+  </p>
+  <pre><code>local :  103   ·   104   ·   103-106
+onde  :  "REGRAS.md:Acesso e isolamento"
+         "REGRAS.md (Acesso e isolamento)"
+         "REGRAS.md - Acesso e isolamento"
+         "REGRAS.md:Acesso e isolamento (linhas ~13-14)"</code></pre>
+  <p>
+    Cada par acertava um eixo e errava o outro. A chave estava certa no espírito e rígida na
+    letra. O conserto veio de uma pergunta que virou princípio:
+  </p>
+  <div class="regra-central">
+    <p>A <strong>procedência</strong> é fato do repositório; a paráfrase da regra e do conserto é <strong>opinião do modelo</strong>. A chave se constrói do fato.</p>
+  </div>
+  <p>
+    Então funde por <em>(arquivo do código, arquivo da regra, seção da regra)</em>, com a linha
+    entrando por proximidade e não por igualdade. Sem árbitro, não funde — há contraexemplo
+    medido em que quatro acusações na mesma linha eram quatro preocupações <em>diferentes</em>.
+    E fundir é seguro <strong>aqui</strong>, na apresentação: antes do advogado, uma fusão errada
+    custaria uma vaga de verificação.
+  </p>
+  <h3>E depois a fusão vira exit code, também</h3>
+  <p class="assin"><span class="arq">veredito/prova_de_fusao.py + orquestrador._prova_as_fusoes() — ligado em 18/08, verificado em produção em 19/08</span></p>
+  <p>
+    O agrupamento acima decide "é o mesmo defeito?" por semelhança de endereço e procedência.
+    Funciona — mas era o <strong>único lugar do pipeline que argumentava em vez de testar</strong>,
+    num produto cuja tese é o contrário. Depois do advogado existe artefato executável, então a
+    pergunta vira medição:
+  </p>
+  <pre><code>reverte UM trecho do diff  →  quais testes param de falhar?
+
+  todos param       → um trecho explica todos: É O MESMO DEFEITO
+  só alguns param   → aquele trecho explica só aqueles: SÃO DEFEITOS DIFERENTES
+  nenhum, ou não deu para medir → INCONCLUSIVO, e diz por quê</code></pre>
+  <p>
+    O terceiro estado não é decoração: sem ele, "não consegui medir" viraria "são o mesmo",
+    que é a absolvição falsa de sempre com roupa nova. E a prova faz o que a heurística não
+    consegue: <strong>separar</strong>. Se o trecho que conserta A não conserta B, os dois voltam
+    a ser dois achados — com evidência de que são dois, e a contagem do comentário acompanha.
+  </p>
+
+  <div class="nota chave">
+    <span class="rot">A granularidade é trecho, nunca hunk</span>
+    <p>
+      O PR medido é <em>um hunk só</em> com duas mudanças dentro — uma docstring e a condição de
+      autorização. Revertê-lo inteiro faz tudo passar, mas isso é só "reverter o PR conserta o
+      PR": trivialmente verdade, e não diz nada. O que deu sentido ao experimento foi separar as
+      duas — revertendo só a docstring os três testes continuaram falhando (controle negativo), e
+      revertendo só a condição os três passaram. Por isso a unidade é o <strong>trecho contíguo
+      de linhas alteradas</strong> (os opcodes do <code>difflib</code>), e diff com um trecho só
+      é <span class="pill p-inc">INCONCLUSIVO</span>, nunca "provado". Teto de 12 trechos por
+      grupo, porque cada um é uma rodada de <code>pytest</code>.
+    </p>
+  </div>
+
+  <h3>Quem mede e quem lê</h3>
+  <p>
+    A medição roda no <strong>orquestrador</strong>, depois do laço caro, e grava
+    <code>fusao.json</code>. O juiz e o comentário apenas <strong>leem</strong> esse arquivo.
+    A divisão é a disciplina nº 2 do projeto: sem ela, reajustar o parecer passaria a subir
+    container, e a propriedade de o juiz rodar em milissegundos sem rede morreria em troca de nada.
+  </p>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Situação</th><th>O que o bloco do parecer diz</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">MESMO_DEFEITO</td><td>"FUSÃO PROVADA: revertendo um único trecho do diff, os N testes param de falhar. A causa é a mesma — medido por exit code, não inferido por semelhança."</td></tr>
+        <tr><td class="nw">DEFEITOS_DIFERENTES</td><td>"FUSÃO DESFEITA POR PROVA: o trecho que conserta X não conserta Y. São causas diferentes, apesar de caírem no mesmo lugar."</td></tr>
+        <tr><td class="nw">INCONCLUSIVO<br>ou arquivo ausente</td><td>"AGRUPAMENTO NÃO PROVADO (&lt;causa&gt;). Os N achados foram agrupados por endereço e procedência, que é <strong>indício e não prova</strong>."</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Sem <code>fusao.json</code> — rodada sem Docker, projeto sem bloco <code>codigo</code>, rodada
+    antiga — o parecer sai idêntico <em>fora de uma linha</em>, e a linha que muda é exatamente a
+    que diz se o agrupamento foi provado ou inferido. O teste que mais importa é o da ausência:
+    sem ele, uma rodada sem container publicaria "FUSÃO PROVADA" sem nada ter rodado.
+  </p>
+
+  <div class="nota">
+    <span class="rot">O limite, dito em voz alta</span>
+    <p>
+      A bissecção exige prova <strong>diferencial de todos os membros</strong> do grupo: ela
+      precisa de um teste para reexecutar contra o código alterado. Achado provado só por
+      <code>http_request</code> sustenta o achado (a R1 tem duas vias) mas não deixa esse objeto —
+      e aí o grupo inteiro sai <span class="pill p-inc">INCONCLUSIVO</span> com essa causa. Medido
+      em 19/08 num PR real: dos três condenados, só um tinha artefato de prova diferencial.
+    </p>
+  </div>
+
+  <div class="nota risco">
+    <span class="rot">A variação nova do padrão de bug — 19/08</span>
+    <p>
+      A prova de fusão <strong>nunca tinha executado em produção</strong>, e o
+      <code>try/except</code> que degradava honestamente ("o agrupamento fica por heurística") era
+      exatamente o que escondia isso. Dois bugs, a mesma família: um <code>import</code> que nunca
+      foi adicionado, e <code>_por_id("prova_{}.json")</code> — onde <code>_por_id</code> faz
+      <strong>glob</strong> e <code>{}</code> é literal. O segundo é o pior: sozinho, teria
+      produzido um produto que diz "não consegui medir" em toda rodada, para sempre, parecendo
+      que rodou.
+    </p>
+    <p>
+      E os testes escritos no dia anterior não pegaram nenhum dos dois — os dois evitavam o
+      caminho feliz por construção. A primeira versão do teste novo também não pegava, porque o
+      valor esperado era igual ao valor errado: <em>teste cujo resultado esperado coincide com o
+      do defeito não discrimina nada</em>.
+    </p>
+  </div>
+
+  <h3>O formato do parecer</h3>
+  <pre><code>[SEVERIDADE] [CONFIANÇA] Categoria — arquivo:linha
+O QUE: uma frase.
+ÁRBITRO: &lt;a regra (arquivo:linha)&gt;   ou   "nenhum citado"
+EVIDÊNCIA: &lt;artefato: teste que falha base→head / chamadas HTTP&gt;
+           ou: o que foi tentado e por que não fechou
+CONSERTO SUGERIDO: uma frase.        ← só para condenados</code></pre>
+  <p>E o parecer inteiro tem cinco seções, nesta ordem:</p>
+  <ol>
+    <li><strong>Cabeçalho de escopo</strong> — "N suspeitas levantadas, M testadas dentro do orçamento (TOP_N=M)".</li>
+    <li><strong>CONDENADOS</strong> — um bloco por <em>defeito</em>, não por veredicto.</li>
+    <li><strong>DESCARTADOS, COM MOTIVO</strong>.</li>
+    <li><strong>INCONCLUSIVOS, COM CAUSA</strong>.</li>
+    <li><strong>LEVANTADAS E NÃO TESTADAS</strong> — na ordem em que a fila as alcançaria com um teto maior, cada uma com posição e motivo.</li>
+    <li><strong>EFEITO NO BANCO DO APP</strong> — só aparece quando há o que dizer.</li>
+  </ol>
+  <div class="nota chave">
+    <span class="rot">A moldura decide como isso é lido</span>
+    <p>
+      Com o mesmo número dos dois lados: "25 levantadas, 8 testadas dentro do orçamento" é
+      <strong>escopo declarado</strong>; "17 não testadas" é confissão. A primeira é a verdadeira
+      — teto de orçamento é escolha de operação, não falha da perícia. As duas listas do meio
+      (descartados e inconclusivos) são a peça que quase nenhum concorrente tem, e precisam ser
+      enquadradas em voz alta, senão soam como erro admitido.
+    </p>
+  </div>
+</section>
+
+<section id="e6">
+  <div class="etapa"><span class="num">ETAPA 06</span><h2>Entrega: o parecer chega ao PR</h2></div>
+  <p class="assin"><span class="arq">veredito/comentario.py :: monta() · do_disco() · corta() — e posta_parecer.py</span></p>
+  <p class="olho">
+    O comentário é montado do disco, com a mesma disciplina do juiz: ajustar o formato pela
+    trigésima vez não pode gastar API.
+  </p>
+  <ul>
+    <li><strong>Condenados abertos</strong>, por extenso — é o que o autor precisa agir.</li>
+    <li><strong>Descartados e inconclusivos em <code>&lt;details&gt;</code></strong> — presentes, nunca omitidos, mas sem competir com o achado.</li>
+    <li><strong>A contagem é de defeitos</strong>, via <code>fusao.agrupa</code>, e não de veredictos.</li>
+    <li><strong>Corta com folga para o rodapé</strong>, porque o comentário do GitHub tem teto de tamanho.</li>
+  </ul>
+
+  <h3>Atualiza, nunca empilha</h3>
+  <p>
+    O corpo começa com a marca <code>&lt;!-- veredito:parecer --&gt;</code>. Antes de postar, o
+    script procura um comentário nosso com essa marca e faz <code>PATCH</code> nele. Sem isso,
+    uma Action que roda a cada push deixaria doze comentários num PR de três dias — e bot assim
+    é bot que o time desliga na primeira semana.
+  </p>
+  <div class="nota risco">
+    <span class="rot">Dry-run é o padrão</span>
+    <p>
+      <code>posta_parecer.py</code> só imprime; postar de verdade exige <code>--postar</code>.
+      Comentar num PR é público e irreversível na prática: a notificação sai para todo mundo que
+      segue o repositório no mesmo segundo, e apagar depois não desfaz o email. Efeito
+      irreversível se pergunta <em>antes</em>.
+    </p>
+    <p>
+      E a conferência de que funcionou é a API do GitHub (contar os comentários do PR), não a
+      linha que o script imprimiu — <code>criado:</code>/<code>atualizado:</code> é
+      autodeclaração do código sob teste, que é a mesma distinção da regra R0.
+    </p>
+  </div>
+
+  <h3>Por que Action e não bot hospedado</h3>
+  <p>
+    O produto precisa <strong>rodar o app do cliente</strong>. Um bot hospedado exigiria clonar
+    o código e subir o stack de cada cliente em infra de terceiro — e o comprador que mais
+    precisa é justamente quem não deixa o código sair. A CI do cliente já faz checkout de base e
+    head, já sobe o app, já roda testes: a Action inverte a restrição em vantagem.
+  </p>
+  <p>
+    O rastro da rodada sobe como artefato da Action <strong>sempre</strong>, inclusive quando a
+    rodada falha — que é quando ele mais vale.
+  </p>
+</section>
+
+<section id="contencao">
+  <div class="etapa"><span class="num">RISCO</span><h2>O agente pode destruir o que ele testa</h2></div>
+  <p class="olho">
+    É a classe de risco mais séria do produto, e não é bug pontual: é consequência direta do
+    desenho. Aconteceu três vezes, cada uma com uma cara diferente.
+  </p>
+
+  <div class="grade-cartoes duas">
+    <div class="cartao">
+      <h5>Caso 1 · o payload</h5>
+      <p>
+        Um promotor pediu prova com <code>email="admin'; DROP TABLE users--"</code>, e o advogado
+        tem <code>http_request</code> apontado para o app rodando. O classificador de
+        cibersegurança recusou e <strong>estava protegendo</strong> — tratar a recusa como
+        obstáculo teria consertado a coisa errada. Injeção se prova por <em>leitura</em>:
+        <code>' OR '1'='1</code> devolvendo linhas demais.
+      </p>
+    </div>
+    <div class="cartao">
+      <h5>Caso 2 · a suíte do base</h5>
+      <p>
+        A prova diferencial roda a suíte do repositório nos dois commits. O commit base era
+        anterior ao conserto do próprio autor ("stop the test suite from wiping the app
+        database") e <strong>apagou o banco</strong>. O desenho trata o base como referência
+        inerte — e rodar código não é inerte.
+      </p>
+    </div>
+    <div class="cartao">
+      <h5>Caso 3 · a regra impossível</h5>
+      <p>
+        Numa rodada real, uma tabela saiu de 0 para 3 linhas. Nada destruído, mas provar injeção
+        na rota de compartilhamento <em>exige</em> chamar a rota que compartilha. "Prove de forma
+        que só lê" era regra que o desenho viola por construção — e regra impossível no mesmo
+        prompt ensina que as regras dali são aproximadas.
+      </p>
+    </div>
+    <div class="cartao">
+      <h5>E o diagnóstico óbvio estava errado</h5>
+      <p>
+        Procurar <code>DROP</code> no diff não pega nada: o <code>DROP SCHEMA</code> existia
+        <strong>igual nos dois commits</strong>. O que o PR mudou foi para onde ele aponta. O
+        perigo estava no código que a mudança <em>não tocou</em>.
+      </p>
+    </div>
+  </div>
+
+  <h3>O princípio: contenção, não predição</h3>
+  <p>
+    Adivinhar o que o código faz perdeu as duas vezes. O que funciona é impor a fronteira de
+    fora. A linha certa também mudou: não é entre <em>ler</em> e <em>escrever</em>, é entre
+    <strong>criar</strong> e <strong>destruir</strong>.
+  </p>
+  <ul>
+    <li>🚫 o <strong>payload</strong> injetado é sempre read-only — <code>DROP</code>, <code>DELETE</code>, <code>UPDATE</code>, <code>INSERT</code> proibidos;</li>
+    <li>✅ a <strong>chamada</strong> a um endpoint documentado pode criar registro, quando o defeito mora nele;</li>
+    <li>🚫 em qualquer via: apagar ou modificar o que <strong>já existia</strong>.</li>
+  </ul>
+
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Camada</th><th>Mecanismo</th><th>Onde</th></tr></thead>
+      <tbody>
+        <tr><td class="nw">prova read-only</td><td>promotores proíbem no prompt; a ferramenta recusa o código antes de escrever</td><td class="nw"><code>_valida_codigo_do_teste</code></td></tr>
+        <tr><td class="nw">banco descartável</td><td><code>DATABASE_URL</code> imposta de fora no container, em qualquer commit</td><td class="nw"><code>_roda_pytest</code></td></tr>
+        <tr><td class="nw">rede sem saída</td><td><code>docker run --network &lt;interna&gt;</code>: banco dentro, internet fora — <strong>só no lado base</strong></td><td class="nw"><code>_garante_rede_isolada</code></td></tr>
+        <tr><td class="nw">app em cópia</td><td><code>pg_dump</code> → banco novo → api reapontada durante a rodada (desligada por padrão)</td><td class="nw"><code>contencao_app.py</code></td></tr>
+        <tr><td class="nw">delta de estado</td><td>retrato antes e depois, gravado e impresso no parecer</td><td class="nw"><code>retrato_do_banco</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>Por que só o base:</strong> a CI do cliente roda o head a cada push, então o risco
+    marginal ali é zero. O base ninguém roda mais — é lá que o risco é só nosso. A escotilha
+    (<code>PERMITIR_REDE_NO_BASE=1</code>) existe desligada: se o arnês de teste precisa de
+    internet, o base vira inconclusivo <em>rotulado</em>, dizendo que foi o isolamento e não o PR.
+  </p>
+  <div class="nota">
+    <p>
+      <strong>O vão que ainda existe, dito em voz alta:</strong> a contenção fechou o
+      <em>banco</em> para o <code>http_request</code>; a rede, não. E a contenção do app é
+      desligada por padrão. Quando ligada e o retrato falha, a rodada <strong>aborta</strong> —
+      contenção pedida e não confirmada é o pior dos mundos.
+    </p>
+  </div>
+</section>
+
+<section id="yml">
+  <div class="etapa"><span class="num">CONTRATO</span><h2>O <code>veredito.yml</code>: o projeto se descreve</h2></div>
+  <p class="olho">
+    Até certo ponto da história, as contas de teste estavam escritas dentro do código — e era
+    isso que fazia <strong>metade do produto só funcionar num repositório</strong>. Hoje o que é
+    do projeto revisado mora num arquivo na raiz dele, como um Dockerfile.
+  </p>
+
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Arquivo</th><th>Descreve</th><th>Muda por</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><code>veredito.yml</code></td><td>o <strong>projeto revisado</strong>: como sobe, como autentica, layout do código, onde é seguro escrever</td><td class="nw">cliente</td></tr>
+        <tr><td class="nw"><code>.env</code></td><td>como <strong>nós operamos</strong>: modelo, orçamento, <code>TOP_N</code>, timeouts</td><td class="nw">nunca</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Precedência: <strong>variável de ambiente &gt; <code>veredito.yml</code> &gt; padrão do código</strong>.</p>
+
+  <h3>O que ele declara</h3>
+  <pre><code>app:      compose · api · web · saude · subir · espera_s · preparar
+codigo:   montagens · trabalho · testes · testes_no_repo · banco_de_teste_semeado
+auth:     rota · campo_usuario · campo_senha · campo_token
+banco:    servico · usuario · senha · nome · descartavel_testes · descartavel_app
+contas:   nome · email · senha · possui        <span class="cmt"># ≥3, e uma com possui: 0</span>
+contexto: caminho para o que o repositório documenta sobre si mesmo</code></pre>
+
+  <h3>Ausente não é vazio, e errado não é ausente</h3>
+  <ul>
+    <li><strong>Sem arquivo</strong> → a rodada acontece com leitura e grep, e o pré-voo <em>diz o que perdeu</em>. Ausência é limite honesto de um projeto que não se descreveu.</li>
+    <li><strong>Arquivo errado</strong> → <strong>levanta</strong> (conta sem senha, nomes repetidos, <code>contas: []</code>). Engano do operador seguido com metade do arquivo produz rodada que parece boa e não é.</li>
+  </ul>
+
+  <div class="nota chave">
+    <span class="rot">Por que as contas vêm de fora</span>
+    <p>
+      A prova ponta a ponta — a única via que sustenta CRÍTICA junto com o árbitro — dependia de
+      quatro emails escritos no nosso repositório. E são necessárias três contas no mínimo porque
+      <em>"qualquer coisa envolvendo o acesso de um usuário aos dados de outro precisa de pelo
+      menos três contas para ser testada direito"</em>: uma dona, uma destinatária e uma que não
+      deveria ver nada. A terceira, com <code>possui: 0</code>, é deduzida como controle negativo
+      — declarar duas vezes é convidar as duas a divergirem.
+    </p>
+  </div>
+
+  <div class="nota risco">
+    <span class="rot">O padrão de bug que este projeto produz</span>
+    <p>
+      <strong>A guarda existe, mas está condicionada ao mesmo sinal que ela deveria vigiar —
+      então fica muda exatamente onde é necessária.</strong> Aconteceu uma dúzia de vezes, sempre
+      com cara diferente. As perguntas que acham isso:
+    </p>
+    <ul>
+      <li>Toda guarda dentro de um <code>if</code>: o que acontece quando a condição é falsa?</li>
+      <li>Toda guarda que alarma: ela consegue ficar <em>quieta</em>? Guarda que dispara sempre morre de excesso.</li>
+      <li>Toda métrica: isto pode estar medindo outra coisa? (94 árbitros "preenchidos" estavam preenchidos com lixo reciclado.)</li>
+      <li>Toda chave derivada de um campo: e se o campo sumir? E ela é feita de <strong>fato</strong> ou de <strong>paráfrase</strong>?</li>
+      <li>Todo <code>or &lt;valor padrão&gt;</code>: consertar o valor trata o sintoma — o mecanismo é o fallback existir.</li>
+      <li>E toda guarda precisa ser <strong>vista falhando</strong>, com a violação injetada. Guarda confiada é decoração.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="disco">
+  <div class="etapa"><span class="num">RASTRO</span><h2>O que fica em disco</h2></div>
+  <p class="olho">
+    Cada etapa grava antes de a próxima começar. Não é zelo: ajustar o juiz pela trigésima vez
+    não pode re-executar o advogado, e rodada que morre no meio não perde o que já foi provado.
+  </p>
+  <pre><code>saidas/rodadas/&lt;data&gt;T&lt;hora&gt;-&lt;commit&gt;/     <span class="cmt"># rodada nunca apaga rodada</span>
+saidas/rodadas/ULTIMA                       <span class="cmt"># ponteiro para a mais recente</span></code></pre>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Arquivo</th><th>Gravado por</th><th>Contém</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><code>acusacoes_brutas.json</code></td><td class="nw">etapa 02</td><td>a lista completa, com todas as fontes, antes de qualquer corte</td></tr>
+        <tr><td class="nw"><code>escopo.json</code></td><td class="nw">etapa 03</td><td>levantadas · fundidas · testadas · não testadas, com motivo e posição</td></tr>
+        <tr><td class="nw"><code>acusacoes.json</code></td><td class="nw">etapa 04</td><td>as que foram ao advogado, com o local normalizado carimbado</td></tr>
+        <tr><td class="nw"><code>veredictos.json</code></td><td class="nw">etapa 04</td><td>reescrito <strong>a cada acusação</strong>, não no fim</td></tr>
+        <tr><td class="nw"><code>artefatos/prova_&lt;id&gt;.json</code></td><td class="nw">ferramenta</td><td>commits, exit codes dos dois lados, saída, estado, motivo</td></tr>
+        <tr><td class="nw"><code>artefatos/http_&lt;id&gt;.json</code></td><td class="nw">ferramenta</td><td>as chamadas HTTP e se alcançaram a API</td></tr>
+        <tr><td class="nw"><code>artefatos/chamadas.json</code></td><td class="nw">ferramenta</td><td>toda chamada de ferramenta, com desfecho — o rastro de auditoria</td></tr>
+        <tr><td class="nw"><code>efeito_no_banco.json</code></td><td class="nw">etapa 04</td><td>retrato antes, depois e o delta</td></tr>
+        <tr><td class="nw"><code>parecer.md</code></td><td class="nw">etapa 05</td><td>o parecer completo</td></tr>
+        <tr><td class="nw"><code>custo.json</code></td><td class="nw">fim</td><td>tokens de entrada, saída, cache e segundos da rodada</td></tr>
+        <tr><td class="nw"><code>trace.txt</code></td><td class="nw">tracing</td><td>URL do trace no Langfuse, quando disponível</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    O tracing <strong>nunca derruba a rodada</strong> — quatro dos treze testes do módulo existem
+    só para provar isso. Langfuse fora do ar é no-op silencioso e o parecer sai igual.
+  </p>
+</section>
+
+<section id="rodar">
+  <div class="etapa"><span class="num">OPERAÇÃO</span><h2>Como rodar</h2></div>
+
+  <h4>Revisar um PR do GitHub</h4>
+  <pre><code>py -3.12 revisa_pr.py https://github.com/dono/repo/pull/123
+py -3.12 revisa_pr.py &lt;url&gt; --top-n 5
+py -3.12 revisa_pr.py &lt;url&gt; --so-preparar   <span class="cmt"># monta e não roda: não gasta API</span></code></pre>
+
+  <h4>Rodar contra um repositório já em disco</h4>
+  <pre><code>py -3.12 -m veredito.orquestrador
+py -3.12 -m veredito.orquestrador --top-n 2
+py -3.12 -m veredito.orquestrador --manual        <span class="cmt"># uma acusação de bancada, exercita o pipeline</span>
+py -3.12 -m veredito.orquestrador --reusar        <span class="cmt"># reusa as acusações da rodada anterior</span>
+py -3.12 -m veredito.orquestrador --sem-scanner   <span class="cmt"># só os promotores</span></code></pre>
+
+  <h4>Reajustar o parecer sem gastar nada</h4>
+  <pre><code>py -3.12 -m veredito.juiz         <span class="cmt"># lê a última rodada do disco e reimprime</span>
+py -3.12 posta_parecer.py &lt;url&gt;   <span class="cmt"># dry-run; --postar comenta de verdade</span></code></pre>
+
+  <h4>Conferências grátis, em segundos</h4>
+  <pre><code>py -3.12 checar_contencao.py       <span class="cmt"># as camadas de contenção estão de pé?</span>
+py -3.12 -m pytest tests -q        <span class="cmt"># a suíte do próprio Veredito</span></code></pre>
+
+  <h3>Os botões que mais mudam uma rodada</h3>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Variável</th><th>Padrão</th><th>O que faz</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><code>TOP_N</code></td><td class="num-col">2</td><td>quantas acusações vão ao advogado — o único teto duro</td></tr>
+        <tr><td class="nw"><code>EFFORT</code></td><td class="nw">high</td><td>esforço de raciocínio do advogado</td></tr>
+        <tr><td class="nw"><code>MAX_VOLTAS_LOOP</code></td><td class="num-col">10</td><td>voltas de ferramenta por acusação (+5 se o banco de teste não é semeado)</td></tr>
+        <tr><td class="nw"><code>TIMEOUT_ACUSACAO_S</code></td><td class="num-col">180</td><td>teto de tempo por acusação</td></tr>
+        <tr><td class="nw"><code>TASK_BUDGET_TOKENS</code></td><td class="num-col">30000</td><td>orçamento que o modelo <em>sabe</em> que tem, e por isso fecha o parecer</td></tr>
+        <tr><td class="nw"><code>EXPANSAO_MAX</code></td><td class="num-col">3</td><td>acusações extras por área cega</td></tr>
+        <tr><td class="nw"><code>APP_EM_BANCO_DESCARTAVEL</code></td><td class="nw">off</td><td>roda o app numa cópia do banco durante a rodada</td></tr>
+        <tr><td class="nw"><code>PERMITIR_REDE_NO_BASE</code></td><td class="nw">off</td><td>libera internet para a suíte do lado base</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Se os promotores deixarem passar</h3>
+  <p>
+    Primeiro <strong>descubra onde vazou</strong>, imprimindo a lista bruta. Nunca acusou é
+    problema de cobertura; acusou e não entrou no <code>TOP_N</code> é problema de ranking. O
+    conserto é diferente. Depois, a escada do mais barato ao mais caro:
+  </p>
+  <ol>
+    <li><strong>Contexto</strong> — promotor de PRD sem PRD não acha nada, com qualquer prompt.</li>
+    <li><strong>Dividir o promotor</strong> — foi assim que "segurança de IA" virou injection + vazamento.</li>
+    <li><strong>Pedir volume explicitamente</strong> — sem pedir seletividade.</li>
+    <li><strong>Rodar por arquivo</strong>, não por diff inteiro.</li>
+    <li><strong>Só então trocar de modelo.</strong></li>
+  </ol>
+  <p>
+    <strong>A régua:</strong> se trocássemos o PR por outro, o agente teria que continuar
+    funcionando. Toda melhoria precisa sobreviver a essa troca.
+  </p>
+</section>
+
+<section id="glossario">
+  <div class="etapa"><span class="num">GLOSSÁRIO</span><h2>Vocabulário da casa</h2></div>
+  <div class="tabela">
+    <table>
+      <thead><tr><th>Termo</th><th>O que é</th></tr></thead>
+      <tbody>
+        <tr><td class="nw"><strong>Acusação</strong></td><td>A saída de um promotor: uma hipótese de defeito, com local, árbitro e o que a provaria. Barata, e ninguém a lê fora do sistema.</td></tr>
+        <tr><td class="nw"><strong>Veredicto</strong></td><td>A saída do advogado para <em>uma</em> acusação: PROVADO, REFUTADO ou INCONCLUSIVO, com contagem de ferramentas e uso de tokens.</td></tr>
+        <tr><td class="nw"><strong>Artefato</strong></td><td>O arquivo que outra pessoa consegue rodar: o teste diferencial com os dois exit codes, ou o registro das chamadas HTTP.</td></tr>
+        <tr><td class="nw"><strong>Árbitro</strong></td><td>A regra violada <em>e onde ela está escrita naquele repositório</em>. Sem o "onde", é <code>null</code> — e <code>null</code> é a resposta honesta na maioria dos repositórios.</td></tr>
+        <tr><td class="nw"><strong>Prova diferencial</strong></td><td>Prova de <strong>causalidade</strong>: passa no base, falha no head. Foi esta mudança que quebrou.</td></tr>
+        <tr><td class="nw"><strong>Prova ponta a ponta</strong></td><td>Prova de <strong>alcance</strong>: a falha acontece de fora, contra o app rodando. Vale mais, e é a única que sustenta severidade alta sem árbitro.</td></tr>
+        <tr><td class="nw"><strong>Dublê</strong></td><td>O LLM do app alvo sem chave, respondendo a mesma coisa para qualquer pergunta. "Não obedeceu" ali não é resistência, é ausência de observação.</td></tr>
+        <tr><td class="nw"><strong>Controle negativo</strong></td><td>A conta que não possui nada. Qualquer dado alheio que apareça para ela é vazamento, sem interpretação.</td></tr>
+        <tr><td class="nw"><strong>Bucket / cota</strong></td><td>O agrupamento de categorias que garante vaga a cada lente no orçamento da rodada.</td></tr>
+        <tr><td class="nw"><strong>Rodada</strong></td><td>Uma execução completa, com pasta própria, carimbo de data e commit, e rastro suficiente para ser reaberta depois.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="nota chave">
+    <span class="rot">Os princípios, se você for mexer no código</span>
+    <p>
+      1 · Formato da saída primeiro — sabendo a cara da saída, o agente se desenha.
+      2 · Pipeline inteiro rodando cedo, mesmo burro, antes de refinar peça.
+      3 · Uma ferramenta boa vale mais que quatro pela metade.
+      4 · Demoável &gt; sofisticado e invisível.
+      5 · Log de tudo: o rastro responde auditabilidade, custo e latência de uma vez.
+      6 · Medir antes de comemorar — toda métrica nova merece a pergunta
+      <em>"isto pode estar medindo outra coisa?"</em>
+    </p>
+  </div>
+</section>
+
+<footer class="rodape">
+  <div>hack2l / veredito — documento de workflow, gerado a partir do código em 18/08/2026.</div>
+  <div>fontes: veredito/orquestrador.py · promotores.py · advogado.py · ferramentas.py · juiz.py · fusao.py · fontes.py · contencao_app.py · entrada.py · comentario.py</div>
+  <div>o documento de produto e as decisões com histórico ficam em CLAUDE.md; a fila viva, em PROXIMOS_PASSOS.md.</div>
+</footer>
+
+</main>
+</div>
+</div>
