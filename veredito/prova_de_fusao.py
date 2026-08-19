@@ -46,6 +46,15 @@ achados, com evidencia de que sao dois.
 
 ## Onde nao alcanca
 
+🚨 **Exige prova DIFERENCIAL de TODOS os membros do grupo.** Um achado provado
+so' por `http_request` nao deixa teste para reexecutar, e o grupo inteiro sai
+INCONCLUSIVO. Medido em 19/08 no `pr/filtro-de-projetos`: dos tres condenados,
+so' `correcao_01` tinha `prova_*.json`; os outros dois foram provados pela API.
+
+Isso NAO e' falha da medicao -- e' o limite dela, dito em voz alta. Provar por
+API sustenta o achado (R1 tem duas vias), mas nao produz o objeto que a
+bisseccao precisa: um teste que se possa rodar de novo contra o codigo alterado.
+
 Precisa de artefato e de container -- so' onde a `prova_diferencial` funciona.
 Em PR de terceiro com `read_file` e `grep` nao ha teste para rodar, e o
 agrupamento fica com a heuristica, rotulado como tal. E' a mesma degradacao

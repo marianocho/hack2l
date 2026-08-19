@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 
 from . import (advogado, config as cfg, contencao_app, ferramentas, fontes,
-               juiz, llm_alvo, projeto, promotores, subida, tracing)
+               fusao, juiz, llm_alvo, projeto, promotores, prova_de_fusao,
+               subida, tracing)
 
 
 def _carimbo_da_rodada() -> str:
@@ -136,7 +137,7 @@ def _prova_as_fusoes(veredictos: list[dict], acusacoes_por_id: dict) -> None:
     try:
         organizado = juiz.organiza(
             veredictos, acusacoes_por_id,
-            juiz._por_id("prova_{}.json"), {}, juiz._por_id("http_{}.json"))
+            juiz._por_id("prova_*.json"), {}, juiz._por_id("http_*.json"))
         grupos = [g for g in fusao.agrupa(organizado["condenados"], acusacoes_por_id)
                   if len(g) > 1]
         if not grupos:
@@ -148,7 +149,7 @@ def _prova_as_fusoes(veredictos: list[dict], acusacoes_por_id: dict) -> None:
         for g in grupos:
             ids = [v["id"] for v in g]
             ver, det = prova_de_fusao.prova_o_grupo(
-                g, juiz._por_id("prova_{}.json"), base, head)
+                g, juiz._por_id("prova_*.json"), base, head)
             print(f"    {'+'.join(ids)} -> {ver}")
             fora.append({"ids": ids, "veredito": ver, "detalhe": det})
         prova_de_fusao.grava(fora)

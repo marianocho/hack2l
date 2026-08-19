@@ -178,3 +178,66 @@ def test_tropeco_na_medicao_nao_derruba_a_rodada(rodada, monkeypatch, capsys):
     orquestrador._prova_as_fusoes([_v("c1")], {"c1": _a("c1", "app/main.py:10")})
     assert "nao mediu" in capsys.readouterr().out
     assert not (rodada / pf.ARQUIVO).exists()
+
+
+def test_o_caminho_FELIZ_chega_ao_fim_sem_erro_de_encanamento(rodada, monkeypatch, capsys):
+    """🚨 O teste que faltava, e custou uma rodada paga para aparecer.
+
+    Em 19/08 `_prova_as_fusoes` morreu em producao com
+    `NameError: name 'fusao' is not defined` -- o import nunca tinha sido
+    adicionado. O `try/except` degradou honestamente ("o agrupamento fica por
+    heuristica"), e foi EXATAMENTE isso que escondeu o bug: a funcionalidade
+    nunca rodou, e o parecer saiu plausivel.
+
+    Os meus dois outros testes nao pegaram porque nenhum exercita o caminho
+    feliz: um forca excecao, o outro sai cedo em `TEM_PROVA_DIFERENCIAL`.
+
+    A regra que este teste fixa: "nao mediu" por causa de DOMINIO (sem
+    artefato, diff de um trecho, teto de trechos) e' desfecho legitimo. Por
+    NameError/AttributeError/ImportError e' encanamento quebrado, e nao pode
+    passar por degradacao honesta.
+    """
+    from veredito import orquestrador
+    monkeypatch.setattr(cfg, "TEM_PROVA_DIFERENCIAL", True)
+    cond, ac = _cena()                      # 3 condenados que agrupam em 1
+
+    # Os artefatos EXISTEM -- e' o que faz a medicao passar da checagem de
+    # entrada e chegar de fato a tentar medir. Sem eles, o desfecho seria
+    # "sem artefato" tanto no caminho certo quanto no bug.
+    arte = rodada / "artefatos"
+    arte.mkdir(exist_ok=True)
+    monkeypatch.setattr(cfg, "ARTEFATOS", arte)
+    for v in cond:
+        nome = f"test_{v['id']}.py"
+        (arte / f"prova_{v['id']}.json").write_text(json.dumps({
+            "id": v["id"], "estado": "PROVADO", "arquivo_do_teste": nome,
+            "commit_base": "aaaaaaa", "commit_head": "bbbbbbb",
+            "exit_base": 0, "exit_head": 1}), encoding="utf-8")
+        (arte / f"teste_{v['id']}_{nome}").write_text("def test_x(): pass\n",
+                                                     encoding="utf-8")
+
+    orquestrador._prova_as_fusoes(cond, ac)
+    saida = capsys.readouterr().out
+
+    for encanamento in ("NameError", "AttributeError", "ImportError", "TypeError"):
+        assert encanamento not in saida, (
+            f"a medicao morreu de {encanamento} e o except vendeu isso como "
+            "degradacao honesta")
+
+    assert (rodada / pf.ARQUIVO).exists(), "nao chegou nem a gravar o resultado"
+    dados = json.loads((rodada / pf.ARQUIVO).read_text(encoding="utf-8"))
+    assert dados["grupos"], "gravou vazio"
+
+    # 🚨 E NAO basta ser INCONCLUSIVO: a causa tem que ser a de DOMINIO deste
+    # cenario, e nao "sem artefato".
+    #
+    # A primeira versao deste teste afirmava exatamente "INCONCLUSIVO por falta
+    # de artefato" -- e era o valor que o BUG produzia. `_por_id` faz glob, e o
+    # padrao passado era `prova_{}.json`, string literal: o glob nao achava nada,
+    # todo membro virava "sem artefato", e a prova responderia INCONCLUSIVO para
+    # sempre, parecendo que rodou. Teste cujo valor esperado e' igual ao valor
+    # errado nao discrimina -- e' o mesmo erro do carimbo, em 18/08.
+    causa = dados["grupos"][0]["detalhe"].get("causa", "")
+    assert "nao tem artefato" not in causa, (
+        "os artefatos existem no disco e a medicao nao os enxergou -- confira o "
+        "padrao do glob em `_por_id`")
