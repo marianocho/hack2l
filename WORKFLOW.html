@@ -240,7 +240,7 @@ figcaption{
     <span><b>hack2l</b> / veredito</span>
     <span>revisor de código autônomo</span>
     <span>workflow de execução</span>
-    <span>18 · 08 · 2026</span>
+    <span>19 · 08 · 2026</span>
   </div>
   <h1>Veredito por dentro</h1>
   <p class="tese">
@@ -877,6 +877,16 @@ parecer = juiz(veredictos)                            <span class="cmt"># regras
     não da camada que a moveu ("abaixo do corte do teto", nunca "ganhou vaga de cota").
   </p>
   <p>
+    <strong>E as fundidas saem com hipótese, não como contagem.</strong> Até 18/08 a acusação que
+    não coube no orçamento aparecia inteira no parecer — categoria, local, hipótese, posição — e a
+    <em>fundida</em> aparecia como <code>(Outras 3 eram duplicatas.)</code>. Ou seja: a que o
+    dedup engoliu por engano ficava <em>menos</em> visível que a que simplesmente não coube, e o
+    engano é o caso grave dos dois. Enquanto a chave for heurística, essa lista é a única defesa
+    que a etapa tem: o autor do PR lê a hipótese e decide sozinho. A invariante é que
+    <strong>a contagem e a lista batem</strong> — contagem 3 com lista de 1 seria a métrica
+    medindo outra coisa.
+  </p>
+  <p>
     Isso nasceu de um parecer que abria com "3 com parecer, 0 descartados, 0 inconclusivos"
     numa rodada de <strong>24 suspeitas levantadas</strong>. As 21 que não couberam sumiam do
     arquivo. O console dizia, mas o console rola e o parecer fica.
@@ -1326,7 +1336,7 @@ CONSERTO SUGERIDO: uma frase.        ← só para condenados</code></pre>
     <li><strong>CONDENADOS</strong> — um bloco por <em>defeito</em>, não por veredicto.</li>
     <li><strong>DESCARTADOS, COM MOTIVO</strong>.</li>
     <li><strong>INCONCLUSIVOS, COM CAUSA</strong>.</li>
-    <li><strong>LEVANTADAS E NÃO TESTADAS</strong> — na ordem em que a fila as alcançaria com um teto maior, cada uma com posição e motivo.</li>
+    <li><strong>LEVANTADAS E NÃO TESTADAS</strong> — na ordem em que a fila as alcançaria com um teto maior, cada uma com posição e motivo. E, junto, as <strong>fundidas como duplicata</strong>, cada uma com a hipótese e em qual acusação foi fundida.</li>
     <li><strong>EFEITO NO BANCO DO APP</strong> — só aparece quando há o que dizer.</li>
   </ol>
   <div class="nota chave">
@@ -1351,7 +1361,7 @@ CONSERTO SUGERIDO: uma frase.        ← só para condenados</code></pre>
   <ul>
     <li><strong>Condenados abertos</strong>, por extenso — é o que o autor precisa agir.</li>
     <li><strong>Descartados e inconclusivos em <code>&lt;details&gt;</code></strong> — presentes, nunca omitidos, mas sem competir com o achado.</li>
-    <li><strong>A contagem é de defeitos</strong>, via <code>fusao.agrupa</code>, e não de veredictos.</li>
+    <li><strong>A contagem é de defeitos</strong>, e não de veredictos: <code>fusao.agrupa</code> agrupa por heurística e <code>prova_de_fusao.aplica</code> refina com o que a bissecção mediu — inclusive desfazendo grupo, e a contagem acompanha.</li>
     <li><strong>Corta com folga para o rodapé</strong>, porque o comentário do GitHub tem teto de tamanho.</li>
   </ul>
 
@@ -1531,6 +1541,9 @@ contexto: caminho para o que o repositório documenta sobre si mesmo</code></pre
     <ul>
       <li>Toda guarda dentro de um <code>if</code>: o que acontece quando a condição é falsa?</li>
       <li>Toda guarda que alarma: ela consegue ficar <em>quieta</em>? Guarda que dispara sempre morre de excesso.</li>
+      <li>Todo <code>try/except</code> que degrada honestamente: ele consegue distinguir <em>"degradei"</em> de <em>"nunca executei"</em>? Foi o que escondeu a prova de fusão por um dia inteiro.</li>
+      <li>Todo teste: o valor esperado é diferente do valor que o defeito produz? Se coincidirem, ele não discrimina nada.</li>
+      <li>Dá para <strong>provar</strong> em vez de inferir? Foi a pergunta que transformou "é o mesmo defeito?" em exit code.</li>
       <li>Toda métrica: isto pode estar medindo outra coisa? (94 árbitros "preenchidos" estavam preenchidos com lixo reciclado.)</li>
       <li>Toda chave derivada de um campo: e se o campo sumir? E ela é feita de <strong>fato</strong> ou de <strong>paráfrase</strong>?</li>
       <li>Todo <code>or &lt;valor padrão&gt;</code>: consertar o valor trata o sintoma — o mecanismo é o fallback existir.</li>
@@ -1558,6 +1571,7 @@ saidas/rodadas/ULTIMA                       <span class="cmt"># ponteiro para a 
         <tr><td class="nw"><code>artefatos/prova_&lt;id&gt;.json</code></td><td class="nw">ferramenta</td><td>commits, exit codes dos dois lados, saída, estado, motivo</td></tr>
         <tr><td class="nw"><code>artefatos/http_&lt;id&gt;.json</code></td><td class="nw">ferramenta</td><td>as chamadas HTTP e se alcançaram a API</td></tr>
         <tr><td class="nw"><code>artefatos/chamadas.json</code></td><td class="nw">ferramenta</td><td>toda chamada de ferramenta, com desfecho — o rastro de auditoria</td></tr>
+        <tr><td class="nw"><code>fusao.json</code></td><td class="nw">etapa 04b</td><td>por grupo: os ids, o veredito da bissecção e o detalhe. Ausente = agrupamento por heurística, dito no parecer</td></tr>
         <tr><td class="nw"><code>efeito_no_banco.json</code></td><td class="nw">etapa 04</td><td>retrato antes, depois e o delta</td></tr>
         <tr><td class="nw"><code>parecer.md</code></td><td class="nw">etapa 05</td><td>o parecer completo</td></tr>
         <tr><td class="nw"><code>custo.json</code></td><td class="nw">fim</td><td>tokens de entrada, saída, cache e segundos da rodada</td></tr>
@@ -1642,6 +1656,7 @@ py -3.12 -m pytest tests -q        <span class="cmt"># a suíte do próprio Vere
         <tr><td class="nw"><strong>Árbitro</strong></td><td>A regra violada <em>e onde ela está escrita naquele repositório</em>. Sem o "onde", é <code>null</code> — e <code>null</code> é a resposta honesta na maioria dos repositórios.</td></tr>
         <tr><td class="nw"><strong>Prova diferencial</strong></td><td>Prova de <strong>causalidade</strong>: passa no base, falha no head. Foi esta mudança que quebrou.</td></tr>
         <tr><td class="nw"><strong>Prova ponta a ponta</strong></td><td>Prova de <strong>alcance</strong>: a falha acontece de fora, contra o app rodando. Vale mais, e é a única que sustenta severidade alta sem árbitro.</td></tr>
+        <tr><td class="nw"><strong>Prova de fusão</strong></td><td>A bissecção que responde "estes achados são o mesmo defeito?" revertendo um trecho do diff e olhando quais testes param de falhar. Roda no orquestrador, grava <code>fusao.json</code>, e sem ela o parecer diz que agrupou por indício.</td></tr>
         <tr><td class="nw"><strong>Dublê</strong></td><td>O LLM do app alvo sem chave, respondendo a mesma coisa para qualquer pergunta. "Não obedeceu" ali não é resistência, é ausência de observação.</td></tr>
         <tr><td class="nw"><strong>Controle negativo</strong></td><td>A conta que não possui nada. Qualquer dado alheio que apareça para ela é vazamento, sem interpretação.</td></tr>
         <tr><td class="nw"><strong>Bucket / cota</strong></td><td>O agrupamento de categorias que garante vaga a cada lente no orçamento da rodada.</td></tr>
@@ -1665,8 +1680,8 @@ py -3.12 -m pytest tests -q        <span class="cmt"># a suíte do próprio Vere
 </section>
 
 <footer class="rodape">
-  <div>hack2l / veredito — documento de workflow, gerado a partir do código em 18/08/2026.</div>
-  <div>fontes: veredito/orquestrador.py · promotores.py · advogado.py · ferramentas.py · juiz.py · fusao.py · fontes.py · contencao_app.py · entrada.py · comentario.py</div>
+  <div>hack2l / veredito — documento de workflow, gerado a partir do código em 19/08/2026 (commit bbb1cc4, suíte com 635 testes verdes).</div>
+  <div>fontes: veredito/orquestrador.py · promotores.py · advogado.py · ferramentas.py · juiz.py · fusao.py · prova_de_fusao.py · fontes.py · contencao_app.py · entrada.py · comentario.py</div>
   <div>o documento de produto e as decisões com histórico ficam em CLAUDE.md; a fila viva, em PROXIMOS_PASSOS.md.</div>
 </footer>
 
