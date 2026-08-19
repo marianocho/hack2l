@@ -13,12 +13,11 @@ import json
 import re
 import time
 
-import anthropic
-
 from . import arbitro
 from . import config as cfg
 from . import ferramentas
 from . import fontes
+from . import motor
 
 # O prompt e' produto, nao configuracao. Cada paragrafo aqui existe por um
 # motivo que custou caro em outro lugar.
@@ -158,8 +157,15 @@ FECHAMENTO = (
 )
 
 
-def _cliente() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=cfg.ANTHROPIC_API_KEY)
+def _cliente():
+    """Quem fatura esta chamada. Ver `veredito/motor.py`.
+
+    ⚠️ Nao construa cliente aqui. Ate' 19/08 esta funcao chumbava
+    `anthropic.Anthropic(...)`, e as outras duas pecas que falam com o
+    modelo chumbavam a mesma linha por conta propria: trocar de provedor
+    exigia achar as tres. Um lugar so', sem copia.
+    """
+    return motor.cliente()
 
 
 def diff_do_pr() -> str:
@@ -258,6 +264,21 @@ def _diagnostico_da_recusa(msg) -> str:
         or bool(servido_por and servido_por != cfg.MODEL_ADVOGADO)
     )
 
+    # 🚨 Antes de atribuir causa, conferir se havia fallback ARMADO. Num
+    # motor sem `fallbacks` (Bedrock -- ver `motor.SEM_NO_BEDROCK`) nenhum
+    # dos tres sinais aparece, e este bloco culparia rate limit por um
+    # fallback que nunca existiu, ou diria "nao da' para afirmar" -- verdade
+    # sem ser util. Guarda lendo o sinal errado e' o padrao de bug deste
+    # projeto; aqui ela pergunta ao motor, que e' quem sabe.
+    m = motor.ativo()
+    if not m.tem("fallback_de_recusa"):
+        partes.append(
+            f"nao havia fallback armado -- o motor e' {m.rotulo}, que nao "
+            "suporta fallback de recusa no servidor. A recusa vira "
+            "INCONCLUSIVO na primeira tentativa, e isso e' limite do "
+            "provedor, nao sinal sobre a acusacao")
+        return " | ".join(partes)
+
     if recomendado:
         partes.append(
             f"o fallback NAO foi tentado (rate limit ou sobrecarga); "
@@ -311,7 +332,10 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
     }
 
     try:
-        runner = _cliente().beta.messages.tool_runner(
+        # `ajusta_chamada` traduz o id do modelo e remove o que o motor ativo
+        # NAO aceita -- no Bedrock, `task_budget` e `fallbacks` com as betas
+        # delas. O que sai daqui esta em `motor.Motor.sem`, e o pre-voo diz.
+        runner = _cliente().beta.messages.tool_runner(**motor.ajusta_chamada(
             model=cfg.MODEL_ADVOGADO,
             max_tokens=cfg.MAX_TOKENS_ADVOGADO,
             # Teto do SDK. O break do for abaixo e' redundante de proposito:
@@ -348,7 +372,7 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
                  "cache_control": {"type": "ephemeral"}},
                 {"type": "text", "text": _prompt_da_acusacao(acusacao)},
             ]}],
-        )
+        ))
 
         ultima = None
         historico: list = []  # espelho da conversa, para o fechamento abaixo
@@ -395,7 +419,7 @@ def julga(acusacao: dict, diff: str, contexto: str = "") -> dict:
             v["fechamento_forcado"] = True
             try:
                 final = _cliente().beta.messages.create(
-                    model=cfg.MODEL_ADVOGADO,
+                    model=motor.modelo(cfg.MODEL_ADVOGADO),
                     max_tokens=4000,
                     output_config={"effort": "low"},
                     tool_choice={"type": "none"},
@@ -475,13 +499,27 @@ def sonda_api() -> tuple[bool, str]:
 
     Devolve (ok, detalhe). Nunca levanta: quem decide abortar e' o orquestrador.
     """
-    if not cfg.ANTHROPIC_API_KEY:
+    # ⚠️ A chave so' e' pre-requisito no motor que a USA. Esta linha abortava
+    # a rodada por ANTHROPIC_API_KEY vazia mesmo com o faturamento indo pela
+    # AWS -- guarda condicionada a um sinal que deixou de ser o dela.
+    #
+    # ⚠️ `ativo()` LEVANTA quando o motor foi forcado sem credencial -- e o
+    # contrato desta funcao e' nunca levantar, porque quem decide abortar e'
+    # o orquestrador. Entao o engano do operador chega aqui como (False,
+    # causa), igual a qualquer outra falha de pre-voo.
+    try:
+        m = motor.ativo()
+    except Exception as e:
+        return False, f"o motor nao resolveu: {type(e).__name__}: {e}"
+    if m.nome == "anthropic" and not cfg.ANTHROPIC_API_KEY:
         return False, "ANTHROPIC_API_KEY ausente"
+    modelo = motor.modelo(cfg.MODEL_PROMOTOR)
     try:
         r = _cliente().messages.create(
-            model=cfg.MODEL_PROMOTOR, max_tokens=1,
+            model=modelo, max_tokens=1,
             messages=[{"role": "user", "content": "ok"}])
-        return True, f"{cfg.MODEL_PROMOTOR} respondeu ({r.usage.input_tokens} tokens)"
+        return True, f"{modelo} respondeu ({r.usage.input_tokens} tokens) "\
+                     f"por {m.rotulo}"
     except Exception as e:
         msg = str(e)
         baixo = msg.lower()
@@ -494,6 +532,17 @@ def sonda_api() -> tuple[bool, str]:
             return False, "SALDO esgotado na conta -- a chave esta ok"
         if "rate_limit" in baixo:
             return False, "limite de taxa: nao e' chave nem saldo, tente daqui a pouco"
+        # As duas do lado AWS. Sem separar, as duas chegam como
+        # "ValidationException"/"AccessDenied" e se leem como "o modelo nao
+        # existe" -- mandando o operador procurar id errado em vez de abrir
+        # o IAM ou a pagina de acesso a modelo, que sao os consertos reais.
+        if "accessdenied" in baixo or "not authorized" in baixo:
+            return False, (f"o principal AWS nao tem permissao para invocar "
+                           f"{modelo} -- e' IAM, nao chave")
+        if ("could not access model" in baixo or "validationexception" in baixo
+                or "model identifier is invalid" in baixo):
+            return False, (f"{modelo} nao esta habilitado nesta conta/regiao "
+                           f"-- peca acesso ao modelo no console do provedor")
         return False, f"{type(e).__name__}: {msg[:200]}"
 
 
