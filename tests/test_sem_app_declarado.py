@@ -31,10 +31,23 @@ from veredito import ferramentas as f
 
 @pytest.fixture
 def sem_app(monkeypatch):
-    """O estado de um PR de terceiro: nada declarado."""
+    """O estado de um PR de terceiro: nada declarado.
+
+    🚨 O `codigo` entrou em 19/08, com o canario das montagens. O fixture dizia
+    "nada declarado" e deixava o LAYOUT DO DESAFIO em pe -- entao o "PR de
+    terceiro" que ele modelava tinha `codigo.montagens` apontando para
+    `app/api/app`, arvore que so' existe no desafio. Ninguem tinha notado porque
+    nenhuma sonda do pre-voo dependia disso ate' agora.
+
+    E' o mesmo vao que o `test_projeto_nu` existe para fechar: no estado nu TODO
+    valor de projeto tem que estar vazio, e meio-nu produz um cenario que nao e'
+    nem o desafio nem um terceiro.
+    """
     monkeypatch.setattr(cfg, "TEM_APP", False)
     monkeypatch.setattr(cfg, "APP_API_URL", "")
     monkeypatch.setattr(cfg, "USUARIOS", {})
+    monkeypatch.setattr(cfg, "TEM_PROVA_DIFERENCIAL", False)
+    monkeypatch.setattr(cfg, "CODIGO_MONTAGENS", [])
 
 
 @pytest.fixture
