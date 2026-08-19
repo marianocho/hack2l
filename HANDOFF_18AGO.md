@@ -168,7 +168,31 @@ diferente. Duas travas novas, nenhuma é lista mantida à mão:
 "não tem onde entregar" caiu, e sobrou um.
 ⚠️ **A cópia no vault (`Onde retomar.md`) diverge** e não é alcançável daqui.
 
-~~**1. Fundir por CONSERTO**~~ ✅ **FEITO em 18/08** — `veredito/fusao.py`.
+~~**1. Fundir por CONSERTO**~~ ✅ **FEITO em 18/08, e virou PROVA POR EXIT CODE.**
+
+`veredito/fusao.py` agrupa por endereço+procedência — inferência. Depois disso,
+`veredito/prova_de_fusao.py` **mede**: reverte um trecho do diff e vê quais
+testes param de falhar. Rodado no PR da bancada: `MESMO_DEFEITO`, **21s, zero de
+API**. O orquestrador grava `fusao.json`; o juiz e o comentário só **leem** — a
+pureza do juiz (milissegundos, sem rede) fica intacta. Sem Docker ou sem
+`codigo` declarado, o comentário diz *"indício e não prova"* em vez de calar.
+
+⚠️ **Granularidade é TRECHO, nunca hunk** — aquele PR é um hunk só com duas
+mudanças dentro; revertê-lo inteiro é reverter o PR. Diff de um trecho ⇒
+INCONCLUSIVO.
+
+~~**2. Divulgar a fundida com hipótese**~~ ✅ A duplicata do pré-advogado
+aparece **com hipótese**, igual à cortada por orçamento — antes era só uma
+contagem, o que deixava o engano do dedup *menos* visível que o corte de
+orçamento. É a única defesa daquele estágio.
+
+🚫 **NÃO reconstruir sem ler `MEDICAO_CHAVE_PRE_ADVOGADO.md`.** Quatro ideias
+plausíveis foram medidas e **engavetadas**: afrouxar a chave do pré-advogado
+(~metade das fusões erradas), o portão de similaridade (caudas sobrepostas),
+re-ranquear a fila (0,12 vaga/rodada — a vaga da duplicata não é recuperável
+antes de ser gasta) e `MAX_POR_LOCAL` por proximidade (11 de 27 rodadas mudam,
+e a troca perde diversidade de lente).
+
 As duas rodadas de 18/08 saíam com *"3 achados com evidência"* para **um**
 defeito; agora saem com **1**, e as três provas continuam no bloco.
 
@@ -202,12 +226,12 @@ sintoma no cabeçalho (o grupo assume o rótulo da lente líder) mas não resolv
 suspeitas, trio condenado diferente. A fusão faz as duas rodadas convergirem no
 mesmo *achado*, mas as acusações que chegam ao advogado seguem variando.
 
-**2. Os outros três PRs da bancada** *(~US$1,50)* — a medição de 15/08 refeita
+**3. Os outros três PRs da bancada** *(~US$1,20)* — a medição de 15/08 refeita
 pela porta da frente. **O PR limpo é o que mais importa:** se ele condenar
 alguma coisa, há falso positivo na Action, e isso é pior que tudo que foi
 consertado hoje.
 
-**3. Repo de demonstração público** *(1 dia)* — é o que converte, e o único
+**4. Repo de demonstração público** *(1 dia)* — é o que converte, e o único
 jeito de mostrar isto sem dar acesso à bancada privada.
 
 ## Mapa rápido do que é novo no código
