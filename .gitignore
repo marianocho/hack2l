@@ -45,3 +45,8 @@ artefatos/chamadas.json
 # dispara falso-inconclusivo na maquina do palco.
 artefatos/ambiente.json
 .repos/
+
+# O registro PR -> carimbo da regua. Aponta para pastas em saidas/,
+# que e ignorada: commitado, seria ponteiro pendurado -- o mesmo modo
+# de falha que _rodada_do_ponteiro existe para pegar.
+regua/rodadas.json
