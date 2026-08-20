@@ -462,21 +462,43 @@ público num repositório de demonstração.
 `gh secret set ANTHROPIC_API_KEY -R luisfelp07/veredito-demo < arquivo`.
 🚫 Não fiz: valor de chave de API é do operador, não meu.
 
-**(b)** 🚨 **A PR #1 (`contagem-de-tarefas`) está sem o `index=True` em
-`Task.project_id`** — conferido em `app/models.py:27` do demo, e o diff da PR não
-o acrescenta. É a versão **pré-16/08**, que o `CLAUDE.md` registra como o
-**controle negativo cego**, que condenava *com razão* (agregação sobre FK sem
-índice, `EXPLAIN` com `Seq Scan`).
+**(b)** ~~A PR #1 estaria sem o `index=True`~~ — **RETRATADO. Eu errei, e a PR
+#1 é sim a PR limpa.**
 
-A T5 escreveu que o PR limpo é o que mais importa, porque falso positivo faz o
-autor desinstalar. Do jeito que está, **um achado de performance na #1 estaria
-CERTO** — mas leria como falso positivo, e o conserto instintivo seria mexer no
-produto para parar de acusar o que ele acusa corretamente. Mesmo formato do primo
-do fixture já documentado (`sem_app` com o layout do desafio de pé): **meio-nu
-não é nu**.
+O diff dela toca `app/main.py` **e** `app/models.py`, e o que faz em models é
+exatamente acrescentar o índice, com comentário explicando o porquê:
 
-Aplicar o índice no base, ou rotular a #1 como controle negativo. As duas
-servem; a ambiguidade não.
+```python
+-    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
++    # index=True porque a listagem de projetos agrega tarefas por project_id.
++    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
+```
+
+🚨 **Como eu errei, porque o formato do erro importa mais que o erro.** Dois
+descuidos que se somaram e produziram uma conclusão confiante e falsa:
+
+1. li o diff com `gh pr diff 1 | head -40` — os hunks de `app/models.py` estavam
+   **abaixo do corte**, e eu concluí "a PR não toca models.py" a partir de uma
+   leitura truncada, sem notar que tinha truncado;
+2. depois fui conferir `app/models.py` por `gh api .../contents/app/models.py`,
+   que devolve o **default branch** — ou seja, o **base** do PR. O base
+   corretamente não tem o índice: é a PR que o adiciona. Li o base como se fosse
+   o head.
+
+O segundo é o mesmo erro que o `CLAUDE.md` já documenta em outra roupa: o
+descritor se lê **do base**, o código sob revisão é o **head**, e confundir os
+dois produz um retrato do lugar errado. Eu confundi, e o sintoma foi
+indistinguível de uma medição de verdade — conclusão específica, com número de
+linha, e errada.
+
+⚠️ E a lição operacional: **`head -N` num diff é truncamento silencioso.** Não
+existe aviso de que havia mais. Para decidir "a PR toca o arquivo X?", a
+pergunta certa é `--name-only`, que não tem cauda para cortar.
+
+**Nada a fazer na PR #1.** Ela é a versão pós-16/08 e o parecer da rodada de
+13:25 saiu como deveria: *"Nada a apontar neste PR. 4 suspeita(s) levantadas e a
+verificação derrubou todas."* — o falso positivo que a T5 mais temia **não
+aconteceu**, e é esse o resultado que a vitrine precisa mostrar.
 
 ### 8 → T5: sincronizar o workflow
 
