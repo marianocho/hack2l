@@ -15,6 +15,7 @@ artefato em disco continua dizendo a verdade, porque foi calculado em Python.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -92,6 +93,23 @@ _CHAMADAS: dict[str, list[dict]] = {}
 # Marcado por _marca_falha durante UMA chamada, lido por _fecha_chamada.
 _FALHA_DA_CHAMADA: str | None = None
 
+# 🚨 O QUARTO SINAL, e ele e' ORTOGONAL aos outros tres -- 20/08.
+#
+# A leitura NAO falhou e a ferramenta EXISTE: ela respondeu olhando so' um
+# pedaco do repositorio. Arquivo cortado no `CORTE_SAIDA`, grep parado no teto
+# de achados, resgate por sufixo parado no teto de varredura.
+#
+# 🚫 Isto NAO pode virar `erro`. Marcar falha faria a R3 converter em
+# INCONCLUSIVO toda refutacao obtida em repositorio grande -- que e' exatamente
+# o erro de 17/08 (`indisponivel` contado como erro no `pallets/flask`), so' que
+# pela porta do tamanho do repo em vez da porta da ferramenta ausente. Chamada
+# parcial continua `ok`; `parcial` anda ao lado, e quem le decide.
+#
+# ⚠️ E nao pode virar `indisponivel` tampouco: a ferramenta existe e foi usada.
+# "Olhei um pedaco" nao e' "nao olhei" nem "nao consegui olhar" -- e' o terceiro
+# eixo, e o parecer precisa dos tres para dizer de quem e' o limite.
+_PARCIAL_DA_CHAMADA: list[str] = []
+
 # 🚨 O TERCEIRO DESFECHO -- 17/08. Ferramenta que QUEBROU e ferramenta que o
 # projeto NAO DECLAROU nao sao a mesma coisa, e trata-las igual custou uma
 # rodada inteira: revisando `pallets/flask`, o advogado refutou cinco acusacoes
@@ -126,10 +144,22 @@ def _marca_indisponivel(texto: str) -> str:
     return texto
 
 
+def _marca_parcial(detalhe: str) -> None:
+    """Registra que ESTA chamada olhou so' um pedaco. Nao mexe no desfecho.
+
+    Acumula em lista porque uma chamada so' pode degradar por mais de um motivo
+    -- um `grep` que bate no teto de achados E pula um arquivo de segredo ve
+    duas fatias diferentes do repositorio, e o parecer precisa das duas para
+    dizer o tamanho do que nao foi olhado.
+    """
+    _PARCIAL_DA_CHAMADA.append(detalhe[:300])
+
+
 def _abre_chamada() -> None:
     global _FALHA_DA_CHAMADA, _INDISPONIVEL_DA_CHAMADA
     _FALHA_DA_CHAMADA = None
     _INDISPONIVEL_DA_CHAMADA = None
+    _PARCIAL_DA_CHAMADA.clear()
 
 
 def _desfecho_em_curso() -> str:
@@ -152,6 +182,9 @@ def _fecha_chamada(nome: str, saida: str) -> str:
         "ok": desfecho == "ok",
         "desfecho": desfecho,
         "causa": _FALHA_DA_CHAMADA or _INDISPONIVEL_DA_CHAMADA or "",
+        # Ortogonal a `desfecho`, de proposito: uma chamada `ok` pode ter visto
+        # so' um pedaco. Lista vazia = viu tudo que pediram. Ver _PARCIAL_DA_CHAMADA.
+        "parcial": list(_PARCIAL_DA_CHAMADA),
     })
     # Limpa ao registrar, e nao so' no _abre_chamada. `autoteste` chama
     # `_read_file`/`_grep`/`_http_request` DIRETO, fora de qualquer ferramenta:
@@ -161,6 +194,7 @@ def _fecha_chamada(nome: str, saida: str) -> str:
     # nas duas pontas.
     _FALHA_DA_CHAMADA = None
     _INDISPONIVEL_DA_CHAMADA = None
+    _PARCIAL_DA_CHAMADA.clear()
     # Grava a cada chamada, nao no fim: rodada que morre no meio nao pode levar
     # junto a prova de que as ferramentas estavam funcionando. Mesmo motivo do
     # _avisa acima.
@@ -210,6 +244,32 @@ def desfecho_da_acusacao(id_acusacao: str) -> tuple[int, int, int]:
     ok = sum(1 for c in chamadas if c.get("desfecho", "ok" if c["ok"] else "erro") == "ok")
     indisp = sum(1 for c in chamadas if c.get("desfecho") == "indisponivel")
     return ok, len(chamadas) - ok - indisp, indisp
+
+
+def leitura_parcial_da_acusacao(id_acusacao: str) -> list[str]:
+    """O que esta acusacao NAO conseguiu olhar, em ordem de acontecimento.
+
+    🚨 Existe para o parecer poder dizer DE QUEM E' O LIMITE. Medido no
+    `next.js` (repositorio gigante): ~220s por acusacao contra ~30s nos outros,
+    e 6 de 8 inconclusivos. O modo de falha e' o do produto -- ele nunca entende
+    o sistema, faz um ato de compreensao estreito e dirigido pela alegacao -- e
+    quando a fatia nao cabe ele nao degrada com elegancia: gasta o orcamento e
+    entao diz nao sei.
+
+    O INCONCLUSIVO que sai disso hoje e' indistinguivel de "olhamos o seu PR e
+    nao deu para concluir". Nao e' a mesma coisa, e a diferenca e' toda: um e'
+    limite do codigo revisado, o outro e' o nosso teto. Mesma familia do
+    `isolamento_bloqueou` (14/08) e do `corrida_do_mount` (20/08).
+
+    ⚠️ Lista vazia NAO significa "leu tudo que existe" -- significa "leu tudo
+    que pediram, inteiro". O advogado pode ter deixado de pedir; isso e' escolha
+    dele, e nao aparece aqui.
+    """
+    fora: list[str] = []
+    for c in _CHAMADAS.get(id_acusacao, []):
+        for p in c.get("parcial") or []:
+            fora.append(f"{c['ferramenta']}: {p}")
+    return fora
 
 
 # Chamadas HTTP por acusacao. Mesma chaveagem dos avisos, e pelo mesmo motivo:
@@ -977,6 +1037,119 @@ def _classifica(
     return "INCONCLUSIVO", False, f"par de exit codes inesperado: base={exit_base} head={exit_head}"
 
 
+# ------------------------------------------ a corrida do bind-mount (19/08)
+#
+# O SINTOMA, capturado: o arquivo de teste e' gravado no worktree do host, o
+# `_roda_pytest` do lado head volta com exit 4 e a saida diz
+#
+#     ERROR: file or directory not found: tests/test_selftest_nao.py
+#
+# ...com o arquivo LA', em disco. O lado base roda normal. Medido intermitente
+# em 19/08 -- tres execucoes do mesmo arquivo, sem tocar em codigo, deram
+# conjuntos DIFERENTES de falha -- e so' aparece com mais containers disputando
+# a camada de compartilhamento de arquivos do Docker Desktop no Windows.
+#
+# ✅ Ela ja falha para o lado seguro: exit 4 nao produz linha de resumo do
+# pytest => `rodou_head = False` => `erro` preenchido => a R3 devolve
+# INCONCLUSIVO. Nunca REFUTADO. Nao ha absolvicao falsa aqui, e por isso este
+# modulo NAO tenta evitar a corrida -- so' a NOMEIA.
+#
+# 🚨 O custo e' o outro, e e' ele que isto ataca: numa rodada paga a corrida
+# converte uma prova legitima em INCONCLUSIVO e o motivo APONTA PARA O PR. E' a
+# mesma familia do `isolamento_bloqueou` de 14/08 -- inconclusivo por causa
+# NOSSA disfarcado de limite do codigo revisado. La' a solucao foi rotular, e e'
+# a mesma aqui.
+#
+# 🚫 NAO retry cego. Repetir o pytest esconderia tambem o caso em que o arquivo
+# realmente nao foi gravado -- que e' defeito de verdade, e e' o que a recusa de
+# 17/08 (`testes_no_repo` errado) existe para gritar.
+
+_NAO_ENCONTRADO = re.compile(
+    r"^ERROR: file or directory not found: *(?P<alvo>.+?) *$", re.MULTILINE)
+
+
+def _sinal_da_corrida(saida: str, alvo: str, no_disco: Path) -> bool:
+    """Um lado so': a saida nega o alvo e o alvo esta em disco no host?
+
+    Duas condicoes, e a segunda e' a que separa a corrida do DEFEITO DE VERDADE:
+    se o arquivo nao esta no worktree, o pytest tem razao e nao ha nada a
+    rotular -- o `erro` cru continua gritando, que e' o desejado.
+
+    O casamento e' com o alvo EXATO passado ao pytest, e nao com a frase solta:
+    um `not found` sobre outro caminho (conftest, plugin, o `-p` de alguem) nao
+    e' esta corrida, e chamar tudo de corrida seria a guarda morrendo de
+    excesso -- o modo de falha do `NAO MEDIDO` do banco, em 17/08.
+    """
+    for achado in _NAO_ENCONTRADO.finditer(saida or ""):
+        if achado.group("alvo").strip().rstrip("/") == alvo.strip().rstrip("/"):
+            return no_disco.is_file()
+    return False
+
+
+def _corrida_do_mount(art: dict, alvo: str,
+                      no_disco: dict[str, Path]) -> dict | None:
+    """UM lado nao enxergou o arquivo; o OUTRO rodou com o mesmo alvo.
+
+    🚨 "O OUTRO LADO RODOU" e' o criterio que impede o rotulo de MENTIR, e nao
+    e' floreio. `ERROR: file or directory not found` tambem e' a assinatura
+    EXATA de `codigo.testes` apontando para fora do que `codigo.montagens`
+    monta -- o item 3 das cinco suposicoes chumbadas que o `pallets/flask`
+    expos em 17/08. Nesse caso o arquivo TAMBEM esta no worktree do host, e a
+    frase e' a MESMA palavra por palavra.
+
+    O que separa os dois: config errada falha nos DOIS lados, sempre; corrida
+    falha em UM. Sem este criterio o rotulo mandaria o operador culpar o Docker
+    Desktop por um `veredito.yml` torto -- guarda condicionada a um sinal
+    VIZINHO do que ela deveria vigiar, que e' o padrao de bug da casa.
+
+    Devolve o detalhe, ou None. Nao decide veredito nenhum: com exit 4 nao ha
+    linha de resumo, `rodou_<lado>` ja e' False e o estado ja e' INCONCLUSIVO
+    pela R3. Este campo e' DADO para o parecer, nao regra.
+    """
+    outro = {"base": "head", "head": "base"}
+    suspeitos = [
+        lado for lado in ("base", "head")
+        if _sinal_da_corrida(art.get(f"stdout_{lado}", ""), alvo, no_disco[lado])
+    ]
+    if not suspeitos:
+        return None
+    # 🚨 A LINHA QUE DECIDE, e ela e' UMA so' de proposito.
+    #
+    # A primeira versao tinha duas condicoes -- "um lado suspeito" e "o outro
+    # lado rodou" -- e a mutacao mostrou que a primeira era DECORACAO: nos dois
+    # lados suspeitos nenhum "outro" rodou, entao este filtro ja esvaziava a
+    # lista, e nao havia violacao que deixasse a primeira vermelha sozinha.
+    # Guarda que nao pode ser vista falhando nao e' guarda.
+    #
+    # Filtrar aqui cobre os dois casos com um criterio so':
+    #   dois suspeitos  -> nenhum "outro" produziu resumo -> vivos == []
+    #                      e' `veredito.yml` torto (assinatura IDENTICA), nao corrida
+    #   docker caiu     -> idem, vivos == []
+    #   um suspeito e o outro rodou -> vivos == [lado]: o alvo RESOLVE dentro do
+    #                      container, logo a queda e' do host.
+    vivos = [lado for lado in suspeitos if art.get(f"rodou_{outro[lado]}")]
+    if len(vivos) != 1:
+        return None
+    lado = vivos[0]
+    return {
+        "lado": lado,
+        "alvo": alvo,
+        "no_disco": str(no_disco[lado]),
+        "exit": art.get(f"exit_{lado}"),
+        "detalhe": (
+            f"corrida do bind-mount no {lado}: o arquivo de teste esta gravado "
+            f"no worktree do host ({no_disco[lado]}) e o container nao o "
+            f"enxergou (`file or directory not found: {alvo}`, exit "
+            f"{art.get(f'exit_{lado}')}). O lado {outro[lado]} rodou com o "
+            "MESMO alvo, entao o caminho resolve dentro do container. Isto e' a "
+            "camada de compartilhamento de arquivos do Docker no host -- NAO e' "
+            "defeito do PR nem `veredito.yml` errado. A prova nao foi obtida e "
+            "nada foi refutado; repetir a rodada com menos containers "
+            "concorrentes tende a fechar."
+        ),
+    }
+
+
 def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
     inicio = time.time()
     cfg.prepara_pastas()
@@ -995,6 +1168,11 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         # segundo.
         "estado": "INCONCLUSIVO", "provado": False,
         "motivo": "a prova nao chegou a rodar", "erro": None, "indisponivel": None,
+        # 19/08: inconclusivo por causa NOSSA nao pode se disfarcar de
+        # limite do PR. False significa "nao atribuido a corrida" em toda
+        # saida deste modulo, inclusive nas que voltam cedo -- ali a causa
+        # ja tem nome (indisponivel, recusa, canario, excecao).
+        "corrida_do_mount": False, "corrida_do_mount_detalhe": None,
         "segundos": 0.0,
     }
     escritos: list[Path] = []
@@ -1150,12 +1328,30 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
                     "estado acumulado, e a diferenca nao pode ser atribuida ao PR."
                 )
 
+        # A CORRIDA DO BIND-MOUNT, nomeada antes de o `erro` ser montado --
+        # e antes do `finally`, que apaga os arquivos que sao a prova de que
+        # eles estavam la'. Rotulo, nao regra: o estado ja e' INCONCLUSIVO pela
+        # R3, e continua sendo. O que muda e' PARA ONDE o motivo aponta.
+        corrida = _corrida_do_mount(
+            art, alvo, {"base": wt_base / cfg.CODIGO_TESTES_NO_REPO / nome,
+                        "head": wt_head / cfg.CODIGO_TESTES_NO_REPO / nome})
+        if corrida:
+            art["corrida_do_mount"] = True
+            art["corrida_do_mount_detalhe"] = corrida
+
         # O CONTRATO promete `erro` preenchido quando o docker cai. Sem isto so
         # a excecao preenchia, e o docker devolvendo exit 1 nao levanta excecao
         # nenhuma -- a promessa era falsa.
         if not rodou_base or not rodou_head:
             lado = "base" if not rodou_base else "head"
+            # `erro` continua preenchido nos dois casos: e' ele que faz a R3
+            # devolver INCONCLUSIVO, e a corrida NAO afrouxa isso. So' o texto
+            # muda -- de "o pytest nao executou" (que se le como culpa do
+            # repositorio) para a causa medida, que e' nossa.
             art["erro"] = (
+                corrida["detalhe"] + " --- saida no " + lado + ": "
+                + _corta(art[f"stdout_{lado}"], 500)
+            ) if corrida else (
                 f"pytest nao executou no {lado} (exit "
                 f"{art['exit_base'] if lado == 'base' else art['exit_head']} veio do docker). "
                 + _corta(art[f"stdout_{lado}"], 500)
@@ -1191,6 +1387,13 @@ def _formata_prova(art: dict) -> str:
         f"  head {art['commit_head']}: exit {art['exit_head']}",
         f"  => {art['estado']}: {art['motivo']}",
     ]
+    if art.get("corrida_do_mount"):
+        # Para o modelo, e nao para o parecer: sem esta linha o advogado le
+        # "file or directory not found" e reescreve o teste, gastando voltas
+        # do loop contra um problema que nao esta no teste dele.
+        linhas.append("  CORRIDA DO BIND-MOUNT (infraestrutura do host, nao o PR): "
+                      + art["corrida_do_mount_detalhe"]["detalhe"])
+        linhas.append("  O teste nao tem defeito: NAO o reescreva por causa disto.")
     if art["erro"]:
         linhas.append(f"  falha de execucao: {art['erro']}")
     if art.get("indisponivel"):
@@ -1212,22 +1415,82 @@ def _worktree_de(lado: str) -> Path:
     return _garante_worktree(commit, lado)
 
 
-def _resolve_caminho(raiz: Path, caminho: str) -> Path | None:
+# Diretorios que o RESGATE por sufixo e o `grep` nao entram. O caminho exato
+# nunca passa por aqui -- ver o docstring de `_resolve_caminho`.
+_IGNORA = {".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build"}
+
+
+def _teto_da_varredura() -> int:
+    """Quantos arquivos o resgate por sufixo pode visitar antes de desistir.
+
+    Lido em EXECUCAO, nao no import -- mesma precedencia do resto do produto
+    (variavel de ambiente > padrao), e e' o que faz
+    `VEREDITO_TETO_VARREDURA=200 py -3.12 ...` valer para uma rodada pontual.
+
+    ⚠️ Mora aqui e nao no `config.py` porque aquele arquivo tem outro dono nesta
+    semana. Ver PEDIDOS no HANDOFF_20AGO_T3.
+    """
+    try:
+        return max(1, int(os.environ.get("VEREDITO_TETO_VARREDURA", "") or 20000))
+    except ValueError:
+        return 20000
+
+
+def _resolve_caminho(raiz: Path, caminho: str) -> tuple[Path | None, str | None]:
     """Acha o arquivo mesmo quando a raiz do caminho vem errada.
+
+    Devolve `(alvo, parcial)`. `parcial` preenchido significa **desisti de
+    procurar**, e e' diferente de `(None, None)`, que significa **procurei tudo
+    e nao esta la'**.
 
     Os promotores discordam entre si sobre a raiz: 29 acusacoes disseram
     `app/routers/shares.py` e 20 disseram `app/api/app/routers/shares.py` para o
     MESMO arquivo. Sem isto o advogado gasta voltas do loop descobrindo que o
     caminho nao existe -- e volta gasta e' acusacao que morre inconclusiva.
+
+    🚨 O RESGATE ERA ILIMITADO, e era ele que derrubava a leitura em repo
+    grande. `raiz.rglob(nome)` anda a arvore INTEIRA por dentro -- inclusive
+    `node_modules`, `.next` e `.git` -- mesmo que quase nenhum nome case. O
+    `_grep` sempre honrou `_IGNORA`; este caminho nao, e a assimetria nao tinha
+    motivo. Isso roda a cada `read_file` que erra a raiz, que e' o caso comum.
+
+    🚨 E o pior nao era o tempo, era a MENTIRA no fim dele: sem alvo, o
+    `_read_file` dizia "nao existe em head (nem como sufixo de outro caminho)".
+    Num repositorio grande isso e' falso -- o arquivo pode muito bem estar la',
+    nos so' paramos de procurar. O advogado que le "nao existe" refuta a
+    acusacao com base nisso, e absolvicao falsa e' o desfecho que este produto
+    existe para impedir. Agora quem desiste diz que desistiu.
+
+    ⚠️ A poda vale so' para o RESGATE por sufixo. O caminho exato e' tentado
+    antes e sem poda nenhuma, entao um alvo legitimo dentro de `dist/` ou
+    `node_modules/` continua abrindo quando o promotor acerta a raiz.
     """
     rel = caminho.strip().lstrip("/\\").replace("\\", "/")
     alvo = (raiz / rel).resolve()
     if alvo.is_file():
-        return alvo
+        return alvo, None
+
     # sufixo: 'app/routers/shares.py' casa com '.../app/api/app/routers/shares.py'
-    casam = [p for p in raiz.rglob(Path(rel).name)
-             if p.is_file() and p.as_posix().endswith(rel)]
-    return casam[0] if len(casam) == 1 else None
+    nome = Path(rel).name
+    teto = _teto_da_varredura()
+    casam: list[Path] = []
+    vistos = 0
+    for dirpath, dirnames, filenames in os.walk(raiz):
+        # Poda NA DESCIDA: tirar do `dirnames` impede o os.walk de entrar. E' o
+        # que o rglob nao deixava fazer, e e' de onde vem a diferenca de tempo.
+        dirnames[:] = [d for d in dirnames if d not in _IGNORA]
+        vistos += len(filenames)
+        if nome in filenames:
+            p = Path(dirpath) / nome
+            if p.as_posix().endswith(rel):
+                casam.append(p)
+        if vistos >= teto:
+            return (casam[0] if len(casam) == 1 else None,
+                    f"a varredura de resgate parou em {vistos} arquivos (teto "
+                    f"{teto}) procurando `{rel}`. NAO conclua que o arquivo nao "
+                    "existe: nos paramos de procurar. Peca o caminho completo, "
+                    "ou use grep com um glob estreito.")
+    return (casam[0] if len(casam) == 1 else None), None
 
 
 _CACHE_LOCAL: dict[str, str] = {}
@@ -1275,7 +1538,10 @@ def normaliza_local(local: str) -> str:
         raiz = cfg.WORKTREES / "head"
         if raiz.is_dir():
             caminho, sep, sufixo = local.strip().partition(":")
-            alvo = _resolve_caminho(raiz, caminho)
+            # `_` de proposito: isto e' cosmetica de caminho no parecer, nao
+            # perícia. Varredura que desiste devolve o `local` cru, que e'
+            # o comportamento que esta funcao ja prometia.
+            alvo, _ = _resolve_caminho(raiz, caminho)
             if alvo is not None:
                 resultado = alvo.relative_to(raiz.resolve()).as_posix() + sep + sufixo
     except (OSError, ValueError):
@@ -1290,10 +1556,24 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
     # cacheado le dezenas de arquivos do MESMO lado. Sem isso seriam dezenas de
     # subprocessos git no caminho critico da rodada.
     raiz = raiz or _worktree_de(lado)
-    alvo = _resolve_caminho(raiz, caminho)
+    alvo, varredura_parcial = _resolve_caminho(raiz, caminho)
     if alvo is None:
+        # 🚨 Duas frases DIFERENTES, e a diferenca e' a que importa: "procurei e
+        # nao esta la'" autoriza o advogado a refutar; "desisti de procurar" nao
+        # autoriza nada. Dizer a primeira quando a verdade e' a segunda fabrica
+        # absolvicao falsa em todo repositorio grande.
+        if varredura_parcial:
+            _marca_parcial(varredura_parcial)
+            return _marca_falha(
+                f"ERRO: nao foi possivel LOCALIZAR {caminho} em {lado}. "
+                + varredura_parcial)
         return _marca_falha(
             f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho).")
+    if varredura_parcial:
+        # Achou, mas parou antes do fim: pode existir outro candidato com o
+        # mesmo sufixo que nunca foi visitado. O modelo le o arquivo e sabe que
+        # a escolha nao foi entre todos.
+        _marca_parcial(varredura_parcial)
     if raiz.resolve() not in alvo.parents:
         return _marca_falha(f"ERRO: {caminho} sai da raiz do repo.")
 
@@ -1314,11 +1594,26 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
 
     texto = alvo.read_text(encoding="utf-8", errors="replace")
     # numerado, porque a acusacao pede 'arquivo:linha' e chute de linha nao cola
-    numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(texto.splitlines(), 1))
-    return _corta(numerado)
-
-
-_IGNORA = {".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build"}
+    linhas = texto.splitlines()
+    numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(linhas, 1))
+    cortado = _corta(numerado)
+    if len(cortado) != len(numerado):
+        # 🚨 `_corta` fica com o FIM (o resumo do pytest mora no rodape), entao
+        # num fonte grande o modelo recebe o RABO do arquivo -- e a acusacao
+        # quase sempre aponta para o comeco. Ele so' ve `[... N caracteres
+        # cortados ...]`, que nao diz QUAIS linhas ele esta lendo nem que a
+        # linha da acusacao pode nao estar entre elas.
+        #
+        # ⚠️ Isto ROTULA, nao conserta. Ler centrado na linha da acusacao e' o
+        # conserto, e ficou na fila -- ver PEDIDOS no HANDOFF_20AGO_T3.
+        detalhe = (
+            f"{caminho} tem {len(linhas)} linhas e nao coube: o corte deixou o "
+            f"FIM do arquivo (teto de {cfg.CORTE_SAIDA} caracteres). Se a linha "
+            "da acusacao nao aparecer abaixo, ela foi cortada -- traga a regiao "
+            "com grep em vez de concluir pelo que sobrou.")
+        _marca_parcial(detalhe)
+        return f"[LEITURA PARCIAL] {detalhe}\n{cortado}"
+    return cortado
 
 
 def _com_pulados(corpo: str, pulados: list[str]) -> str:
@@ -1333,6 +1628,10 @@ def _com_pulados(corpo: str, pulados: list[str]) -> str:
     if not pulados:
         return corpo
     nomes = ", ".join(sorted(set(pulados))[:10])
+    # Ja era dito ao MODELO desde sempre; agora chega tambem ao parecer, pelo
+    # mesmo canal das outras fatias que nao foram olhadas.
+    _marca_parcial(f"{len(set(pulados))} arquivo(s) nao varrido(s) por convencao "
+                   f"de segredo: {nomes}")
     return (f"{corpo}\n\n[NAO VARRIDO -- convencao de arquivo de segredo: "
             f"{nomes}. O conteudo nao entra no contexto do modelo; a presenca "
             f"do arquivo no repositorio e' o fato que voce pode citar.]")
@@ -1370,6 +1669,14 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
             if rx.search(linha):
                 achados.append(f"{p.relative_to(raiz).as_posix()}:{i}: {linha.strip()[:200]}")
                 if len(achados) >= teto:
+                    # Mesmo raciocinio do `_com_pulados` abaixo: o que nao foi
+                    # varrido nao pode sumir. "200 resultados" lido como "sao
+                    # estes 200" e' a mesma absolvicao falsa por omissao muda,
+                    # e em repo grande o teto e' batido o tempo todo.
+                    _marca_parcial(
+                        f"grep /{padrao}/ parou no teto de {teto} resultados: ha "
+                        "mais ocorrencias que nao entraram. Estreite o padrao ou "
+                        "o glob antes de concluir pela contagem.")
                     achados.append(f"[... cortado no teto de {teto} ...]")
                     return _com_pulados("\n".join(achados), pulados)
     corpo = ("\n".join(achados) if achados
