@@ -977,6 +977,119 @@ def _classifica(
     return "INCONCLUSIVO", False, f"par de exit codes inesperado: base={exit_base} head={exit_head}"
 
 
+# ------------------------------------------ a corrida do bind-mount (19/08)
+#
+# O SINTOMA, capturado: o arquivo de teste e' gravado no worktree do host, o
+# `_roda_pytest` do lado head volta com exit 4 e a saida diz
+#
+#     ERROR: file or directory not found: tests/test_selftest_nao.py
+#
+# ...com o arquivo LA', em disco. O lado base roda normal. Medido intermitente
+# em 19/08 -- tres execucoes do mesmo arquivo, sem tocar em codigo, deram
+# conjuntos DIFERENTES de falha -- e so' aparece com mais containers disputando
+# a camada de compartilhamento de arquivos do Docker Desktop no Windows.
+#
+# ✅ Ela ja falha para o lado seguro: exit 4 nao produz linha de resumo do
+# pytest => `rodou_head = False` => `erro` preenchido => a R3 devolve
+# INCONCLUSIVO. Nunca REFUTADO. Nao ha absolvicao falsa aqui, e por isso este
+# modulo NAO tenta evitar a corrida -- so' a NOMEIA.
+#
+# 🚨 O custo e' o outro, e e' ele que isto ataca: numa rodada paga a corrida
+# converte uma prova legitima em INCONCLUSIVO e o motivo APONTA PARA O PR. E' a
+# mesma familia do `isolamento_bloqueou` de 14/08 -- inconclusivo por causa
+# NOSSA disfarcado de limite do codigo revisado. La' a solucao foi rotular, e e'
+# a mesma aqui.
+#
+# 🚫 NAO retry cego. Repetir o pytest esconderia tambem o caso em que o arquivo
+# realmente nao foi gravado -- que e' defeito de verdade, e e' o que a recusa de
+# 17/08 (`testes_no_repo` errado) existe para gritar.
+
+_NAO_ENCONTRADO = re.compile(
+    r"^ERROR: file or directory not found: *(?P<alvo>.+?) *$", re.MULTILINE)
+
+
+def _sinal_da_corrida(saida: str, alvo: str, no_disco: Path) -> bool:
+    """Um lado so': a saida nega o alvo e o alvo esta em disco no host?
+
+    Duas condicoes, e a segunda e' a que separa a corrida do DEFEITO DE VERDADE:
+    se o arquivo nao esta no worktree, o pytest tem razao e nao ha nada a
+    rotular -- o `erro` cru continua gritando, que e' o desejado.
+
+    O casamento e' com o alvo EXATO passado ao pytest, e nao com a frase solta:
+    um `not found` sobre outro caminho (conftest, plugin, o `-p` de alguem) nao
+    e' esta corrida, e chamar tudo de corrida seria a guarda morrendo de
+    excesso -- o modo de falha do `NAO MEDIDO` do banco, em 17/08.
+    """
+    for achado in _NAO_ENCONTRADO.finditer(saida or ""):
+        if achado.group("alvo").strip().rstrip("/") == alvo.strip().rstrip("/"):
+            return no_disco.is_file()
+    return False
+
+
+def _corrida_do_mount(art: dict, alvo: str,
+                      no_disco: dict[str, Path]) -> dict | None:
+    """UM lado nao enxergou o arquivo; o OUTRO rodou com o mesmo alvo.
+
+    🚨 "O OUTRO LADO RODOU" e' o criterio que impede o rotulo de MENTIR, e nao
+    e' floreio. `ERROR: file or directory not found` tambem e' a assinatura
+    EXATA de `codigo.testes` apontando para fora do que `codigo.montagens`
+    monta -- o item 3 das cinco suposicoes chumbadas que o `pallets/flask`
+    expos em 17/08. Nesse caso o arquivo TAMBEM esta no worktree do host, e a
+    frase e' a MESMA palavra por palavra.
+
+    O que separa os dois: config errada falha nos DOIS lados, sempre; corrida
+    falha em UM. Sem este criterio o rotulo mandaria o operador culpar o Docker
+    Desktop por um `veredito.yml` torto -- guarda condicionada a um sinal
+    VIZINHO do que ela deveria vigiar, que e' o padrao de bug da casa.
+
+    Devolve o detalhe, ou None. Nao decide veredito nenhum: com exit 4 nao ha
+    linha de resumo, `rodou_<lado>` ja e' False e o estado ja e' INCONCLUSIVO
+    pela R3. Este campo e' DADO para o parecer, nao regra.
+    """
+    outro = {"base": "head", "head": "base"}
+    suspeitos = [
+        lado for lado in ("base", "head")
+        if _sinal_da_corrida(art.get(f"stdout_{lado}", ""), alvo, no_disco[lado])
+    ]
+    if not suspeitos:
+        return None
+    # 🚨 A LINHA QUE DECIDE, e ela e' UMA so' de proposito.
+    #
+    # A primeira versao tinha duas condicoes -- "um lado suspeito" e "o outro
+    # lado rodou" -- e a mutacao mostrou que a primeira era DECORACAO: nos dois
+    # lados suspeitos nenhum "outro" rodou, entao este filtro ja esvaziava a
+    # lista, e nao havia violacao que deixasse a primeira vermelha sozinha.
+    # Guarda que nao pode ser vista falhando nao e' guarda.
+    #
+    # Filtrar aqui cobre os dois casos com um criterio so':
+    #   dois suspeitos  -> nenhum "outro" produziu resumo -> vivos == []
+    #                      e' `veredito.yml` torto (assinatura IDENTICA), nao corrida
+    #   docker caiu     -> idem, vivos == []
+    #   um suspeito e o outro rodou -> vivos == [lado]: o alvo RESOLVE dentro do
+    #                      container, logo a queda e' do host.
+    vivos = [lado for lado in suspeitos if art.get(f"rodou_{outro[lado]}")]
+    if len(vivos) != 1:
+        return None
+    lado = vivos[0]
+    return {
+        "lado": lado,
+        "alvo": alvo,
+        "no_disco": str(no_disco[lado]),
+        "exit": art.get(f"exit_{lado}"),
+        "detalhe": (
+            f"corrida do bind-mount no {lado}: o arquivo de teste esta gravado "
+            f"no worktree do host ({no_disco[lado]}) e o container nao o "
+            f"enxergou (`file or directory not found: {alvo}`, exit "
+            f"{art.get(f'exit_{lado}')}). O lado {outro[lado]} rodou com o "
+            "MESMO alvo, entao o caminho resolve dentro do container. Isto e' a "
+            "camada de compartilhamento de arquivos do Docker no host -- NAO e' "
+            "defeito do PR nem `veredito.yml` errado. A prova nao foi obtida e "
+            "nada foi refutado; repetir a rodada com menos containers "
+            "concorrentes tende a fechar."
+        ),
+    }
+
+
 def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
     inicio = time.time()
     cfg.prepara_pastas()
@@ -995,6 +1108,11 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
         # segundo.
         "estado": "INCONCLUSIVO", "provado": False,
         "motivo": "a prova nao chegou a rodar", "erro": None, "indisponivel": None,
+        # 19/08: inconclusivo por causa NOSSA nao pode se disfarcar de
+        # limite do PR. False significa "nao atribuido a corrida" em toda
+        # saida deste modulo, inclusive nas que voltam cedo -- ali a causa
+        # ja tem nome (indisponivel, recusa, canario, excecao).
+        "corrida_do_mount": False, "corrida_do_mount_detalhe": None,
         "segundos": 0.0,
     }
     escritos: list[Path] = []
@@ -1150,12 +1268,30 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
                     "estado acumulado, e a diferenca nao pode ser atribuida ao PR."
                 )
 
+        # A CORRIDA DO BIND-MOUNT, nomeada antes de o `erro` ser montado --
+        # e antes do `finally`, que apaga os arquivos que sao a prova de que
+        # eles estavam la'. Rotulo, nao regra: o estado ja e' INCONCLUSIVO pela
+        # R3, e continua sendo. O que muda e' PARA ONDE o motivo aponta.
+        corrida = _corrida_do_mount(
+            art, alvo, {"base": wt_base / cfg.CODIGO_TESTES_NO_REPO / nome,
+                        "head": wt_head / cfg.CODIGO_TESTES_NO_REPO / nome})
+        if corrida:
+            art["corrida_do_mount"] = True
+            art["corrida_do_mount_detalhe"] = corrida
+
         # O CONTRATO promete `erro` preenchido quando o docker cai. Sem isto so
         # a excecao preenchia, e o docker devolvendo exit 1 nao levanta excecao
         # nenhuma -- a promessa era falsa.
         if not rodou_base or not rodou_head:
             lado = "base" if not rodou_base else "head"
+            # `erro` continua preenchido nos dois casos: e' ele que faz a R3
+            # devolver INCONCLUSIVO, e a corrida NAO afrouxa isso. So' o texto
+            # muda -- de "o pytest nao executou" (que se le como culpa do
+            # repositorio) para a causa medida, que e' nossa.
             art["erro"] = (
+                corrida["detalhe"] + " --- saida no " + lado + ": "
+                + _corta(art[f"stdout_{lado}"], 500)
+            ) if corrida else (
                 f"pytest nao executou no {lado} (exit "
                 f"{art['exit_base'] if lado == 'base' else art['exit_head']} veio do docker). "
                 + _corta(art[f"stdout_{lado}"], 500)
@@ -1191,6 +1327,13 @@ def _formata_prova(art: dict) -> str:
         f"  head {art['commit_head']}: exit {art['exit_head']}",
         f"  => {art['estado']}: {art['motivo']}",
     ]
+    if art.get("corrida_do_mount"):
+        # Para o modelo, e nao para o parecer: sem esta linha o advogado le
+        # "file or directory not found" e reescreve o teste, gastando voltas
+        # do loop contra um problema que nao esta no teste dele.
+        linhas.append("  CORRIDA DO BIND-MOUNT (infraestrutura do host, nao o PR): "
+                      + art["corrida_do_mount_detalhe"]["detalhe"])
+        linhas.append("  O teste nao tem defeito: NAO o reescreva por causa disto.")
     if art["erro"]:
         linhas.append(f"  falha de execucao: {art['erro']}")
     if art.get("indisponivel"):
