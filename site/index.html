@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veredito</title>
+<meta name="description" content="Revisor de código autônomo que trata cada suspeita como acusação. Nada vira parecer sem artefato reproduzível.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* ---------------------------------------------------------------- tokens */
+:root{
+  --paper:#ECEEF0;
+  --surface:#F5F6F8;
+  --ink:#10141A;
+  --ink-2:#3B4552;
+  --muted:#5C6672;
+  --rule:#C9CFD6;
+  --rule-soft:#DCE1E6;
+  --stamp:#9B2B2B;
+  --provado:#1F6B4A;
+  --descartado:#5C6672;
+  --inconclusivo:#8A5D14;
+  --shadow:rgba(16,20,26,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1216;
+    --surface:#151B21;
+    --ink:#DEE4EB;
+    --ink-2:#AAB4C0;
+    --muted:#8391A0;
+    --rule:#2A343E;
+    --rule-soft:#1E262E;
+    --stamp:#CB5B52;
+    --provado:#4CA87C;
+    --descartado:#8391A0;
+    --inconclusivo:#C8973F;
+    --shadow:rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1216;
+  --surface:#151B21;
+  --ink:#DEE4EB;
+  --ink-2:#AAB4C0;
+  --muted:#8391A0;
+  --rule:#2A343E;
+  --rule-soft:#1E262E;
+  --stamp:#CB5B52;
+  --provado:#4CA87C;
+  --descartado:#8391A0;
+  --inconclusivo:#C8973F;
+  --shadow:rgba(0,0,0,.4);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+  font-size:17px;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible{outline:2px solid var(--stamp);outline-offset:3px;border-radius:2px}
+
+/* ----------------------------------------------------------- estrutura */
+.wrap{max-width:1080px;margin:0 auto;padding:0 clamp(20px,5vw,48px)}
+.row{
+  display:grid;
+  grid-template-columns:132px minmax(0,1fr);
+  gap:0 40px;
+  align-items:start;
+}
+@media (max-width:760px){
+  .row{grid-template-columns:1fr;gap:0}
+}
+.rail{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);
+  padding-top:.55em;
+  border-top:1px solid var(--rule);
+}
+@media (max-width:760px){
+  .rail{border-top:none;padding-top:0;margin-bottom:10px}
+}
+.col{min-width:0}
+section{padding:clamp(46px,7vw,84px) 0}
+section + section{border-top:1px solid var(--rule-soft)}
+
+h1,h2,h3,.stamp,.chip,.eyebrow,.rail,.brand{font-family:"Archivo",system-ui,sans-serif}
+h2{
+  font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.022em;
+  line-height:1.14;margin:0 0 .55em;text-wrap:balance;max-width:22ch;
+}
+h3{
+  font-size:14px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  margin:0 0 .35em;
+}
+p{margin:0 0 1.05em;max-width:64ch}
+p:last-child{margin-bottom:0}
+.lede{font-size:clamp(18px,2vw,20px);color:var(--ink-2)}
+strong{font-weight:600;color:var(--ink)}
+a{color:var(--ink);text-decoration-color:var(--stamp);text-underline-offset:3px}
+a:hover{color:var(--stamp)}
+
+/* ---------------------------------------------------------------- topo */
+header.top{
+  display:flex;align-items:baseline;justify-content:space-between;gap:20px;
+  padding:26px 0 0;flex-wrap:wrap;
+}
+.brand{
+  font-size:15px;font-weight:800;letter-spacing:.22em;text-transform:uppercase;
+}
+.brand span{color:var(--stamp)}
+.top nav{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12.5px;color:var(--muted);
+}
+
+/* --------------------------------------------------------------- herói */
+.hero{padding:clamp(40px,6vw,64px) 0 clamp(40px,6vw,70px)}
+.eyebrow{
+  font-size:11.5px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--stamp);margin:0 0 18px;
+}
+.hero h1{
+  font-size:clamp(32px,5.6vw,58px);font-weight:800;letter-spacing:-.032em;
+  line-height:1.05;margin:0 0 .42em;max-width:17ch;text-wrap:balance;
+}
+.hero h1 em{font-style:normal;color:var(--stamp)}
+.hero .lede{max-width:52ch}
+
+/* --------------------------------------------------- o parecer (herói) */
+.parecer{
+  position:relative;margin-top:clamp(34px,5vw,54px);
+  background:var(--surface);
+  border:1px solid var(--rule);
+  box-shadow:0 1px 0 var(--rule-soft), 0 18px 40px -28px var(--shadow);
+}
+.parecer-head{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:13px 18px;border-bottom:1px solid var(--rule);
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;
+  color:var(--muted);
+}
+.chip{
+  font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border:1px solid currentColor;border-radius:2px;
+}
+.chip.alta{color:var(--stamp)}
+.parecer-body{
+  padding:22px 18px 26px;overflow-x:auto;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:13px;line-height:1.85;
+}
+.parecer-body dl{margin:0;display:grid;grid-template-columns:104px minmax(0,1fr);gap:0 18px}
+.parecer-body dt{
+  color:var(--muted);font-size:10.5px;font-weight:500;letter-spacing:.11em;
+  text-transform:uppercase;padding-top:.42em;
+}
+.parecer-body dd{margin:0 0 14px;color:var(--ink);white-space:pre-wrap}
+.parecer-body dd:last-of-type{margin-bottom:0}
+.parecer-body .path{color:var(--ink-2)}
+.pass{color:var(--provado)}
+.fail{color:var(--stamp)}
+@media (max-width:620px){
+  .parecer-body dl{grid-template-columns:1fr;gap:0}
+  .parecer-body dt{padding-top:0;margin-bottom:2px}
+}
+
+.nota{
+  margin:14px 0 0;max-width:60ch;
+  font-size:14px;line-height:1.55;color:var(--muted);
+}
+.nota strong{color:var(--ink-2);font-weight:600}
+
+/* ------------------------------------------------------------- o selo */
+.stamp{
+  position:absolute;top:-20px;right:clamp(12px,4vw,32px);
+  transform:rotate(-7deg);
+  border:2.5px solid var(--stamp);border-radius:3px;
+  color:var(--stamp);background:var(--paper);
+  padding:7px 15px 8px;text-align:center;
+  box-shadow:inset 0 0 0 1.5px var(--paper), inset 0 0 0 3px var(--stamp);
+}
+.stamp b{
+  display:block;font-size:19px;font-weight:800;letter-spacing:.15em;line-height:1;
+}
+.stamp small{
+  display:block;margin-top:4px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;opacity:.85;
+}
+
+/* ------------------------------------------------------------- etapas */
+.etapas{display:grid;gap:2px;margin:0;padding:0;list-style:none;counter-reset:e}
+.etapas li{
+  display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 20px;
+  padding:22px 0;border-top:1px solid var(--rule-soft);
+}
+.etapas li:first-child{border-top:none;padding-top:0}
+.etapas .n{
+  counter-increment:e;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:12px;color:var(--stamp);padding-top:.28em;font-variant-numeric:tabular-nums;
+}
+.etapas .n::before{content:counter(e,decimal-leading-zero)}
+.etapas p{margin:0;color:var(--ink-2);font-size:16px}
+
+/* ------------------------------------------------------------ estados */
+.estados{display:grid;gap:0;margin:0;padding:0;list-style:none}
+.estados li{padding:20px 0 20px 18px;border-top:1px solid var(--rule-soft);border-left:3px solid var(--edge)}
+.estados li:first-child{border-top:none}
+.estados li:nth-child(1){--edge:var(--provado)}
+.estados li:nth-child(2){--edge:var(--descartado)}
+.estados li:nth-child(3){--edge:var(--inconclusivo)}
+.estados h3{color:var(--edge)}
+.estados p{margin:0;color:var(--ink-2);font-size:16px}
+
+/* --------------------------------------------------------------- fatos */
+.fatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:28px 36px;margin:0;padding:0}
+.fatos div{border-top:1px solid var(--rule);padding-top:14px}
+.fatos dt{
+  font-family:"Archivo",system-ui,sans-serif;
+  font-size:11px;font-weight:600;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:6px;
+}
+.fatos dd{
+  margin:0;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:19px;font-weight:500;letter-spacing:-.01em;font-variant-numeric:tabular-nums;
+}
+.fatos dd small{display:block;font-size:12.5px;color:var(--muted);letter-spacing:0;margin-top:5px;font-weight:400}
+
+/* ---------------------------------------------------------------- pé */
+footer{padding:46px 0 60px;border-top:1px solid var(--rule);margin-top:20px}
+.pe{
+  display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;color:var(--muted);
+}
+
+/* -------------------------------------------------------------- motion */
+.rise{opacity:0;transform:translateY(14px);animation:rise .72s cubic-bezier(.2,.7,.3,1) forwards}
+.rise:nth-child(2){animation-delay:.07s}
+.rise:nth-child(3){animation-delay:.14s}
+.parecer{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.3,1) .2s forwards}
+.stamp{opacity:0;animation:press .5s cubic-bezier(.3,1.5,.5,1) .62s forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+@keyframes press{
+  from{opacity:0;transform:rotate(-16deg) scale(1.35)}
+  to{opacity:1;transform:rotate(-7deg) scale(1)}
+}
+@media (prefers-reduced-motion: reduce){
+  .rise,.parecer,.stamp{animation:none;opacity:1;transform:none}
+  .stamp{transform:rotate(-7deg)}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">Vered<span>i</span>to</div>
+    <nav><a href="https://github.com/marianocho/hack2l">github.com/marianocho/hack2l</a></nav>
+  </header>
+
+  <!-- ------------------------------------------------------------ herói -->
+  <section class="hero">
+    <p class="eyebrow rise">Revisão de código por prova</p>
+    <h1 class="rise">Revisor de IA afirma. Este <em>prova</em> — ou diz que não conseguiu.</h1>
+    <p class="lede rise">Cada suspeita entra como acusação, e nada vira parecer sem artefato
+      reproduzível. O veredito é um exit code, não opinião de modelo.</p>
+
+    <div class="parecer">
+      <div class="stamp"><b>Provado</b><small>artefato anexado</small></div>
+      <div class="parecer-head">
+        <span class="chip alta">Crítica</span>
+        <span>security</span>
+        <span class="path">app/api/app/routers/shares.py:84-95</span>
+      </div>
+      <div class="parecer-body">
+        <dl>
+          <dt>O que</dt>
+          <dd>GET /shared/{doc_id} valida apenas se existe um share para qualquer
+usuário do documento, não se o share é para o usuário atual: um
+terceiro lê o documento compartilhado entre outros dois.</dd>
+
+          <dt>Árbitro</dt>
+          <dd>"Quem não é dono nem destinatário não pode ler"
+<span class="path">docs/REVIEW_TASK.md:43</span></dd>
+
+          <dt>Evidência</dt>
+          <dd>contra o app rodando —
+GET  /documents                      como alice  → <span class="pass">200</span>
+POST /documents/4/share?email=bob@…  como alice  → <span class="pass">201</span>
+GET  /shared/4                       como carol  → <span class="fail">200</span>
+<span class="path">artefatos/http_injection_03.json</span></dd>
+
+          <dt>Conserto</dt>
+          <dd>Filtrar o select por Share.shared_with_user_id == user.id (ou dono)
+em read_shared_document, retornando 403/404 caso contrário.</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="nota">Achado real, rodada de 14/08 — <strong>4 com parecer, 1 descartado com
+      motivo, 1 inconclusivo com causa.</strong> Carol não é dona nem destinatária do
+      documento 4, e mesmo assim leu.</p>
+  </section>
+
+  <!-- --------------------------------------------------------- problema -->
+  <section class="row">
+    <div class="rail">O problema</div>
+    <div class="col">
+      <h2>Relatório gerado por IA já fechou instituição.</h2>
+      <p>O curl encerrou seu programa de bug bounty no fim de janeiro de 2026. A taxa
+        de confirmação ficou acima de 15% por anos e caiu <strong>abaixo de 5% em
+        2025</strong>, soterrada pela enxurrada de relatórios gerados por IA. Foram
+        US$ 100 mil pagos por 87 vulnerabilidades reais antes de desligarem.</p>
+      <p>Encontrar deixou de ser o gargalo. <strong>Provar é.</strong> Uma ferramenta que
+        afirma sem evidência não economiza trabalho de revisão — ela transfere o
+        trabalho para quem vai conferir, e multiplica.</p>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------- como funciona -->
+  <section class="row">
+    <div class="rail">Como funciona</div>
+    <div class="col">
+      <h2>Promotores acusam. Advogado testa. Juiz sentencia.</h2>
+      <ol class="etapas">
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Promotores</h3>
+            <p>Seis lentes em paralelo leem o diff e o código em volta. Acusar é barato e
+              essa lista ninguém vê — o trabalho delas é cobertura, não seletividade.
+              Pedir que se contenham faz o modelo engolir achado real.</p>
+          </div>
+        </li>
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Advogado</h3>
+            <p>A única peça que é agente de verdade: pensa, chama ferramenta, lê o
+              resultado, decide. Vê uma acusação por vez, isolada, com o repositório
+              montado numa cópia descartável. <strong>Não argumenta — testa.</strong></p>
+          </div>
+        </li>
+        <li>
+          <span class="n"></span>
+          <div>
+            <h3>Juiz</h3>
+            <p>Regras determinísticas, cada uma com teste. O artefato ganha do modelo:
+              disse provado e o exit code discordou, vale o exit code. A severidade
+              acompanha a força da prova, não a gravidade teórica.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------ prova diferencial -->
+  <section class="row">
+    <div class="rail">A prova</div>
+    <div class="col">
+      <h2>A mesma prova roda nos dois commits.</h2>
+      <p>Só é provado se <strong>passa antes e falha depois</strong>. O falso alarme se
+        elimina sozinho, sem ninguém precisar julgá-lo: se o teste já falhava no código
+        de ontem, o problema não é do pull request.</p>
+      <p>E a evidência deixa de ser uma opinião sobre o seu código. Vira uma frase que
+        você pode conferir em trinta segundos: <em>este teste passa no seu código de hoje
+        e quebra com a sua mudança.</em></p>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------- três estados -->
+  <section class="row">
+    <div class="rail">O parecer</div>
+    <div class="col">
+      <h2>Três desfechos, e o terceiro é o que ninguém entrega.</h2>
+      <ul class="estados">
+        <li>
+          <h3>Provado</h3>
+          <p>Artefato reproduzível anexado ao achado. É o que sustenta severidade alta —
+            e é conferível sem confiar em nós.</p>
+        </li>
+        <li>
+          <h3>Descartado</h3>
+          <p>A perícia refutou. Sai no parecer <strong>com o motivo</strong>, porque
+            saber o que foi olhado e absolvido vale tanto quanto saber o que foi
+            condenado.</p>
+        </li>
+        <li>
+          <h3>Inconclusivo</h3>
+          <p>A ferramenta falhou, o parse quebrou, o modelo recusou. Sai rotulado, com a
+            causa, e <strong>nunca vira absolvição</strong>.</p>
+        </li>
+      </ul>
+      <p style="margin-top:26px">Num veredito binário, “não consegui provar” vira
+        absolvição limpa: a categoria mais importante se esvazia sozinha e o relatório
+        <em>parece</em> rigoroso. Por isso o terceiro estado é obrigatório aqui, e as duas
+        listas — descartados e inconclusivos — saem no parecer em voz alta.</p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ fatos -->
+  <section class="row">
+    <div class="rail">Estado</div>
+    <div class="col">
+      <h2>Onde está hoje.</h2>
+      <dl class="fatos">
+        <div>
+          <dt>Custo medido</dt>
+          <dd>US$ 0,071<small>por acusação verificada, com leitura e grep</small></dd>
+        </div>
+        <div>
+          <dt>Reconhecimento</dt>
+          <dd>2º lugar<small>Hack2L, agosto de 2026</small></dd>
+        </div>
+        <div>
+          <dt>Código</dt>
+          <dd>Aberto<small><a href="https://github.com/marianocho/hack2l">github.com/marianocho/hack2l</a></small></dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <footer>
+    <div class="pe">
+      <span>Veredito — revisão de código por prova</span>
+      <!-- contato@veredito.dev só responde depois do Email Routing configurado. -->
+      <span>
+        <a href="mailto:contato@veredito.dev">contato@veredito.dev</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/marianocho/hack2l">Repositório</a>
+      </span>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
