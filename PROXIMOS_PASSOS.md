@@ -5,6 +5,13 @@
 Quadro geral e fila completa. **Esta é a fila viva** — o `ESTADO.md` é do dia do
 hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 
+> 🆕 **20/08: cinco trilhas em paralelo até 01/09 — `TRILHAS_ATE_01SET.md`.**
+> Ele diz quem é dono de qual arquivo, em que ordem duas trilhas passam pelo
+> mesmo lugar, e traz o prompt de abertura de cada sessão. **Este arquivo aqui
+> passa a ter escritor único** (a sessão principal); cada trilha escreve em
+> `HANDOFF_20AGO_T<n>.md`. Sem isso, cinco sessões editando a fila viva é
+> conflito garantido no arquivo que menos pode ficar errado.
+
 > ⚠️ **Existe uma cópia deste quadro no vault** (`Onde retomar.md`). Em 15/08 as
 > duas divergiram **nos dois sentidos** — cada uma mais atual que a outra num
 > ponto diferente. Se você editar uma, propague. É a regra do "um arquivo só,
@@ -142,6 +149,57 @@ e a troca perde diversidade de lente).
 | 🆕 **Detector de `veredito.yml`** | 1 dia | **medido em 19/08: 12 campos saem de compose+Dockerfile com 0 erro.** Encolhe o onboarding de 26 campos para 2 perguntas — mas os 2 que sobram são os que sustentam CRÍTICA. Ver abaixo |
 | ✅ **`senha_em`** *(19/08)* | | a senha sai do yml commitado e vira **nome de variável**. 🚨 Não era questão de UX: `read_file` não bloqueia nada, não há redação em lugar nenhum, e o parecer vai para o PR. Ver abaixo |
 | ✅ **Segredo: entrada e saída** *(19/08)* | | `veredito/segredo.py`. `read_file`/`grep` recusam convenção universal de arquivo de segredo — **recusando o conteúdo e confirmando a existência**, que é o que preserva a acusação legítima; e o corpo do comentário passa por redação. 50 travas, 5 mutações. Ver abaixo |
+| ✅ **O motor — quem fatura a chamada** *(19/08)* | | `veredito/motor.py`. `anthropic` / `aws` / `bedrock` atrás de `cliente()`, `modelo()`, `ajusta_chamada()`. **Destrava crédito promocional da AWS** — e a perda de capacidade do Bedrock é dita em voz alta. Ver abaixo |
+
+#### ✅ O motor — `anthropic` / `aws` / `bedrock` *(19/08)*
+
+**O que ele destrava:** rodar sobre crédito da AWS sem tocar em nenhuma das
+peças que fazem o trabalho. Antes, as três que falam com a Anthropic
+(`promotores`, `advogado`, `fontes`) construíam o cliente cada uma por conta
+própria — trocar de provedor significava achar as três e mantê-las de acordo.
+Mesma classe do `app/api/app` chumbado: infraestrutura espalhada dentro do
+código que faz o trabalho.
+
+```
+VEREDITO_MOTOR=auto|anthropic|aws|bedrock     # variável de ambiente > detecção
+```
+
+| motor | paridade | quando usar |
+|---|---|---|
+| `anthropic` | total | padrão; paga com `ANTHROPIC_API_KEY` |
+| `aws` | total, no mesmo dia | Claude Platform on AWS — operada pela Anthropic sobre infra AWS |
+| `bedrock` | **menor** | é onde crédito promocional da AWS costuma valer |
+
+🚨 **O Bedrock custa duas capacidades, e as duas doem onde este produto vive:**
+`task_budget` (o advogado deixa de saber o próprio orçamento e fecha no corte do
+`max_tokens`, não por decisão dele) e `fallback_de_recusa` (recusa do
+classificador de cibersegurança vira INCONCLUSIVO direto, sem segunda tentativa
+— e cibersegurança é a categoria carro-chefe deste produto).
+
+**Isso não some em silêncio**, e é o ponto: o que foi removido fica em
+`Motor.sem`, legível de fora; `descreve()` entra no pré-voo ao lado dos
+scanners; e `advogado._diagnostico_da_recusa` consulta `tem("fallback_de_recusa")`
+antes de culpar rate limit por um fallback que nunca foi armado. Remover os dois
+e seguir seria o padrão de bug de novo — a guarda sumindo justo no motor onde
+ela não existe.
+
+🚨 **Forçar motor sem credencial LEVANTA, não cai para a API direta.** Quem
+escreveu `VEREDITO_MOTOR=bedrock` está gastando crédito da AWS de propósito;
+cair calado **faturaria a rodada na conta errada** e ela pareceria perfeita. Em
+`auto`, cai — e diz que caiu. É *ausente não é vazio, errado não é ausente*
+aplicado a credencial.
+
+⚠️ **Conferido ao documentar, não assumido:** os três consomem `motor.cliente()`,
+os três traduzem o id com `motor.modelo(...)`, e só o advogado precisa de
+`ajusta_chamada()` — porque só ele manda `task_budget` e `fallbacks`. O único
+`anthropic.Anthropic(` que restou no código está dentro do próprio `motor.py`.
+
+🚫 **Não há wrapper boto3 à mão sobre o bedrock-runtime, de propósito.** O
+`tool_runner` **é** o advogado; reimplementá-lo para trocar quem fatura
+bifurcaria a única peça do produto que é agente de verdade. Os clientes de
+Bedrock/AWS do próprio SDK assinam com SigV4 pelo boto3 e expõem
+`beta.messages.tool_runner` igual — o boto3 entra onde ele é de fato bom:
+resolver credencial.
 
 #### ✅ Segredo: as duas frentes *(19/08)*
 
@@ -453,12 +511,30 @@ notado porque nenhuma sonda do pré-voo dependia disso. Completado com
 `TEM_PROVA_DIFERENCIAL=False` e `CODIGO_MONTAGENS=[]`; é o mesmo vão que o
 `test_projeto_nu` existe para fechar.
 
-🚫 **O limite, escrito para não virar confiança a mais:** o canário prova que o
-`-v` pousa no **destino declarado**, não que o destino seja a raiz de onde o
-python importa. Se o yml declara `/srv/app` e a imagem importa de `/code/app`, a
-montagem está viva, o canário fica verde e o pytest continua lendo a imagem.
-Pegar isso exige saber a raiz de import, que **nenhum campo do `veredito.yml`
-declara hoje**. Fica na fila.
+🚫 **O limite era este:** o canário prova que o `-v` pousa no **destino
+declarado**, não que o destino seja a raiz de onde o python importa. Se o yml
+declara `/srv/app` e a imagem importa de `/code/app`, a montagem está viva, o
+canário fica verde e o pytest continua lendo a imagem.
+
+> ✅ **FECHADO no mesmo dia** — `tests/test_canario_raiz_de_import.py` e a
+> checagem em `ferramentas.py`. O limite estava **escrito no docstring desde o
+> primeiro dia**, como limite conhecido, e foi isso que o tornou barato de
+> fechar: quem pegou o arquivo já sabia onde estava o buraco.
+>
+> **Como foi resolvido sem campo novo no yml:** `import <pacote>` dentro do
+> mesmo container, com `<pacote>` **derivado** de `destino` relativo a
+> `trabalho`. Nada de perguntar a raiz de import ao cliente — *lista mantida →
+> critério derivado*, de novo.
+>
+> ⚠️ E **só `outra` reprova**: pacote que simplesmente não é importável fica
+> quieto, senão a guarda dispararia em todo diretório de teste — guarda morrendo
+> de excesso, que é o modo de falha que o `NAO MEDIDO` do banco ensinou.
+>
+> 🚨 O arnês de mutação também mordeu aqui: a primeira injeção casava string
+> exata, a string tinha uma continuação `\` que o literal errou, o `replace`
+> virou **no-op** e a suíte passou inteira — que se lê exatamente como *"a trava
+> é fraca"*. **Mutação que não dispara é indistinguível de trava que não pega.**
+> Passou a mutar por índice de linha, com `assert` no alvo antes de rodar.
 
 Suíte: **655 passando, 1 pulado**. A única falha (`test_llm_alvo`) é anterior e
 pede o app do desafio no ar — conferido rodando a mesma prova contra o
