@@ -19,10 +19,9 @@ import time
 from collections import Counter
 from pathlib import Path
 
-import anthropic
-
 from . import arbitro as arb
 from . import config as cfg
+from . import motor
 
 SISTEMA = (
     "Voce e' um PROMOTOR do Veredito. Le um pull request sob uma lente especifica "
@@ -174,7 +173,7 @@ def _acusa_um(cliente, nome: str, lente: str, diff: str,
         })
     try:
         r = cliente.messages.create(
-            model=cfg.MODEL_PROMOTOR,
+            model=motor.modelo(cfg.MODEL_PROMOTOR),
             max_tokens=8000,
             system=SISTEMA,
             messages=[{"role": "user", "content": prefixo + [
@@ -216,9 +215,10 @@ def acusa(diff: str, contexto: str | None = None) -> list[dict]:
     todos. Ver `arbitro.py` para o numero que comprou essa decisao.
     """
     cfg.prepara_pastas()
-    cliente = anthropic.Anthropic(api_key=cfg.ANTHROPIC_API_KEY)
+    cliente = motor.cliente()
     ls = lentes()
-    print(f"{len(ls)} promotores em paralelo, modelo {cfg.MODEL_PROMOTOR}")
+    print(f"{len(ls)} promotores em paralelo, modelo {cfg.MODEL_PROMOTOR} "
+          f"por {motor.ativo().rotulo}")
     print(f"contexto do repo: "
           f"{f'{len(contexto)} chars' if contexto else 'NENHUM (arbitro sai null)'}")
 

@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 import requests
@@ -26,6 +27,7 @@ from anthropic import beta_tool
 
 from . import config as cfg
 from . import llm_alvo
+from . import segredo
 
 # O orquestrador carimba isto antes de soltar o advogado em cada acusacao, para
 # que o nome do artefato case com a acusacao sem mudar a assinatura da tool --
@@ -567,6 +569,302 @@ def _montagens(worktree: Path) -> list[str]:
     return fora
 
 
+# ------------------------------------------------- o canario do bind-mount
+#
+# 🚨 O FURO QUE ELE FECHA, e ele mora na ferramenta que assina PROVADO.
+#
+# `_montagens` produz os `-v`; ninguem conferia que eles POUSAM. Com o
+# mapeamento disco->container errado, o docker monta em lugar nenhum de util, o
+# pytest importa o codigo ASSADO NA IMAGEM, e a prova diferencial compara
+# imagem contra imagem: MESMO resultado nos dois lados, `_classifica` le "nao
+# falhou no head" e devolve REFUTADO.
+#
+# Absolvicao falsa e MUDA -- exatamente o desfecho que o produto existe para
+# impedir. Foi o canario de 08/08, feito a mao uma vez e nunca automatizado.
+#
+# ⚠️ O ARQUIVO DE TESTE NAO SERVE DE CANARIO, e e' por isso que o furo
+# sobreviveu um ano de conserto em volta dele. Ele e' gravado no worktree e
+# roda, logo a montagem de TESTES esta viva -- e `rodou_base`/`rodou_head`
+# ficam True, e o pre-voo fica verde. A montagem que decide o veredito e' a do
+# CODIGO, e essa nenhuma sonda exercitava. Guarda condicionada a um sinal
+# vizinho do que ela deveria vigiar: o padrao de bug deste projeto.
+#
+# 🚨 E ele fica URGENTE agora: ate' 19/08 as `montagens` eram escritas a mao no
+# veredito.yml, entao um humano tinha olhado para elas pelo menos uma vez. Com
+# o detector (fila, secao A) elas passam a ser GERADAS, e nao ha mais ninguem
+# olhando.
+
+_NOME_DO_CANARIO = "_veredito_canario.txt"
+
+
+def _pacote_de(destino: str) -> str | None:
+    """O nome de import que corresponde a este destino de montagem.
+
+    `/code/app` com `trabalho: /code` -> `app`. E' a mesma conta que o pytest
+    faz: o diretorio de trabalho e' a raiz, e o caminho relativo vira o caminho
+    de import.
+
+    Devolve None quando nao da' para derivar -- destino fora do `trabalho`, ou
+    segmento que nao e' identificador Python valido (`my-lib`, `2fa`). Nesse
+    caso o canario confere so' o arquivo, e diz que conferiu so' o arquivo.
+    Derivar errado seria pior que nao derivar: acusaria sombra onde nao ha.
+    """
+    trabalho = (cfg.CODIGO_TRABALHO or "").rstrip("/")
+    destino = destino.rstrip("/")
+    if not trabalho or not destino.startswith(trabalho + "/"):
+        return None
+    rel = destino[len(trabalho) + 1:]
+    partes = [p for p in rel.split("/") if p]
+    if not partes or not all(p.isidentifier() for p in partes):
+        return None
+    return ".".join(partes)
+
+
+def _onde_importou(saida: str, pacote: str) -> str | None:
+    """De onde o container importou `pacote`, segundo a linha `IMPORT`.
+
+    None quando o pacote nao importou, ou quando o leitor nao emitiu a linha --
+    e os dois casos sao deliberadamente o MESMO aqui: "nao consegui medir" nao
+    pode reprovar, so' `outra` reprova. Ver o comentario no laco que chama.
+    """
+    for linha in saida.splitlines():
+        campos = linha.strip().split(None, 2)
+        if len(campos) == 3 and campos[0] == "IMPORT" and campos[1] == pacote:
+            return None if campos[2] == "-" else campos[2]
+    return None
+_canario_memo: dict[tuple, dict] = {}
+
+
+def _chave_do_canario(lado: str) -> tuple:
+    """A chave e' feita do que o resultado DEPENDE, nunca so' do lado.
+
+    🚨 Indexar so' por `lado` deixou o memo herdar veredito de outra
+    configuracao: um teste com montagens dubladas gravava "montagem morta"
+    em `head`, e a proxima medicao -- outro layout, outro worktree -- lia
+    aquele resultado como se fosse dela. Tres testes `@lento` vermelhos em
+    19/08, e passando isolados, que e' a assinatura de estado compartilhado.
+
+    Numa rodada de verdade a config e' imutavel e a chave velha bastaria --
+    e e' exatamente por isso que o furo nao aparecia em producao nem nas
+    travas do canario, que limpam o memo por fixture. Chave feita do FATO
+    (as montagens, o trabalho) em vez de um proxy dele.
+    """
+    montagens = tuple(tuple(m) if isinstance(m, (list, tuple)) else (m,)
+                      for m in cfg.CODIGO_MONTAGENS or [])
+    return (lado, montagens, cfg.CODIGO_TRABALHO)
+
+
+def _canario_das_montagens(lado: str = "head") -> dict:
+    """As montagens declaradas POUSAM dentro do container?
+
+    Grava um nonce em cada origem declarada do worktree, roda o container com
+    EXATAMENTE os mesmos `-v` que `_roda_pytest` usa, e le de volta pelo
+    caminho de DESTINO. Se o nonce aparece, aquele `-v` esta vivo.
+
+    🚨 Tem que ser a MESMA forma de comando de `_roda_pytest`. Canario que
+    exercita outro caminho e' decoracao: `_confere_imagem_do_head` ja confere o
+    container RODANDO, que nao leva `-v` nenhum -- outra pergunta, outra
+    resposta.
+
+    Memoizado por lado: montagens e worktrees sao os mesmos a rodada inteira,
+    entao custa UM container por lado, uma vez, e nao um por acusacao.
+
+    Ele responde DUAS perguntas, e a segunda entrou em 19/08 fechando o limite
+    que a primeira versao declarava aqui:
+
+      (a) o `-v` POUSA?           nonce escrito na origem, lido pelo destino
+      (b) o destino e' a RAIZ     `import <pacote>` dentro do container, e o
+          DE IMPORT?              `__file__`/`__path__` tem que cair sob ele
+
+    🚨 (b) NAO E' redundante com (a), e o caso que separa os dois e' o perigoso:
+    a montagem viva em `/srv/app`, o nonce chegando la', e o python importando
+    `app` de `/code/app` assado na imagem. A conferencia de arquivo passa
+    VERDE, os dois lados voltam iguais e a prova diferencial absolve. O
+    `<pacote>` sai de `_pacote_de` -- destino relativo ao `trabalho`, a mesma
+    conta que o pytest faz -- e nao de campo novo no yml.
+
+    ⚠️ ASSIMETRIA DELIBERADA: so' `outra` (importa, mas de fora da montagem)
+    reprova. Pacote que nao importa NAO reprova, porque diretorio de teste, de
+    dados ou de template nao e' pacote, e cobrar import deles faria a guarda
+    disparar em projeto correto -- morrendo de excesso, que da' no mesmo que
+    morrer de falta.
+
+    Devolve `{"aplica", "ok", "conferidas", "mortas", "sombreadas", "detalhe"}`
+    -- e `erro` quando quem falhou foi a infraestrutura.
+    """
+    chave = _chave_do_canario(lado)
+    if chave in _canario_memo:
+        return _canario_memo[chave]
+
+    # 🚨 A guarda precisa conseguir ficar QUIETA. Projeto que nao declara
+    # `codigo` nao tem montagem para pousar: isso e' NAO SE APLICA, nunca
+    # "montagem morta". Alarme que dispara em todo PR de terceiro ensina o
+    # leitor a pular justamente esta linha -- foi o `NAO MEDIDO` do banco, em
+    # 17/08, a guarda morrendo de excesso.
+    if not cfg.TEM_PROVA_DIFERENCIAL:
+        r = {"aplica": False, "ok": True, "conferidas": 0, "mortas": [],
+             "detalhe": ("o projeto nao declara `codigo.montagens` -- nao ha "
+                         "bind-mount a conferir")}
+        _canario_memo[chave] = r
+        return r
+
+    escritos: list[Path] = []
+    try:
+        wt = _worktree_de(lado)
+        nonce = uuid.uuid4().hex
+        pares: list[tuple[str, str]] = []
+        ausentes: list[str] = []
+        for par in cfg.CODIGO_MONTAGENS:
+            if not isinstance(par, (list, tuple)) or len(par) != 2:
+                continue
+            origem = (wt / str(par[0])).resolve()
+            # 🚨 NAO pular igual `_montagens` pula -- e este furo estava DENTRO
+            # do proprio canario, achado ao escrever a trava.
+            #
+            # `_montagens` pula origem que nao existe, de proposito (montar
+            # vazio faria o pytest coletar 0 teste). Se o canario pulasse
+            # igual, ele ficaria mudo exatamente na montagem que nunca chegou a
+            # ser montada: guarda condicionada ao mesmo sinal que ela deveria
+            # vigiar -- o padrao de bug deste projeto, dentro da guarda escrita
+            # contra ele.
+            #
+            # E o caso e' real: origem que sumiu (diretorio renomeado pelo PR,
+            # ou `codigo.montagens` gerado errado pelo detector) desaparece do
+            # `-v` sem ruido nenhum, e o pytest passa a importar da imagem.
+            if not origem.is_dir():
+                ausentes.append(f"{par[0]} (origem nao existe em {lado})")
+                continue
+            (origem / _NOME_DO_CANARIO).write_text(nonce, encoding="utf-8")
+            escritos.append(origem / _NOME_DO_CANARIO)
+            destino_dir = str(par[1]).rstrip("/")
+            pares.append((str(par[0]), destino_dir + "/" + _NOME_DO_CANARIO,
+                          destino_dir, _pacote_de(destino_dir)))
+
+        if not pares:
+            r = {"aplica": True, "ok": False, "conferidas": 0,
+                 "mortas": ausentes or [str(p) for p in cfg.CODIGO_MONTAGENS],
+                 "detalhe": (f"nenhuma origem de `codigo.montagens` existe em "
+                             f"{lado} -- o pytest rodaria so' o codigo da imagem")}
+            _canario_memo[chave] = r
+            return r
+
+        # `python` e nao `sh`: a garantia que queremos e' "funciona onde o
+        # `_roda_pytest` funciona", e o que ele roda la' e' `python -m pytest`.
+        #
+        # Duas perguntas, dois tipos de linha, e a segunda entrou em 19/08 para
+        # fechar o vao que o docstring desta funcao ja declarava:
+        #
+        #   "<destino>/_veredito_canario.txt <nonce>"  o `-v` POUSOU
+        #   "IMPORT <pacote> <onde>"                   a montagem e' a RAIZ DE
+        #                                              IMPORT, e nao so' um
+        #                                              diretorio que existe
+        #
+        # ⚠️ Argumento prefixado com `P:` e' pacote; o resto e' caminho. Manter
+        # UMA invocacao importa: duas medicoes em containers diferentes podem
+        # discordar por motivo que nao e' a montagem.
+        leitor = (
+            "import pathlib,sys,importlib\n"
+            "for a in sys.argv[1:]:\n"
+            "    if a.startswith('P:'):\n"
+            "        pac = a[2:]\n"
+            "        try:\n"
+            "            m = importlib.import_module(pac)\n"
+            "            onde = getattr(m, '__file__', None) or next(\n"
+            "                iter(getattr(m, '__path__', []) or []), None)\n"
+            "        except Exception:\n"
+            "            onde = None\n"
+            "        print('IMPORT', pac, onde or '-')\n"
+            "    else:\n"
+            "        q = pathlib.Path(a)\n"
+            "        print(a, q.read_text().strip() if q.is_file() else 'AUSENTE')\n"
+        )
+        alvos = [arq for _, arq, _, _ in pares]
+        alvos += [f"P:{pac}" for _, _, _, pac in pares if pac]
+        cmd = [
+            "docker", "compose", "-f", str(cfg.COMPOSE),
+            "--project-directory", str(cfg.RAIZ_DO_APP),
+            "run", "--rm",
+            *_montagens(wt),
+            "api", "python", "-c", leitor, *alvos,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=cfg.TIMEOUT_PYTEST_S)
+        saida = (proc.stdout or "") + (proc.stderr or "")
+
+        # 🚨 "Quebrou" nao e' "nao pousou", e confundir os dois faria o canario
+        # culpar o veredito.yml do cliente por um docker fora do ar. E' a mesma
+        # distincao que a R3 comprou em 17/08: o leitor nem imprimiu as linhas
+        # dele, entao nao houve medicao -- nao houve montagem morta.
+        if not any(arq in saida for _, arq, _, _ in pares):
+            r = {"aplica": True, "ok": False, "conferidas": 0, "mortas": [],
+                 "erro": _corta(saida, 400),
+                 "detalhe": ("o container do canario nao rodou -- infraestrutura, "
+                             "nao o `codigo.montagens` do projeto")}
+            _canario_memo[chave] = r
+            return r
+
+        # As `ausentes` entram MORTAS, nao somem: montagem declarada que o
+        # `_montagens` pulou e' justamente a que ninguem ia notar faltando.
+        vivas, mortas, sombreadas = [], list(ausentes), []
+        for origem_rel, arq, destino_dir, pacote in pares:
+            if f"{arq} {nonce}" in saida:
+                vivas.append(origem_rel)
+            else:
+                mortas.append(f"{origem_rel} -> {destino_dir}")
+                continue
+
+            # 🚨 O `-v` pousou. Mas o python IMPORTA de la'?
+            #
+            # Este e' o caso (b) do docstring, e ele passa VERDE pela conferencia
+            # de arquivo: a montagem esta viva em `/srv/app`, o arquivo esta la',
+            # e mesmo assim o pytest importa `app` de `/code/app`, assado na
+            # imagem. Os dois lados voltam iguais e a prova diferencial absolve.
+            #
+            # ⚠️ So' `outra` reprova. `nao_importavel` NAO reprova, e a diferenca
+            # e' a licao 0: diretorio de teste, de dados ou de template nao e'
+            # pacote, e cobrar import deles faria a guarda disparar em projeto
+            # correto -- morrendo de excesso, que da' no mesmo que morrer de
+            # falta.
+            onde = _onde_importou(saida, pacote) if pacote else None
+            if onde and not onde.startswith(destino_dir.rstrip("/") + "/") \
+                    and onde != destino_dir:
+                sombreadas.append(f"{origem_rel}: montado em {destino_dir}, mas "
+                                  f"`{pacote}` importa de {onde}")
+
+        problemas = mortas + sombreadas
+        r = {
+            "aplica": True, "ok": not problemas, "conferidas": len(vivas),
+            "mortas": mortas, "sombreadas": sombreadas,
+            "detalhe": (
+                f"{len(vivas)} montagem(ns) pousaram e sao a raiz de import ({lado})"
+                if not problemas else
+                (f"montagem declarada que NAO pousa no container ({lado}): {mortas}. "
+                 if mortas else "")
+                + (f"montagem VIVA mas SOMBRADA pela imagem ({lado}): {sombreadas}. "
+                   if sombreadas else "")
+                + "O pytest rodaria o codigo assado na imagem, a comparacao "
+                  "base/head daria igual nos dois lados e a prova diferencial "
+                  "absolveria em silencio. Confira `codigo.montagens` e "
+                  "`codigo.trabalho` no veredito.yml."),
+        }
+        _canario_memo[chave] = r
+        return r
+    except subprocess.TimeoutExpired:
+        r = {"aplica": True, "ok": False, "conferidas": 0, "mortas": [],
+             "erro": f"timeout: passou de {cfg.TIMEOUT_PYTEST_S}s",
+             "detalhe": "o canario das montagens estourou o tempo -- infraestrutura"}
+        _canario_memo[chave] = r
+        return r
+    except Exception as e:
+        r = {"aplica": True, "ok": False, "conferidas": 0, "mortas": [],
+             "erro": f"{type(e).__name__}: {e}",
+             "detalhe": "o canario das montagens falhou -- infraestrutura"}
+        _canario_memo[chave] = r
+        return r
+    finally:
+        for p in escritos:      # worktree limpo, igual ao arquivo de teste
+            p.unlink(missing_ok=True)
 def _roda_pytest(worktree: Path, alvo: str = "tests",
                  contido: bool = False) -> tuple[int, str, bool]:
     """Roda a suite dentro do container, com o codigo do worktree por cima.
@@ -747,6 +1045,46 @@ def _prova_diferencial(codigo_do_teste: str, nome_do_arquivo: str) -> dict:
 
         wt_base = _garante_worktree(base, "base")
         wt_head = _garante_worktree(head, "head")
+
+        # 🚨 O CANARIO, antes de escrever o teste e antes de gastar container.
+        #
+        # Montagem que nao pousa faz o pytest rodar o codigo da IMAGEM nos dois
+        # lados: mesmo exit code, e `_classifica` le isso como "nao falhou no
+        # head" -> REFUTADO. Absolvicao falsa e muda, na unica ferramenta que
+        # assina PROVADO.
+        #
+        # ⚠️ Confere os DOIS lados, e nao e' redundancia: `_montagens` PULA
+        # origem que nao existe, entao um diretorio renomeado pelo PR faz o base
+        # montar menos que o head sem nenhum sinal. Memoizado -- custa um
+        # container por lado, uma vez na rodada.
+        #
+        # `erro` e nao `indisponivel`: a montagem foi DECLARADA e nao pousou.
+        # Isso e' "existia e quebrou", que e' o que a R3 converte em
+        # INCONCLUSIVO. Projeto que nao declara `codigo` nem chega aqui -- sai
+        # em `indisponivel` na guarda de `TEM_PROVA_DIFERENCIAL`, la' em cima.
+        # 🚨 SO' RECUSA QUANDO O CANARIO MEDIU. `erro` preenchido significa que
+        # ele nao conseguiu olhar -- docker fora do ar, timeout -- e isso NAO e'
+        # montagem morta.
+        #
+        # Ligar sem o `not canario.get("erro")` custou tres testes `@lento`
+        # vermelhos em 19/08, e o estrago real era pior que o vermelho: com o
+        # docker parado, toda prova diferencial voltava dizendo "montagem
+        # declarada que NAO pousa -- confira `codigo.montagens` no
+        # veredito.yml", ou seja, CULPANDO A CONFIG DO CLIENTE por uma queda de
+        # infraestrutura nossa. Deixando passar, o `_roda_pytest` falha alto, o
+        # `rodou_*` fica False e a R3 devolve INCONCLUSIVO com a causa certa.
+        #
+        # E' a mesma distincao que a R3 comprou em 17/08 ("quebrou" != "nao
+        # existe"), que o proprio canario calcula internamente, e que a fiacao
+        # do pre-voo ja tinha acertado -- repetida aqui uma camada abaixo. O
+        # padrao de bug nao mora na guarda: mora em cada ponto que a consome.
+        for _lado in ("base", "head"):
+            canario = _canario_das_montagens(_lado)
+            if canario.get("aplica") and not canario.get("ok") \
+                    and not canario.get("erro"):
+                art["canario_das_montagens"] = canario
+                art["erro"] = canario["detalhe"]
+                return art
 
         for wt in (wt_base, wt_head):
             # Caminho de ESCRITA (disco), que nao e' o alvo do pytest (container).
@@ -958,6 +1296,22 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
             f"ERRO: {caminho} nao existe em {lado} (nem como sufixo de outro caminho).")
     if raiz.resolve() not in alvo.parents:
         return _marca_falha(f"ERRO: {caminho} sai da raiz do repo.")
+
+    # 🚨 Recusa o CONTEUDO, confirma a EXISTENCIA. Ver `segredo.recusa_de_leitura`:
+    # para acusar "segredo commitado" o fato e' o arquivo estar versionado, e o
+    # valor la' dentro nao acrescenta prova -- e' so' o que nao pode viajar para
+    # a API e para o comentario do PR.
+    #
+    # ⚠️ NAO passa por `_marca_falha`: a chamada nao falhou e a ferramenta
+    # existe. Marcar falha faria a R3 converter em INCONCLUSIVO um veredicto que
+    # se sustenta.
+    rel = alvo.relative_to(raiz.resolve()).as_posix()
+    motivo = segredo.caminho_sensivel(rel, cfg.CAMINHOS_SENSIVEIS)
+    if motivo:
+        bruto = alvo.read_bytes()
+        return segredo.recusa_de_leitura(
+            rel, motivo, len(bruto), bruto.count(b"\n") + 1)
+
     texto = alvo.read_text(encoding="utf-8", errors="replace")
     # numerado, porque a acusacao pede 'arquivo:linha' e chute de linha nao cola
     numerado = "\n".join(f"{i:5d} | {l}" for i, l in enumerate(texto.splitlines(), 1))
@@ -967,6 +1321,23 @@ def _read_file(caminho: str, lado: str = "head", raiz: Path = None) -> str:
 _IGNORA = {".git", "node_modules", ".next", "__pycache__", ".venv", "dist", "build"}
 
 
+def _com_pulados(corpo: str, pulados: list[str]) -> str:
+    """O grep diz o que NAO varreu.
+
+    🚨 Omissao muda vira absolvicao falsa fabricada pela propria guarda de
+    seguranca: o advogado leria "nenhum resultado" como "nao ha credencial neste
+    repositorio", e essa e' justamente a conclusao que o arquivo pulado poderia
+    contradizer. Nada e' descartado em silencio -- vale para a acusacao e vale
+    para o byte.
+    """
+    if not pulados:
+        return corpo
+    nomes = ", ".join(sorted(set(pulados))[:10])
+    return (f"{corpo}\n\n[NAO VARRIDO -- convencao de arquivo de segredo: "
+            f"{nomes}. O conteudo nao entra no contexto do modelo; a presenca "
+            f"do arquivo no repositorio e' o fato que voce pode citar.]")
+
+
 def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> str:
     raiz = _worktree_de(lado)
     try:
@@ -974,8 +1345,22 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
     except re.error as e:
         return _marca_falha(f"ERRO: regex invalida: {e}")
     achados: list[str] = []
+    pulados: list[str] = []
     for p in raiz.rglob(glob or "*"):
         if not p.is_file() or _IGNORA & set(p.relative_to(raiz).parts):
+            continue
+        # O grep devolve A LINHA INTEIRA. Num `.env` isso e' o valor da
+        # credencial, entao a mesma regra do `read_file` vale aqui -- e vale com
+        # mais forca: um `grep` por `KEY` varre o repo todo sem que ninguem
+        # tenha pedido aquele arquivo.
+        #
+        # 🚨 PULADO NAO PODE SER MUDO. Sumir com o arquivo faria o advogado ler
+        # "nenhum resultado" como "nao ha credencial no repo" -- absolvicao
+        # falsa fabricada pela propria guarda de seguranca. Os pulados vao no
+        # rodape, nomeados.
+        rel_p = p.relative_to(raiz).as_posix()
+        if segredo.caminho_sensivel(rel_p, cfg.CAMINHOS_SENSIVEIS):
+            pulados.append(rel_p)
             continue
         try:
             texto = p.read_text(encoding="utf-8", errors="replace")
@@ -986,8 +1371,10 @@ def _grep(padrao: str, glob: str = "", lado: str = "head", teto: int = 200) -> s
                 achados.append(f"{p.relative_to(raiz).as_posix()}:{i}: {linha.strip()[:200]}")
                 if len(achados) >= teto:
                     achados.append(f"[... cortado no teto de {teto} ...]")
-                    return "\n".join(achados)
-    return "\n".join(achados) if achados else f"nenhum resultado para /{padrao}/ em {lado}."
+                    return _com_pulados("\n".join(achados), pulados)
+    corpo = ("\n".join(achados) if achados
+             else f"nenhum resultado para /{padrao}/ em {lado}.")
+    return _com_pulados(corpo, pulados)
 
 
 # ---------------------------------------------------------------------- http
@@ -1303,6 +1690,17 @@ ESSENCIAIS = ("read_file", "grep")
 # parecer sai limpo e mentiroso. Custou uma rodada em 15/08.
 ESSENCIAIS_COM_APP = ("app_serve_o_head",)
 
+# 🚨 Fatal quando o projeto DECLARA `codigo` -- pelo mesmo argumento, e nao por
+# analogia: montagem que nao pousa faz o pytest rodar o codigo da imagem nos
+# dois lados, e a prova diferencial devolve REFUTADO sem ter comparado nada.
+# Nao e' degradacao (nao ha ferramenta faltando); e' a ferramenta respondendo
+# com confianca a pergunta errada.
+#
+# ⚠️ Exigida SO' quando `TEM_PROVA_DIFERENCIAL` -- ver `exigidas` no fim do
+# `autoteste`. Projeto que nao declara `codigo` nao tem o que pousar, e cobrar
+# isso dele abortaria toda revisao de PR de terceiro.
+ESSENCIAIS_COM_PROVA = ("montagens_vivas",)
+
 
 def _confere_imagem_do_head() -> dict:
     """O container esta servindo o codigo do HEAD, ou o de um build antigo?
@@ -1466,6 +1864,40 @@ def autoteste(sondar_app: bool = True) -> dict:
         except Exception as e:
             r["destino_do_teste"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
+        # 🚨 A sonda IRMA, e a diferenca entre as duas e' o furo inteiro.
+        #
+        # `destino_do_teste` confere que da' para ESCREVER o teste; o canario
+        # confere que o CODIGO do worktree chega dentro do container. A primeira
+        # ficava verde com a segunda quebrada -- o teste roda, `rodou_base` e
+        # `rodou_head` ficam True, e o pytest importa o codigo da imagem nos
+        # dois lados. Prova diferencial que absolve sem ter comparado nada.
+        #
+        # Custa ~2 containers, uma vez na rodada (memoizado por lado), e
+        # responde antes de a rodada gastar um centavo de modelo.
+        # 🚨 FATAL so' quando MEDIU e achou montagem morta.
+        #
+        # O canario ja separa "quebrou" de "nao pousou"; a primeira versao desta
+        # linha jogava a distincao fora (`ok = bool(canario["ok"])`) e um docker
+        # fora do ar abortava a rodada inteira -- inclusive a de um PR que so'
+        # precisa de leitura. Quebrou o `test_pre_voo_sem_app_NAO_exige...`, que
+        # existe exatamente contra isso.
+        #
+        # Docker caido nao e' o caso perigoso: o `_roda_pytest` falha alto
+        # depois, preenche `erro`, e a R3 devolve INCONCLUSIVO. O caso perigoso
+        # e' docker FUNCIONANDO com montagem que nao pousa -- ali o pytest roda,
+        # devolve exit 0 nos dois lados, e a prova absolve em silencio.
+        #
+        # 🚫 E nao vira verde MUDO: quando nao deu para conferir, o detalhe diz
+        # que nao conferiu. Guarda que nao consegue olhar tem que dizer que nao
+        # olhou -- e isso e' diferente de olhar e nao achar nada.
+        canario = _canario_das_montagens("head")
+        nao_mediu = bool(canario.get("erro"))
+        r["montagens_vivas"] = {
+            "ok": bool(canario.get("ok")) or nao_mediu,
+            "detalhe": (f"NAO CONFERIDO: {canario['detalhe']}" if nao_mediu
+                        else canario["detalhe"]),
+        }
+
     # Os scanners externos -- NAO essenciais, mas nao invisiveis.
     #
     # 🚨 Ate' 15/08 o pre-voo nao os mencionava. `bandit` ausente devolvia lista
@@ -1481,6 +1913,25 @@ def autoteste(sondar_app: bool = True) -> dict:
         r.update(fontes.disponiveis())
     except Exception as e:
         r["scanners"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
+
+    # QUEM fatura a rodada, e o que aquele motor NAO faz.
+    #
+    # 🚨 Mesma doutrina dos scanners logo acima: o Bedrock roda sem
+    # `task_budget` e sem fallback de recusa (`motor.SEM_NO_BEDROCK`), e uma
+    # rodada assim le EXATAMENTE igual a uma rodada completa -- ate' a
+    # recusa que ninguem tentou de novo virar INCONCLUSIVO. Degradacao
+    # conhecida pode; degradacao MUDA nao.
+    #
+    # 🚫 FORA das ESSENCIAIS de proposito, e a razao nao e' que motor seja
+    # opcional -- e' que quem ja' derruba a rodada por isso e'
+    # `advogado.chave_valida`, com uma chamada de 1 token que testa a
+    # credencial DE VERDADE. Duplicar o portao aqui daria dois lugares para
+    # a mesma decisao, e eles divergiriam.
+    try:
+        from . import motor
+        r.update(motor.descreve())
+    except Exception as e:
+        r["motor"] = {"ok": False, "detalhe": f"{type(e).__name__}: {e}"}
 
     # 🚨 O APP NO AR SERVE O HEAD? -- a sonda que faltava, e a mais cara.
     #
@@ -1559,5 +2010,7 @@ def autoteste(sondar_app: bool = True) -> dict:
                         "http_request e sem prova ponta a ponta. A rodada segue "
                         "com read_file e grep, e a R2 limita tudo a MEDIA."),
         }
-    exigidas = list(ESSENCIAIS) + (list(ESSENCIAIS_COM_APP) if com_app else [])
+    exigidas = (list(ESSENCIAIS)
+                + (list(ESSENCIAIS_COM_APP) if com_app else [])
+                + (list(ESSENCIAIS_COM_PROVA) if cfg.TEM_PROVA_DIFERENCIAL else []))
     return {"ok": all(r.get(n, {}).get("ok") for n in exigidas), "ferramentas": r}

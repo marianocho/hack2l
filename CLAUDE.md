@@ -443,9 +443,21 @@ justamente o caso perigoso.
 | **a chave em dois lugares** | — | `load_dotenv` não sobrescreve o ambiente: a do Windows vencia o `.env` **em silêncio**, e trocar o arquivo não mudava nada. Custou 4 tentativas. |
 | **a guarda lendo variável sombreada** | 🆕 `if prova is not None` decidia se o bloco dizia "provado" | o parâmetro novo se chamava `prova`, e o corpo da função **já tinha uma local `prova`** (a evidência de cada membro do laço). A local sobrescrevia o parâmetro antes da guarda rodar, então ela lia a string do último membro e `frase(prova[0], prova[1])` recebia dois **caracteres soltos** — o bloco sairia com uma frase de fusão fabricada de lixo, rumo ao comentário de PR de alguém. A guarda existia, estava certa, e olhava para um valor que outro código tinha trocado. ✅ 18/08, renomeada para `evidencia`; só os testes de render pegaram. |
 
+| **a montagem que ninguém conferia** | 🆕 nenhuma — e é a variação por **ausência total de guarda**, num caminho que existe desde 08/08 | `_montagens` produz os `-v` e ninguém conferia que eles **pousam**. Mapeamento errado ⇒ o pytest importa o código **assado na imagem**, os dois lados dão o mesmo exit code, e `_classifica` lê isso como "não falhou no head" ⇒ **REFUTADO**. Absolvição falsa e muda, na única ferramenta que assina PROVADO. ⚠️ E o arquivo de teste **não servia de canário** — é por isso que o furo sobreviveu a todo o conserto feito em volta dele: ele é gravado no worktree e roda, então a montagem de *testes* está viva, `rodou_base`/`rodou_head` ficam True e o `destino_do_teste` fica verde. A montagem que decide o veredito é a do **código**. Guarda condicionada a um sinal **vizinho** do que ela deveria vigiar. ✅ 19/08, `_canario_das_montagens`. |
+| **o canário, dentro dele mesmo** | 🆕 o próprio canário acima | a primeira versão **pulava origem inexistente**, igualzinho ao `_montagens`, que pula de propósito — então ela ficaria muda exatamente na montagem que nunca chegou a ser montada. Terceira vez que o padrão aparece **dentro da guarda escrita contra o padrão**, e de novo só apareceu porque a trava foi rodada com a violação injetada. ✅ mesmo dia. |
+| **o pré-voo conflando infra com defeito** | 🆕 `montagens_vivas` fatal no pré-voo | ligar o canário como `ok = bool(canario["ok"])` jogou fora a distinção que o próprio canário calcula: **docker fora do ar abortava a rodada inteira**, inclusive a de um PR que só precisa de leitura. É a conflação que a R3 comprou em 17/08, reintroduzida na fiação de uma guarda nova. ✅ fatal só quando **mediu** e achou montagem morta; infra vira `NAO CONFERIDO`, dito em voz alta. |
+| **a montagem VIVA e mesmo assim sombreada** | 🆕 o canário conferia o **vizinho** do que importa | ele provava que o `-v` **pousa** em `/srv/app` — não que é de lá que o python **importa**. Montagem viva, nonce no lugar, e o pytest importando `app` de `/code/app` assado na imagem: os dois lados voltam iguais e a prova diferencial **absolve em silêncio**, com o canário verde. Mesmo desfecho do caso original, por um caminho que a guarda não alcançava. ⚠️ O limite estava **escrito no docstring** desde o primeiro dia, como limite conhecido — o que o tornou barato de fechar depois. ✅ 19/08: `import <pacote>` dentro do mesmo container, `<pacote>` derivado de `destino` relativo a `trabalho` (nunca campo novo no yml), e **só `outra` reprova** — pacote que não importa fica quieto, senão a guarda dispararia em todo diretório de teste. |
+| **a mutação que não aplica** | 🆕 o próprio arnês de mutação | injetei "`nao_importavel` passa a reprovar" por casamento exato de string, a string tinha uma continuação `\` que meu literal errou, o `replace` virou **no-op** e a suíte passou inteira — o que se lê exatamente como *"a trava é fraca"*. **Mutação que não dispara é indistinguível de trava que não pega.** ✅ passou a mutar por índice de linha, e a aplicação é conferida (`assert` no alvo) antes de rodar. |
+
 **Um primo, na mesma família:** métrica que mede a coisa errada. O diagnóstico
 contava *"árbitro preenchido"*, e 94 de 94 estavam preenchidos **com lixo
 reciclado**. Preenchido não é válido.
+
+**Outro primo, e este é do FIXTURE:** `sem_app` dizia *"PR de terceiro: nada
+declarado"* e deixava o **layout do desafio** em pé. O "terceiro" que ele
+modelava tinha `codigo.montagens` apontando para `app/api/app`. Ninguém notou
+porque nenhuma sonda dependia disso — até uma passar a depender. **Meio-nu não
+é nu**, e produz um cenário que não é nem o desafio nem um terceiro.
 
 ### Como procurar
 
@@ -512,7 +524,28 @@ banco, e `kb` casa dentro de `kb_veredito_app`; outra procurava `override=True`
 no fonte e casava com o comentário que explicava por que ele está desligado. As
 duas viraram comparação estrutural (AST / argumento `-d`).
 
+🆕 **Repetiu em 19/08, duas vezes, no canário das montagens** — e as duas
+passavam **verdes** com o defeito presente:
+
+1. a trava da recusa passava com o canário **arrancado**: o dublê levantava
+   `AssertionError`, o `except Exception` genérico preenchia `erro` e o `finally`
+   punha INCONCLUSIVO. **O desfecho certo pela causa errada.** Passou a conferir
+   que o `_roda_pytest` **não foi alcançado**, e que o `erro` nomeia a montagem.
+2. a trava do pré-voo passava com o canário **fora das exigidas**: a worktree do
+   fixture só tinha pastas vazias, a sonda `read_file` reprovava por falta de
+   alvo (`st_size > 80`), e o `ok` geral caía por ela. **A trava media a falha do
+   vizinho.** Passou a exigir todas as `ESSENCIAIS` verdes antes de atribuir a
+   queda ao canário.
+
+**Nenhuma das duas apareceria sem rodar a mutação.** Cinco foram injetadas; três
+mataram exatamente uma trava cada, e é essa especificidade — não o número de
+travas verdes — que diz que elas medem o que dizem medir.
+
 > **Teste que acusa a coisa errada não vale mais que teste que não acusa nada.**
+>
+> 🆕 E o corolário que 19/08 comprou: **teste verde não é evidência até a
+> mutação existir.** A pergunta não é "passou?", é *"o que eu quebro para ver
+> este teste ficar vermelho, e é exatamente o defeito que ele alega pegar?"*
 
 ---
 
@@ -755,6 +788,79 @@ juiz        → claude-sonnet-5
 verificar, Sonnet para sintetizar — modelo caro só onde a decisão acontece."*
 
 Custo medido: **US$0,071 por acusação verificada** (Opus 5, read_file + grep).
+
+### 🧩 O MOTOR — quem fatura a chamada (`veredito/motor.py`, 19/08)
+
+Até 19/08 as três peças que falam com a Anthropic construíam o cliente **cada
+uma por conta própria** — `anthropic.Anthropic(api_key=...)`, três vezes, em
+`promotores.py`, `advogado.py` e `fontes.py`. É a mesma classe do `app/api/app`
+chumbado: valor de infraestrutura espalhado dentro do código que faz o trabalho.
+
+Agora há **um** lugar que responde três perguntas:
+
+```
+cliente()          com quem eu falo
+modelo(id)         como aquele provedor chama este modelo
+ajusta_chamada()   o que aquele provedor NÃO aceita
+```
+
+| motor | o que é | paridade |
+|---|---|---|
+| `anthropic` | API direta. Paga com `ANTHROPIC_API_KEY` | total |
+| `aws` | Claude Platform on AWS — operada pela Anthropic sobre infra AWS (SigV4, cobrança via Marketplace). IDs de modelo sem prefixo | total, no mesmo dia |
+| `bedrock` | Amazon Bedrock — operado pela AWS. É onde crédito promocional costuma valer | **menor** — ver abaixo |
+
+`VEREDITO_MOTOR=auto|anthropic|aws|bedrock`. Precedência: variável de ambiente >
+detecção — a mesma do `veredito.yml`. Lido **em execução**, nunca no import, para
+`VEREDITO_MOTOR=bedrock py -3.12 -m veredito.orquestrador` funcionar.
+
+🚨 **A degradação do Bedrock é dita em voz alta, nunca silenciosa.** Ele recusa
+exatamente dois parâmetros que este produto manda, e os dois doem:
+
+```
+task_budget          o advogado deixa de saber o próprio orçamento e fecha
+                     no corte do max_tokens, não por decisão dele
+fallback_de_recusa   recusa do classificador de cibersegurança vira
+                     INCONCLUSIVO direto, sem segunda tentativa
+```
+
+Remover os dois e seguir seria **o padrão de bug de novo**: a guarda —
+`fallbacks="default"`, que impede a categoria carro-chefe de se esvaziar — some
+justamente no motor onde ela não existe, e nada avisa. Por isso o que foi
+removido fica em `Motor.sem`, legível de fora; `descreve()` entra no pré-voo ao
+lado dos scanners; e `advogado._diagnostico_da_recusa` consulta
+`tem("fallback_de_recusa")` antes de culpar rate limit por um fallback que nunca
+foi armado.
+
+🚨 **Ausente não é vazio, errado não é ausente** — mesma doutrina do
+`veredito.yml`:
+
+| | |
+|---|---|
+| sem credencial AWS, em `auto` | cai para a API direta, **e diz que caiu** |
+| sem credencial AWS, **forçado** | **levanta** |
+
+O segundo é o que importa: quem escreveu `VEREDITO_MOTOR=bedrock` está gastando
+crédito da AWS de propósito. Cair calado para a API direta **faturaria a rodada
+na conta errada** e a rodada pareceria perfeita.
+
+⚠️ Dois detalhes que só aparecem medindo:
+
+- **`_ha_sinal_aws()` existe para não pagar rede.** `boto3.Session().get_credentials()`
+  percorre a cadeia inteira e, fora da EC2, o último elo é o IMDS —
+  `169.254.169.254`, que só morre no timeout. Sem nenhum sinal barato de AWS no
+  ambiente, o boto3 nem é chamado.
+- **`modelo()` passa batido em id que já tem prefixo.** Perfil de inferência
+  (`us.anthropic....`) é id legítimo do Bedrock; prefixar de novo geraria
+  `anthropic.us.anthropic....` — um 404 que se lê como *"modelo não habilitado
+  na conta"* e manda o operador procurar no console errado.
+
+🚫 **Não escrevemos wrapper boto3 à mão sobre o bedrock-runtime.** O
+`tool_runner` **é** o advogado; reimplementá-lo para trocar quem fatura seria
+bifurcar a única peça do produto que é agente de verdade. Os clientes de
+Bedrock/AWS do próprio SDK assinam com SigV4 pelo boto3 e expõem
+`beta.messages.tool_runner` igual — o boto3 entra onde ele é de fato bom:
+resolver credencial.
 
 ---
 

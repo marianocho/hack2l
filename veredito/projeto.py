@@ -20,6 +20,7 @@ produto nao funcionando.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -89,22 +90,105 @@ def _valida(d: dict, onde: Path) -> None:
     for c in contas:
         if not isinstance(c, dict):
             raise ProjetoInvalido(f"{onde}: cada conta precisa ser um mapa")
-        faltando = [k for k in ("nome", "email", "senha") if not c.get(k)]
+        faltando = [k for k in ("nome", "email") if not c.get(k)]
         if faltando:
             raise ProjetoInvalido(
                 f"{onde}: conta {c.get('nome', '?')} sem {', '.join(faltando)}")
+
+        # A senha vem de UMA das duas: literal no arquivo, ou o NOME de uma
+        # variavel de ambiente. Ver o docstring de `_senha_de`.
+        tem_literal = bool(c.get("senha"))
+        tem_variavel = bool(c.get("senha_em"))
+        if tem_literal and tem_variavel:
+            # Duas fontes para o mesmo valor divergem em silencio -- foi o que
+            # a chave da API custou em 14/08, quatro tentativas. Aqui sairia
+            # pior: o login usaria uma e o operador leria a outra no arquivo.
+            raise ProjetoInvalido(
+                f"{onde}: conta {c['nome']} declara `senha` E `senha_em`. "
+                "Escolha uma -- duas fontes para o mesmo valor divergem em silencio")
+        if not tem_literal and not tem_variavel:
+            raise ProjetoInvalido(
+                f"{onde}: conta {c['nome']} sem `senha` nem `senha_em`")
 
     nomes = [c["nome"] for c in contas]
     if len(set(nomes)) != len(nomes):
         raise ProjetoInvalido(f"{onde}: ha contas com o mesmo `nome`")
 
 
-def usuarios(d: dict) -> dict[str, tuple[str, str]]:
-    """{nome: (email, senha)} -- o formato que `ferramentas._token` consome."""
-    return {c["nome"]: (c["email"], c["senha"]) for c in d.get("contas") or []}
+def _senha_de(conta: dict, ambiente=None) -> str | None:
+    """A senha desta conta, ou None se ela nao esta disponivel AGORA.
+
+    🚨 POR QUE `senha_em` EXISTE -- 19/08.
+
+    O `veredito.yml` mora na RAIZ DO PROJETO REVISADO e e' commitado. Senha
+    literal ali e' senha em controle de versao, e a objecao nao e' de percepcao:
+
+      - scanner de segredo (GitGuardian, TruffleHog, o do proprio GitHub)
+        dispara pela FORMA do valor, entao renomear o campo nao resolve -- e se
+        resolvesse seria pior, porque estaria driblando o controle e mantendo a
+        pratica;
+      - o advogado le o repositorio sob revisao por worktree, `read_file` nao
+        bloqueia arquivo nenhum, nao ha redacao em lugar algum do pipeline, e o
+        parecer e' POSTADO NO PR. Uma acusacao de "credencial em codigo" -- que
+        e' exatamente o que as lentes `padroes` e `vazamento` procuram -- levaria
+        o advogado a ler o `veredito.yml` e poder citar a senha num comentario
+        publico. O arquivo se chama config e contem a palavra senha varias
+        vezes: e' isca para as lentes que nos mesmos rodamos.
+
+    Com `senha_em` o arquivo carrega o NOME da variavel e nunca o valor. Nao
+    sobra nada com forma de senha na arvore, e o pedido de onboarding vira
+    "adicione tres valores aos secrets da Action" -- que todo time ja faz.
+
+    ⚠️ Devolve None, nunca "". Senha vazia faria o `_token` POSTAR credencial
+    vazia no endpoint de login do cliente.
+    """
+    if conta.get("senha"):
+        return str(conta["senha"])
+    variavel = conta.get("senha_em")
+    if not variavel:
+        return None
+    amb = os.environ if ambiente is None else ambiente
+    valor = amb.get(str(variavel))
+    return str(valor) if valor else None
 
 
-def controle_negativo(d: dict) -> str | None:
+def resolve_contas(d: dict, ambiente=None) -> tuple[dict[str, tuple[str, str]], list[str]]:
+    """({nome: (email, senha)}, [o que nao deu para resolver]).
+
+    🚨 A conta que nao resolve NAO ENTRA no dicionario, e a lista do que faltou
+    sai junto de proposito -- os dois fatos precisam viajar juntos.
+
+    O buraco que isso fecha: se `usuarios()` simplesmente pulasse a conta sem
+    ninguem contar, a rodada sairia com menos contas do que o projeto declarou,
+    e as guardas do `avisos()` continuariam passando -- elas contavam a lista
+    DECLARADA, nao a resolvida. Tres contas no arquivo, uma variavel esquecida,
+    `len(contas) >= 3` verde, e o login falhando la' na frente, longe da causa.
+    Guarda condicionada a um sinal que o operador satisfaz sem o fato ser
+    verdade: o padrao de bug deste projeto.
+
+    ⚠️ A lista de faltantes nomeia a VARIAVEL, nunca o valor.
+    """
+    resolvidas: dict[str, tuple[str, str]] = {}
+    faltando: list[str] = []
+    for c in d.get("contas") or []:
+        senha = _senha_de(c, ambiente)
+        if senha is None:
+            faltando.append(
+                f"{c['nome']}: a variavel {c.get('senha_em')!r} nao esta no ambiente")
+            continue
+        resolvidas[c["nome"]] = (c["email"], senha)
+    return resolvidas, faltando
+
+
+def usuarios(d: dict, ambiente=None) -> dict[str, tuple[str, str]]:
+    """{nome: (email, senha)} -- o formato que `ferramentas._token` consome.
+
+    So' as contas que RESOLVERAM. Ver `resolve_contas`.
+    """
+    return resolve_contas(d, ambiente)[0]
+
+
+def controle_negativo(d: dict, ambiente=None) -> str | None:
     """A conta que nao possui nada.
 
     🚨 E' a mais valiosa da lista e a que ninguem lembra de criar. Qualquer dado
@@ -112,9 +196,14 @@ def controle_negativo(d: dict) -> str | None:
     interpretar -- foi ela que provou a CRITICA de 14/08. Deduzida de
     `possui: 0` para o operador nao ter que declarar duas vezes e as duas
     divergirem.
+
+    ⚠️ So' conta se ela RESOLVEU: controle negativo em que nao da' para logar
+    nao e' controle negativo, e apontar um sem senha faria a rodada acreditar
+    que tem a peca que sustenta a CRITICA de vazamento.
     """
+    resolvidas, _ = resolve_contas(d, ambiente)
     for c in d.get("contas") or []:
-        if c.get("possui") == 0:
+        if c.get("possui") == 0 and c["nome"] in resolvidas:
             return c["nome"]
     return None
 
@@ -157,11 +246,16 @@ def ensombrado_pelo_env(d: dict, ambiente: dict) -> list[str]:
     return fora
 
 
-def avisos(d: dict, contexto_resolvido: Path | None = None) -> list[str]:
+def avisos(d: dict, contexto_resolvido: Path | None = None,
+           ambiente=None) -> list[str]:
     """O que este projeto NAO vai conseguir provar, dito antes de gastar.
 
     Sai no pre-voo. Descobrir no fim da rodada que faltava conta e' pagar
     US$1,30 para aprender uma coisa que o arquivo ja sabia.
+
+    🚨 CONTA AS RESOLVIDAS, nunca as declaradas -- 19/08, com o `senha_em`. A
+    contagem sobre a lista do arquivo e' a mesma classe de erro dos 94 arbitros
+    "preenchidos": mede a existencia da linha, nao a existencia do fato.
     """
     fora = []
     # 🚨 "Nao declarei contexto" e "declarei e o caminho esta errado" sao coisas
@@ -177,13 +271,23 @@ def avisos(d: dict, contexto_resolvido: Path | None = None) -> list[str]:
         fora.append("sem `contas`: nao ha prova ponta a ponta, so' leitura e grep "
                     "-- e nada passa de MEDIA pela R2")
         return fora
-    if len(contas) < 3:
+
+    resolvidas, faltando = resolve_contas(d, ambiente)
+    # Dito ANTES da contagem: a causa explica o numero que vem logo abaixo, e
+    # "so' 2 contas" sem a causa manda o operador editar o yml -- que esta
+    # certo. O que falta e' a variavel, e o aviso nomeia qual.
+    for f in faltando:
+        fora.append(f"conta declarada e NAO disponivel -- {f}")
+
+    if len(resolvidas) < 3:
         # A regra do Carlos, 06/08: isolamento precisa de tres contas.
-        fora.append(f"so' {len(contas)} conta(s): provar isolamento entre usuarios "
-                    "pede pelo menos tres")
-    if controle_negativo(d) is None:
-        fora.append("nenhuma conta com `possui: 0`: sem controle negativo, "
-                    "vazamento vira interpretacao em vez de fato")
+        declaradas = (f" ({len(contas)} declarada(s), {len(faltando)} sem a "
+                      "variavel no ambiente)") if faltando else ""
+        fora.append(f"so' {len(resolvidas)} conta(s) utilizavel(is){declaradas}: "
+                    "provar isolamento entre usuarios pede pelo menos tres")
+    if controle_negativo(d, ambiente) is None:
+        fora.append("nenhuma conta utilizavel com `possui: 0`: sem controle "
+                    "negativo, vazamento vira interpretacao em vez de fato")
     if not d.get("contexto"):
         fora.append("sem `contexto`: o arbitro sai `null` e nada sustenta CRITICA "
                     "por regra (R1)")

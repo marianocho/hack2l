@@ -33,9 +33,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import anthropic
-
 from . import config as cfg
+from . import motor
 
 # Achado de scanner que cai FORA dos arquivos do PR e' ruido de revisao: ele
 # fala de codigo que ninguem tocou. Medido: bandit no psf/requests devolve 708
@@ -256,7 +255,7 @@ repositorio sob revisao.
 def _adapta(cliente, achado: dict) -> dict | None:
     try:
         r = cliente.messages.create(
-            model=cfg.MODEL_PROMOTOR, max_tokens=1200,
+            model=motor.modelo(cfg.MODEL_PROMOTOR), max_tokens=1200,
             system=SISTEMA_ADAPTADOR,
             messages=[{"role": "user",
                        "content": PROMPT_ADAPTADOR.format(**achado)}],
@@ -383,7 +382,7 @@ def acusa(diff: str, raiz: Path | None = None) -> list[dict]:
     if not brutos:
         return []
 
-    cliente = anthropic.Anthropic(api_key=cfg.ANTHROPIC_API_KEY)
+    cliente = motor.cliente()
     fora = []
     for i, a in enumerate(brutos, 1):
         conv = _adapta(cliente, a)

@@ -5,6 +5,13 @@
 Quadro geral e fila completa. **Esta é a fila viva** — o `ESTADO.md` é do dia do
 hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 
+> 🆕 **20/08: cinco trilhas em paralelo até 01/09 — `TRILHAS_ATE_01SET.md`.**
+> Ele diz quem é dono de qual arquivo, em que ordem duas trilhas passam pelo
+> mesmo lugar, e traz o prompt de abertura de cada sessão. **Este arquivo aqui
+> passa a ter escritor único** (a sessão principal); cada trilha escreve em
+> `HANDOFF_20AGO_T<n>.md`. Sem isso, cinco sessões editando a fila viva é
+> conflito garantido no arquivo que menos pode ficar errado.
+
 > ⚠️ **Existe uma cópia deste quadro no vault** (`Onde retomar.md`). Em 15/08 as
 > duas divergiram **nos dois sentidos** — cada uma mais atual que a outra num
 > ponto diferente. Se você editar uma, propague. É a regra do "um arquivo só,
@@ -140,6 +147,178 @@ e a troca perde diversidade de lente).
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
 | **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
 | 🆕 **Detector de `veredito.yml`** | 1 dia | **medido em 19/08: 12 campos saem de compose+Dockerfile com 0 erro.** Encolhe o onboarding de 26 campos para 2 perguntas — mas os 2 que sobram são os que sustentam CRÍTICA. Ver abaixo |
+| ✅ **`senha_em`** *(19/08)* | | a senha sai do yml commitado e vira **nome de variável**. 🚨 Não era questão de UX: `read_file` não bloqueia nada, não há redação em lugar nenhum, e o parecer vai para o PR. Ver abaixo |
+| ✅ **Segredo: entrada e saída** *(19/08)* | | `veredito/segredo.py`. `read_file`/`grep` recusam convenção universal de arquivo de segredo — **recusando o conteúdo e confirmando a existência**, que é o que preserva a acusação legítima; e o corpo do comentário passa por redação. 50 travas, 5 mutações. Ver abaixo |
+| ✅ **O motor — quem fatura a chamada** *(19/08)* | | `veredito/motor.py`. `anthropic` / `aws` / `bedrock` atrás de `cliente()`, `modelo()`, `ajusta_chamada()`. **Destrava crédito promocional da AWS** — e a perda de capacidade do Bedrock é dita em voz alta. Ver abaixo |
+
+#### ✅ O motor — `anthropic` / `aws` / `bedrock` *(19/08)*
+
+**O que ele destrava:** rodar sobre crédito da AWS sem tocar em nenhuma das
+peças que fazem o trabalho. Antes, as três que falam com a Anthropic
+(`promotores`, `advogado`, `fontes`) construíam o cliente cada uma por conta
+própria — trocar de provedor significava achar as três e mantê-las de acordo.
+Mesma classe do `app/api/app` chumbado: infraestrutura espalhada dentro do
+código que faz o trabalho.
+
+```
+VEREDITO_MOTOR=auto|anthropic|aws|bedrock     # variável de ambiente > detecção
+```
+
+| motor | paridade | quando usar |
+|---|---|---|
+| `anthropic` | total | padrão; paga com `ANTHROPIC_API_KEY` |
+| `aws` | total, no mesmo dia | Claude Platform on AWS — operada pela Anthropic sobre infra AWS |
+| `bedrock` | **menor** | é onde crédito promocional da AWS costuma valer |
+
+🚨 **O Bedrock custa duas capacidades, e as duas doem onde este produto vive:**
+`task_budget` (o advogado deixa de saber o próprio orçamento e fecha no corte do
+`max_tokens`, não por decisão dele) e `fallback_de_recusa` (recusa do
+classificador de cibersegurança vira INCONCLUSIVO direto, sem segunda tentativa
+— e cibersegurança é a categoria carro-chefe deste produto).
+
+**Isso não some em silêncio**, e é o ponto: o que foi removido fica em
+`Motor.sem`, legível de fora; `descreve()` entra no pré-voo ao lado dos
+scanners; e `advogado._diagnostico_da_recusa` consulta `tem("fallback_de_recusa")`
+antes de culpar rate limit por um fallback que nunca foi armado. Remover os dois
+e seguir seria o padrão de bug de novo — a guarda sumindo justo no motor onde
+ela não existe.
+
+🚨 **Forçar motor sem credencial LEVANTA, não cai para a API direta.** Quem
+escreveu `VEREDITO_MOTOR=bedrock` está gastando crédito da AWS de propósito;
+cair calado **faturaria a rodada na conta errada** e ela pareceria perfeita. Em
+`auto`, cai — e diz que caiu. É *ausente não é vazio, errado não é ausente*
+aplicado a credencial.
+
+⚠️ **Conferido ao documentar, não assumido:** os três consomem `motor.cliente()`,
+os três traduzem o id com `motor.modelo(...)`, e só o advogado precisa de
+`ajusta_chamada()` — porque só ele manda `task_budget` e `fallbacks`. O único
+`anthropic.Anthropic(` que restou no código está dentro do próprio `motor.py`.
+
+🚫 **Não há wrapper boto3 à mão sobre o bedrock-runtime, de propósito.** O
+`tool_runner` **é** o advogado; reimplementá-lo para trocar quem fatura
+bifurcaria a única peça do produto que é agente de verdade. Os clientes de
+Bedrock/AWS do próprio SDK assinam com SigV4 pelo boto3 e expõem
+`beta.messages.tool_runner` igual — o boto3 entra onde ele é de fato bom:
+resolver credencial.
+
+#### ✅ Segredo: as duas frentes *(19/08)*
+
+O buraco estava aberto desde sempre: `read_file` e `grep` **sem restrição de
+caminho nenhuma**, **zero redação** no pipeline inteiro, e o parecer postado
+como comentário no PR. E a lente `padroes` procura *"credencial em código"* —
+ou seja, ela **leva** o advogado até o `.env` do cliente.
+
+| frente | onde | o que impede |
+|---|---|---|
+| `caminho_sensivel()` | `read_file` / `grep` | o conteúdo nunca chega à API |
+| `redige()` | `comentario.monta()` | o que entrou pelo **diff** não sai no comentário |
+
+**Nenhuma basta sozinha:** a da saída sozinha não resolve (o segredo já foi para
+a API); a da entrada sozinha também não (o diff do PR entra no prompt inteiro, e
+credencial commitada *nele* passa por fora do `read_file`).
+
+🚨 **Recusa o conteúdo, confirma a existência.** Para acusar "segredo
+commitado", o fato é o arquivo estar versionado — o valor lá dentro não
+acrescenta prova e é justamente o que não pode viajar. Sem essa divisão a guarda
+destruiria a acusação legítima.
+
+🚨 **E a recusa não é falha.** Não passa por `_marca_falha` nem
+`_marca_indisponivel`: nada quebrou e a ferramenta existe. Marcar falha faria a
+**R3 converter em INCONCLUSIVO** um veredicto que se sustenta.
+
+🚨 **Pulado não pode ser mudo.** O `grep` nomeia o que não varreu — sumir com o
+arquivo faria o advogado ler *"nenhum resultado"* como *"não há credencial neste
+repositório"*: absolvição falsa fabricada pela própria guarda de segurança.
+
+⚠️ **As duas são estreitas, e metade das travas é de silêncio** (lição 0):
+`.env.example` continua legível — é o arquivo que o revisor mais precisa — e o
+conserto sugerido (*"troque o literal por `${VAR}`"*) não pode ser mutilado.
+
+**Dois defeitos meus, os dois pegos no smoke test e não na leitura:**
+`lstrip("./")` removia *qualquer* um daqueles caracteres, então `.env` virava
+`env` e a guarda ficava muda no arquivo mais óbvio de todos; e `\b(password)`
+não casa em `DB_PASSWORD`, porque `_` é caractere de palavra. Duas das cinco
+mutações reintroduzem exatamente esses dois.
+
+⚠️ **O que NÃO foi feito:** a lista de padrões é *mantida*. O que a torna
+aceitável é serem **convenções universais de ecossistema** (`.env` é dotenv em
+qualquer lugar do mundo), nunca layout de um projeto. O projeto **acrescenta**
+por `sensiveis:` no yml e **nunca substitui** — deixar desligar seria dar a ele
+o direito de mandar o próprio `.env` para a API por engano de uma linha.
+
+#### ✅ `senha_em` — a senha sai do arquivo commitado *(19/08)*
+
+**A objeção que isso fecha não é de percepção.** A proposta que chegou de fora
+era de UX: trocar "credencial" por "perfil de teste" para não assustar time de
+segurança. Medido, o diagnóstico estava errado — e a parte perigosa era outra.
+
+O `veredito.yml` mora na **raiz do projeto revisado e é commitado**. Conferido:
+`bancada/veredito.yml` aparece no `git ls-files` com `senha:` em cinco linhas.
+Some a isso três fatos do pipeline, os três conferidos no mesmo dia:
+
+| fato | conferência |
+|---|---|
+| o advogado lê o repo sob revisão por worktree | `_worktree_de` |
+| **`read_file` não bloqueia arquivo nenhum, e não há redação em lugar nenhum** | `grep` por mascaramento em `veredito/*.py` volta **vazio** |
+| o parecer é **postado como comentário no PR** | verificado em 18/08 |
+
+Uma acusação de *"credencial em código"* — exatamente o que as lentes `padroes`
+e `vazamento` procuram — leva o advogado a ler o `veredito.yml` e **poder citar
+a senha num comentário público**. O arquivo se chama config e contém a palavra
+senha várias vezes: é isca para as lentes que nós mesmos rodamos.
+
+🚫 **Trocar vocabulário não resolve, e numa parte piora.** Scanner de segredo
+(GitGuardian, TruffleHog, o do GitHub) dispara pela **forma do valor**, não pelo
+nome do campo. Se o rename fizesse o scanner calar, seria driblar o controle
+mantendo a prática.
+
+**O conserto é estrutural:**
+
+```yaml
+contas:
+  - nome: ana
+    email: ana@bancada.dev
+    senha_em: VEREDITO_SENHA_ANA     # o NOME da variável, nunca o valor
+    possui: 2
+```
+
+- nada com forma de senha na árvore → o scanner não tem no que disparar
+- o pedido de onboarding vira *"adicione N valores aos secrets da Action"* — a
+  familiaridade que a proposta buscava por retórica, obtida por estrutura
+- `senha:` literal **continua funcionando**: os dois yml existentes não migram à força
+
+##### 🚨 E o `senha_em` INTRODUZ um buraco, se implementado ingênuo
+
+Variável esquecida faria a rodada correr com menos contas do que o projeto
+declarou — e **`avisos()` contava `d["contas"]`, a lista do arquivo**. Três
+contas declaradas, uma variável faltando: `len(contas) >= 3` verde, controle
+negativo apontando para uma conta sem senha, e o login falhando lá na frente,
+longe da causa.
+
+É o formato dos 94 árbitros "preenchidos": **medir a existência da linha em vez
+da existência do fato.**
+
+| guarda | ficou |
+|---|---|
+| `avisos()` | conta as **resolvidas**, nomeia a variável que falta, e diz `N declarada(s), M sem a variável` |
+| `usuarios()` | conta que não resolve **sai** do dicionário — nunca senha `""`, que faria o `_token` postar credencial vazia no login do cliente |
+| `controle_negativo()` | só considera conta **resolvida** — controle negativo em que não dá para logar não é controle negativo |
+| `_valida()` | `senha` **xor** `senha_em`; as duas juntas levantam (duas fontes divergem em silêncio — a chave da API, 14/08) |
+
+**Travas:** `tests/test_senha_em.py`, 14. **Cinco mutações injetadas**, cada uma
+matando exatamente a trava que alega pegar — inclusive "o aviso passa a imprimir
+o valor", que é a regressão que devolveria o vazamento pela porta do log.
+
+⚠️ **O que NÃO foi feito:** migrar `bancada/veredito.yml` para `senha_em`. É
+outro repositório, privado, com quatro ramos `pr/*` em sync com o GitHub —
+editar o yml no `main` pede propagação ou cria divergência. Decisão de quem
+manda no fixture.
+
+⚠️ **E a lacuna de redação continua aberta.** O `senha_em` tira a senha do
+arquivo; ele **não** faz o `read_file` bloquear nada nem o parecer redigir nada.
+Qualquer outro segredo que o cliente tenha na árvore continua alcançável pelo
+advogado e citável no comentário do PR. Isso é item separado, e é anterior ao
+detector.
 
 #### 🆕 O detector de `veredito.yml` — medido em 19/08
 
@@ -251,7 +430,7 @@ existe para impedir exatamente isso.
 | 1 | **Chuta em vez de deixar ausente** | campo chutado não levanta, *parece* declarado | `test_detector_nu`: repo vazio → yml vazio. Irmão do `test_projeto_nu` |
 | 2 | **O `or <valor do vizinho>` volta pela porta do detector** | os 14 fallbacks que 17/08 removeu voltariam **gerados** em vez de chumbados — e o `test_projeto_nu` testa o *config*, não o detector | fixture sintético em `tmp_path`, que não é nem o desafio nem a bancada |
 | 3 | 🚨 **`preparar` auto-emitido** | é **execução de comando arbitrário do repo do cliente**, e `preparar` roda sempre que nós subimos. Serviço chamado `seed` não é promessa de que ele semeia | **nunca auto-emitir.** Fica ausente com aviso: *"achei o serviço `seed`, confirme"* |
-| 4 | **`montagens` errado → falso negativo silencioso** | pytest roda o código **assado na imagem**, os dois lados dão igual, e a prova diferencial absolve. É o canário de 08/08 | 🎯 **canário mecânico**: gravar sentinela no worktree e conferir que aparece dentro do container. Vale sozinho, mesmo sem detector |
+| 4 | **`montagens` errado → falso negativo silencioso** | pytest roda o código **assado na imagem**, os dois lados dão igual, e a prova diferencial absolve. É o canário de 08/08 | ✅ **FEITO em 19/08** — `_canario_das_montagens`. Ver abaixo |
 | 5 | **Heurística de nome de serviço** (`api`/`backend`/`server`/`app`) | é lista mantida — o mecanismo do bug. `core`, `gateway`, `rest` não casam; e com dois serviços expondo porta, escolhe o errado | derivar do **diff**: a API é o serviço cujo `build.context` contém o código que o PR toca. Ambiguidade → ausente + pergunta |
 | 6 | **Multi-stage: WORKDIR do `builder` vaza** | nenhum dos dois repos é multi-stage — o teste que temos não alcança | só considerar do **último `FROM`** em diante |
 | 7 | **`${API_PORT}` sem default** | vira literal na URL, e a URL malformada só falha na sondagem | sem default e sem `.env` → ausente |
@@ -265,6 +444,101 @@ existe para impedir exatamente isso.
 
 ⚠️ E cada trava precisa ser **vista falhando** com a violação injetada — a do
 `ERRO`, em 13/08, passou com o defeito presente.
+
+##### ✅ O canário das montagens — FEITO em 19/08, antes do detector
+
+**Por que primeiro:** ele protege um caminho que **já está em produção hoje**, e
+o detector só piora o risco que ele cobre. Até 19/08 as `montagens` eram escritas
+à mão, então um humano tinha olhado para elas pelo menos uma vez; geradas, não há
+mais ninguém olhando.
+
+`veredito/ferramentas.py::_canario_das_montagens`. Grava um nonce em cada origem
+declarada do worktree, roda o container com **exatamente os mesmos `-v`** que o
+`_roda_pytest` usa, e lê de volta pelo caminho de destino. Memoizado por lado —
+custa 2 containers por rodada, não por acusação.
+
+Entra em dois lugares: `montagens_vivas` no pré-voo (fatal via
+`ESSENCIAIS_COM_PROVA`, **só quando `TEM_PROVA_DIFERENCIAL`**) e uma recusa no
+`_prova_diferencial`, antes de escrever teste ou gastar container — com `erro`,
+que a R3 converte em INCONCLUSIVO.
+
+🚨 **O arquivo de teste nunca serviu de canário, e é por isso que o furo durou
+tanto.** Ele é gravado no worktree e roda, logo a montagem de *testes* está viva
+e `rodou_base`/`rodou_head` ficam True, e o `destino_do_teste` do pré-voo fica
+verde. A montagem que decide o veredito é a do **código**, e nenhuma sonda a
+exercitava. Guarda condicionada a um sinal *vizinho* do que ela deveria vigiar.
+
+🚨 **E o padrão de bug apareceu DENTRO do canário, de novo.** A primeira versão
+pulava origem inexistente — igualzinho ao `_montagens`, que pula de propósito.
+Ou seja: a guarda ficaria muda exatamente na montagem que nunca chegou a ser
+montada. Achado ao escrever a trava, não ao escrever o código.
+
+**15 travas (`tests/test_canario_das_montagens.py`), e cinco mutações rodadas:**
+
+| mutação injetada | matou |
+|---|---|
+| canário sempre verde | 9 de 15 |
+| volta a pular origem ausente em silêncio | só `test_origem_que_sumiu` |
+| `_prova_diferencial` ignora o canário | só `test_prova_diferencial_recusa` |
+| pré-voo volta a conflar infra com montagem morta | só `test_docker_caido_NAO_aborta` |
+| canário sai das `ESSENCIAIS_COM_PROVA` | `test_nao_exigido` + `test_montagem_morta_aborta` |
+
+🚨 **DUAS travas passaram pelo motivo errado, e as duas só apareceram porque a
+mutação foi rodada.** É a trava do meio de 13/08 acontecendo de novo, duas vezes,
+no mesmo dia:
+
+1. `test_prova_diferencial_recusa` passava **com o canário arrancado**: o stub
+   levantava `AssertionError`, o `except Exception` genérico preenchia `erro` e o
+   `finally` punha INCONCLUSIVO. Corrigida para conferir que o `_roda_pytest`
+   **não foi alcançado** e que o `erro` nomeia a montagem.
+2. `test_montagem_morta_aborta` passava **com o canário fora das exigidas**: a
+   worktree do fixture só tinha pastas vazias, a sonda `read_file` reprovava por
+   falta de alvo (`st_size > 80`), e o `ok` geral caía por ela. A trava media a
+   falha do vizinho. Corrigida para exigir que **todas as `ESSENCIAIS` estejam
+   verdes** antes de atribuir a queda ao canário.
+
+🚨 **E eu cometi a conflação da R3 ao ligar o canário no pré-voo.** A primeira
+versão fazia `ok = bool(canario["ok"])`, então **docker fora do ar abortava a
+rodada inteira** — inclusive a de um PR que só precisa de leitura. Quebrou o
+`test_pre_voo_sem_app_NAO_exige_app_serve_o_head`, que existe exatamente contra
+isso. Fatal agora é **só** quando mediu e achou montagem morta; infra vira
+`NAO CONFERIDO` dito em voz alta, nunca verde mudo.
+
+⚠️ **E o fixture `sem_app` estava meio-nu.** Ele dizia *"PR de terceiro: nada
+declarado"* e deixava o **layout do desafio** em pé — o "terceiro" que ele
+modelava tinha `codigo.montagens` apontando para `app/api/app`. Ninguém tinha
+notado porque nenhuma sonda do pré-voo dependia disso. Completado com
+`TEM_PROVA_DIFERENCIAL=False` e `CODIGO_MONTAGENS=[]`; é o mesmo vão que o
+`test_projeto_nu` existe para fechar.
+
+🚫 **O limite era este:** o canário prova que o `-v` pousa no **destino
+declarado**, não que o destino seja a raiz de onde o python importa. Se o yml
+declara `/srv/app` e a imagem importa de `/code/app`, a montagem está viva, o
+canário fica verde e o pytest continua lendo a imagem.
+
+> ✅ **FECHADO no mesmo dia** — `tests/test_canario_raiz_de_import.py` e a
+> checagem em `ferramentas.py`. O limite estava **escrito no docstring desde o
+> primeiro dia**, como limite conhecido, e foi isso que o tornou barato de
+> fechar: quem pegou o arquivo já sabia onde estava o buraco.
+>
+> **Como foi resolvido sem campo novo no yml:** `import <pacote>` dentro do
+> mesmo container, com `<pacote>` **derivado** de `destino` relativo a
+> `trabalho`. Nada de perguntar a raiz de import ao cliente — *lista mantida →
+> critério derivado*, de novo.
+>
+> ⚠️ E **só `outra` reprova**: pacote que simplesmente não é importável fica
+> quieto, senão a guarda dispararia em todo diretório de teste — guarda morrendo
+> de excesso, que é o modo de falha que o `NAO MEDIDO` do banco ensinou.
+>
+> 🚨 O arnês de mutação também mordeu aqui: a primeira injeção casava string
+> exata, a string tinha uma continuação `\` que o literal errou, o `replace`
+> virou **no-op** e a suíte passou inteira — que se lê exatamente como *"a trava
+> é fraca"*. **Mutação que não dispara é indistinguível de trava que não pega.**
+> Passou a mutar por índice de linha, com `assert` no alvo antes de rodar.
+
+Suíte: **655 passando, 1 pulado**. A única falha (`test_llm_alvo`) é anterior e
+pede o app do desafio no ar — conferido rodando a mesma prova contra o
+`ferramentas.py` **sem** o canário: resultado idêntico (1 falha, 4 passando).
 
 #### 🚨 A contenção do `http_request` — medido em 14/08
 
@@ -704,6 +978,115 @@ conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
   registra o desfecho, e a string virou só o que o modelo lê. Três travas
   mecânicas seguram a convenção nova, e as três foram **provadas não-mudas**
   injetando a violação de propósito
+- ✅ **A cópia do quadro que envelhecia em silêncio** *(19/08)* —
+  `scripts/sync_vault.py` + `tests/test_sync_vault.py`. Ver abaixo
+- 🆕 **A corrida do bind-mount na prova diferencial** *(19/08)* — falha
+  **intermitente**, falha para o lado seguro, e o custo é inconclusivo espúrio.
+  Ver abaixo
+
+#### 🆕 A corrida do bind-mount — diagnosticada em 19/08, NÃO consertada
+
+**O sintoma, capturado:** `_prova_diferencial` volta com `exit_head = 4` e a
+saída do container diz
+
+```
+ERROR: file or directory not found: tests/test_selftest_nao.py
+```
+
+O arquivo de teste é gravado no worktree do host e o container **não o enxerga**
+pelo bind-mount. O lado `base` roda normal; o `head` erra.
+
+**É intermitente, e isso foi medido — não inferido.** Três execuções do
+`tests/test_ferramentas.py`, mesma ordem, **sem tocar em código**:
+
+| execução | falhas |
+|---|---|
+| dentro da suíte inteira | 1 (`ja_falha_no_base`) |
+| arquivo sozinho | 2 (`ja_falha_no_base` + `passa_dos_dois_lados`) |
+| arquivo sozinho, de novo | **0** |
+
+Conjuntos **diferentes** ⇒ não é ordem entre testes, é corrida. A hipótese de
+isolamento foi levantada e **descartada**: os testes que mexem em worktree
+rodaram junto com os `@lento` e passaram 6 de 6.
+
+⚠️ Só apareceu com o **app do desafio de pé**. Ontem os mesmos `@lento` passaram
+com o app parado. Mais containers disputando a camada de compartilhamento de
+arquivos do Docker Desktop no Windows torna a janela maior — o que é consistente
+com corrida entre a escrita no host e a visibilidade dentro do container, e não
+com defeito de lógica.
+
+✅ **Ela falha para o lado SEGURO, e isso é o que impede que seja urgente.**
+Exit 4 não produz linha de resumo do pytest ⇒ `rodou_head = False` ⇒ o contrato
+preenche `erro` ⇒ a R3 devolve **INCONCLUSIVO**. Nunca REFUTADO. A absolvição
+falsa continua barrada; o canário das montagens e a R3 fazem o trabalho.
+
+🚨 **O custo é o outro:** numa rodada paga, essa corrida converte uma prova
+legítima em INCONCLUSIVO **e o motivo aponta para o PR**, não para a
+infraestrutura do host. É a mesma família do `isolamento_bloqueou` de 14/08 —
+inconclusivo por causa NOSSA que se disfarça de limite do código revisado. Lá a
+solução foi rotular; aqui ainda não há rótulo.
+
+**Duas linhas de conserto, e nenhuma é óbvia:**
+
+1. **Conferir visibilidade antes de rodar** — depois de gravar o arquivo, um
+   `test -f` dentro do container antes de chamar o pytest, com uma reconferência
+   curta. É o canário das montagens aplicado ao ARQUIVO, não à montagem.
+   ⚠️ Vira espera embutida no caminho quente: +1 container por prova.
+2. **Rotular quando acontecer** — `ERROR: file or directory not found` na saída
+   com o arquivo presente no worktree é assinatura reconhecível. Vira
+   `corrida_do_mount: true` no artefato e o parecer diz que foi a bancada, não o
+   PR. Mais barato, e honesto — mas não evita o inconclusivo.
+
+🚫 **Não "resolver" com retry cego.** Repetir o pytest esconderia também o caso
+em que o arquivo realmente não foi gravado — que é defeito de verdade, e é
+justamente o que a recusa de 17/08 (`testes_no_repo` errado) existe para gritar.
+
+#### ✅ O sync do vault, e a trava — 19/08
+
+**O caso.** O mesmo quadro vivia em **três** lugares: `PROXIMOS_PASSOS.md` (o
+repo), `Onde retomar.md` (resumo escrito à mão) e `fontes/PROXIMOS_PASSOS.md`
+(espelho). O `Onde retomar.md` **declara o `fontes/` como sua fonte** — e o
+`fontes/` estava em **11/08** enquanto o repo estava em 19/08. **Oito dias, e a
+fonte declarada era a cópia mais velha das três.** É a regra do *"um arquivo só,
+sem cópia"* violada por três, com o agravante de a violação ser muda.
+
+| | |
+|---|---|
+| `scripts/sync_vault.py` | confere por padrão; **`--sincronizar` para escrever** |
+| `tests/test_sync_vault.py` | 15 travas — 14 sintéticas, 1 olha o vault de verdade |
+| caminho do vault | `VEREDITO_VAULT_FONTES`, **nunca chumbado** — o repo é público |
+
+🚨 **A comparação é normalizada, e isso não é frouxidão.** Dos 6 arquivos que o
+`cmp` acusava, **5 diferiam só no fim de linha** (repo CRLF, vault LF). Trava por
+byte acusaria os 6 em toda execução, para sempre — a guarda morrendo de excesso.
+Normalizada, ela apontou exatamente **3** divergências reais.
+
+🚨 **A mutação matou uma redundância que eu ia deixar passar.** Tirar o
+`.replace("\r\n","\n")` de `normaliza` **não quebrou nenhum teste**: o
+`rstrip()` sem argumento já come o `\r`. Dois mecanismos suficientes para a mesma
+coisa fazem a trava **perder o poder de discriminar** — tirar qualquer um deixava
+tudo verde. Removido; agora uma mutação mata 5 travas, incluindo as duas de
+"ficar quieta".
+
+**Mapa de mutações:**
+
+| injetada | matou |
+|---|---|
+| tirar o `.replace("\r\n","\n")` | **nada — era no-op**, e por isso saiu |
+| tirar o `rstrip()` | 5, inclusive os dois de "não alarmar à toa" |
+| `confere` nunca acha divergência | 5 |
+| conferir passa a escrever por padrão | só `test_conferir_e_o_PADRAO` |
+| sem variável passa a falhar | os 2 de `NAO SE APLICA` |
+| divergência injetada no vault **real** | só `test_o_vault_desta_maquina` |
+
+🚫 **O modo de falha que sobra, e está escrito no `../CLAUDE.md`:** sem
+`VEREDITO_VAULT_FONTES` a trava sai `skipped` — verde e silenciosa — e o espelho
+volta a envelhecer. Foi exatamente assim que os oito dias aconteceram. Numa
+máquina sem vault isso é correto (`NAO SE APLICA`); nesta máquina, a variável
+tem que estar no ambiente.
+
+⚠️ E o `Onde retomar.md` **nunca** é tocado pelo script: é escrito à mão, com
+wikilinks e síntese. Sobrescrevê-lo com o texto do repo destruiria trabalho.
 
 ### E — Capacidade que falta (não é "fazer", é "não sabemos ainda")
 

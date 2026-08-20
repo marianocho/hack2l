@@ -26,6 +26,17 @@ pyyaml
 bandit
 semgrep
 
+# Motor AWS (veredito/motor.py). OPCIONAL: sem ele o `auto` cai para a API
+# direta dizendo por que caiu, e a suite passa inteira -- os testes de
+# alternancia injetam a resolucao de credencial e nao dependem do pacote.
+# So' e' obrigatorio para VEREDITO_MOTOR=bedrock|aws, e ai' a ausencia
+# LEVANTA em vez de faturar na conta errada em silencio.
+#
+# Quem assina a chamada e' o cliente de Bedrock/AWS do proprio SDK da
+# Anthropic (SigV4 por baixo); o boto3 entra para resolver credencial e
+# regiao, que e' onde ele e' de fato bom.
+boto3
+
 httpx
 requests
 python-dotenv

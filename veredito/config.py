@@ -486,6 +486,13 @@ APP_PREPARAR = _app.get("preparar") or []
 # 🚨 SEM FALLBACK desde 17/08, pelo mesmo motivo das contas e do `app.api`: o
 # padrao apontava para a arvore do desafio, e projeto que nao declara layout NAO
 # TEM layout -- nunca o do vizinho. Ver `TEM_PROVA_DIFERENCIAL` abaixo.
+# Padroes de caminho que o projeto ACRESCENTA a lista universal de arquivos de
+# segredo (`veredito/segredo.py`). ACRESCENTA, nunca substitui: as convencoes
+# universais -- `.env`, `id_rsa`, `*.pem` -- valem em qualquer repositorio do
+# mundo, e deixar um projeto desligar isso e' dar a ele o direito de mandar o
+# proprio `.env` para a API do modelo por engano de uma linha.
+CAMINHOS_SENSIVEIS = list(PROJETO.get("sensiveis") or [])
+
 _codigo = PROJETO.get("codigo") or {}
 CODIGO_MONTAGENS = _codigo.get("montagens") or []
 # `/code` e' a arvore do desafio; a bancada usa `/srv`. Sem fallback, e entra no
