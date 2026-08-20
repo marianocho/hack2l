@@ -403,3 +403,84 @@ Sugestão, na ordem de custo: documentar no `CLAUDE.md` que worktree precisa de
 `.env` copiado **com caminhos absolutos**; ou derivar a raiz do repositório com
 `git rev-parse --path-format=absolute --git-common-dir` em vez de `RAIZ.parent`,
 que é o que resolve de verdade e vale para as cinco trilhas.
+
+---
+
+# CI do `veredito-demo` vermelha — diagnóstico (20/08)
+
+Email do GitHub, "all jobs have failed". **Não era o `hack2l`** (0 runs de
+Actions — o workflow só dispara em `pull_request` e nenhum foi aberto) **nem a
+`bancada`** (últimos runs 18/08, verdes). Era `luisfelp07/veredito-demo`, o repo
+público que a T5 criou hoje: dois runs de `pull_request`, PRs #1 e #2.
+
+## A causa, em duas camadas
+
+**Camada 1 — o secret não existia.** `gh secret list -R luisfelp07/veredito-demo`
+voltou vazio. `git push` não leva secret; ele é configuração do repositório.
+
+**Camada 2, e é a que custou a ida e volta — o secret existia e estava VAZIO.**
+Depois de criado (`06:09:00Z`), a re-rodada (`06:10:44Z`, tentativa 2) falhou no
+**mesmo passo com a mesma mensagem**. Descartado tudo o que era estrutural:
+não é fork, zero environments, secret no nível do repositório, run iniciado
+104 s **depois** da criação.
+
+`gh secret set` lê o valor do **stdin**. Com stdin que não é terminal ele grava
+**string vazia sem reclamar** — o secret passa a existir, aparece na lista com
+data, e chega vazio no runner.
+
+## O conserto no nosso lado
+
+O guarda dizia *"nao esta nos secrets DESTE repositorio"* para qualquer valor
+vazio. Isso é **afirmar uma causa que ele não consegue distinguir** — de dentro
+do workflow, "ausente" e "vazio" são indistinguíveis — e mandou o operador
+adicionar o que já estava lá.
+
+Guarda que acusa a causa errada manda consertar a coisa errada: **o padrão de
+bug da casa aplicado ao TEXTO do alarme.** Agora ele diz as duas causas e dá o
+comando que as separa (`gh secret list`).
+
+De quebra, o `-z` antigo **passava** com a chave só de espaço em branco — a
+rodada morreria depois, no 401 da API, que se lê como defeito do produto.
+
+Conferido nos quatro casos, com a violação injetada:
+
+| entrada | desfecho |
+|---|---|
+| vazia | erro, exit 1, com as duas causas |
+| só espaço | idem — **o guarda antigo passava aqui** |
+| plausível | silêncio, exit 0 — ele consegue ficar quieto |
+| com aspas coladas | warning, exit 0 |
+
+🚫 O valor nunca é impresso, e a classificação é grosseira de propósito: o log é
+público num repositório de demonstração.
+
+## PEDIDOS (continuação)
+
+### 7 → T5: o secret do `veredito-demo` está vazio, e o PR "limpo" não é limpo
+
+**(a)** Regravar `ANTHROPIC_API_KEY` com valor de verdade — pela web, ou
+`gh secret set ANTHROPIC_API_KEY -R luisfelp07/veredito-demo < arquivo`.
+🚫 Não fiz: valor de chave de API é do operador, não meu.
+
+**(b)** 🚨 **A PR #1 (`contagem-de-tarefas`) está sem o `index=True` em
+`Task.project_id`** — conferido em `app/models.py:27` do demo, e o diff da PR não
+o acrescenta. É a versão **pré-16/08**, que o `CLAUDE.md` registra como o
+**controle negativo cego**, que condenava *com razão* (agregação sobre FK sem
+índice, `EXPLAIN` com `Seq Scan`).
+
+A T5 escreveu que o PR limpo é o que mais importa, porque falso positivo faz o
+autor desinstalar. Do jeito que está, **um achado de performance na #1 estaria
+CERTO** — mas leria como falso positivo, e o conserto instintivo seria mexer no
+produto para parar de acusar o que ele acusa corretamente. Mesmo formato do primo
+do fixture já documentado (`sem_app` com o layout do desafio de pé): **meio-nu
+não é nu**.
+
+Aplicar o índice no base, ou rotular a #1 como controle negativo. As duas
+servem; a ambiguidade não.
+
+### 8 → T5: sincronizar o workflow
+
+O conserto do guarda está em `.github/workflows/veredito.yml` **do hack2l**. O
+`veredito-demo` tem cópia própria — o repo busca a *ferramenta* em
+`marianocho/hack2l@main`, não o workflow. Sem copiar, o demo continua com a
+mensagem que acusa a causa errada.
