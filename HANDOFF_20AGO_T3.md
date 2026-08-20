@@ -97,8 +97,6 @@ Quatro mutações, quatro conjuntos exatos. **12 travas, todas verdes.**
 
 ---
 
----
-
 ## ✅ Feito: a escala, ROTULADA (item 5 / item E da fila)
 
 Commit `3a368bd`. Medido no `next.js`: ~220s por acusação contra ~30s nos
