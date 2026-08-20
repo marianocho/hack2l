@@ -1,0 +1,173 @@
+# A REGUA CONTRA O MUNDO REAL -- gabarito externo, escrito antes de rodar.
+#
+# 🚨 O QUE ELA MEDE, E O QUE ELA NAO MEDE. Ler antes de olhar qualquer numero.
+#
+# Nenhum destes repositorios tem `veredito.yml`. Logo a rodada tem `read_file` e
+# `grep` e mais nada: sem app de pe, sem prova diferencial, sem banco. A R2
+# limita a severidade a MEDIA e **PROVADO por artefato e' inalcancavel aqui**.
+#
+#   ✅ mede  se a lente LEVANTA suspeita no lugar certo (cobertura)
+#   ✅ mede  se o parecer descarta COM MOTIVO em vez de calar (qualidade)
+#   ✅ mede  se ele fica quieto em PR de rotina (falso positivo)
+#   🚫 NAO mede  poder de prova -- isso e' a bancada, que tem app e gabarito
+#
+# Dizer "achou N de M defeitos" a partir daqui seria numero sem gabarito, que e'
+# proibido no CLAUDE.md. O numero honesto e' por coluna, e as tres colunas tem
+# significados diferentes.
+#
+# ---------------------------------------------------------------------------
+# 🚨 CONTAMINACAO: o modelo pode ja conhecer o conserto.
+#
+# Os quatro defeitos do grupo A foram INTRODUZIDOS antes do corte de
+# conhecimento dos modelos. O que decide contaminacao, porem, e' a data do
+# CONSERTO: e' o texto do conserto que diz "isto era um bug". Tres dos quatro
+# foram consertados em jun/jul de 2026, depois do corte.
+#
+# O `poetry#9304` e' a excecao, e ele fica de proposito: **e' a sonda de
+# contaminacao**. Se o desempenho nele for visivelmente melhor que nos outros
+# tres, isso e' sinal de memoria e nao de deteccao.
+#
+# ⚠️ E o vies tem direcao conhecida: contaminacao so' AJUDA o grupo A. Entao o
+# numero do grupo A e' um TETO, e o do grupo B (falso positivo) e' o robusto.
+#
+# ---------------------------------------------------------------------------
+# 🚫 EXCLUIDO DE PROPOSITO: pallets/flask#6095.
+#
+# Ja foi revisado em 17/08, e foi nele que a R3 foi decidida e ajustada. Medir
+# de novo o caso em que o instrumento foi calibrado nao produz informacao --
+# produz o proprio reflexo, que e' o erro dos 94 arbitros.
+
+versao: 1
+escrito_em: 2026-08-20
+# Todo `esperado` aqui vem de terceiro: o PR que consertou, com numero e data.
+# Regra sem procedencia e' opiniao -- inclusive a nossa sobre codigo dos outros.
+
+grupo_a:                     # PRs que INTRODUZIRAM defeito, confirmado depois
+  - pr: https://github.com/aio-libs/aiohttp/pull/12130
+    titulo: "Replace unintentional except BaseException with except Exception"
+    tamanho: "+4/-4 em 3 arquivos"
+    merge: 2026-02-23
+    onde: aiohttp/client_proto.py
+    defeito: >-
+      estreitar `except BaseException` para `except Exception` em
+      `ResponseHandler.data_received` deixou de fechar o transporte quando o
+      parser e' interrompido por CancelledError/SystemExit -- a conexao
+      dessincronizada volta para o pool keep-alive e e' reusada.
+    procedencia:
+      conserto: https://github.com/aio-libs/aiohttp/pull/12798
+      consertado_em: 2026-06-04
+      pos_corte: true
+      # O conserto cita "#12130" no corpo, e o GitHub gravou o evento
+      # `cross-referenced`. Serve de controle positivo da conferencia.
+      referencia_visivel: true
+    nota: >-
+      o caso mais valioso do conjunto: 4 linhas trocadas, revisor humano passa
+      batido, e o titulo do PR afirma que a mudanca e' intencional e segura.
+
+  - pr: https://github.com/celery/celery/pull/8903
+    titulo: "Fix recursive result parents on group in middle of chain"
+    tamanho: "+24/-0 em 3 arquivos"
+    merge: 2024-03-10
+    onde: celery/canvas.py
+    defeito: >-
+      resetar `prev_task`/`prev_res` depois de promover `group | task` a chord
+      quebra o encadeamento quando ha dois grupos consecutivos: o `as_tuple()`
+      da cadeia perde os `GroupResult` filhos.
+    procedencia:
+      conserto: https://github.com/celery/celery/pull/10408
+      consertado_em: 2026-07-15
+      pos_corte: true
+      referencia_visivel: true
+    nota: "PR que CONSERTA um bug e introduz outro -- padrao comum e dificil."
+
+  - pr: https://github.com/scrapy/scrapy/pull/6540
+    titulo: "Remove build_from_settings() and deprecate from_settings() code"
+    tamanho: "+565/-273 em 23 arquivos"
+    merge: 2024-11-14
+    onde: scrapy/pipelines/images.py
+    defeito: >-
+      o refactor deixou de aplicar `IMAGES_STORE_S3_ACL` e
+      `IMAGES_STORE_GCS_ACL`; os stores de imagem passaram a usar o ACL do
+      store de arquivos.
+    procedencia:
+      conserto: https://github.com/scrapy/scrapy/pull/7614
+      consertado_em: 2026-06-15
+      pos_corte: true
+      # 🚨 FALSO no fato, nao na ferramenta: o conserto culpa o COMMIT
+      # `2ad5f0c`, nunca o numero do PR. Entao nao existe `cross-referenced`
+      # para achar, e a conferencia esta' certa ao nao achar. Quem descobriu o
+      # PR fui eu, por `commits/2ad5f0c/pulls`.
+      referencia_visivel: false
+      porque_invisivel: "o conserto culpa o commit 2ad5f0c, nao o PR"
+    nota: >-
+      🚨 A SONDA DE ESCALA, e esta' aqui de proposito. 23 arquivos, e a fila ja
+      registra 220s/acusacao no next.js. Se sair inconclusivo por orcamento,
+      isso mede o NOSSO limite de escala -- nao a deteccao. Sem um caso assim,
+      a taxa de inconclusivo do conjunto pareceria defeito nosso em toda linha.
+
+  - pr: https://github.com/python-poetry/poetry/pull/9304
+    titulo: "Move to native tags gathering"
+    tamanho: "+37/-61 em 7 arquivos"
+    merge: 2024-04-17
+    onde: src/poetry/utils/env/virtual_env.py
+    defeito: >-
+      passar a coletar as tags de plataforma do venv do proprio Poetry faz
+      instalar wheel da plataforma errada quando o ambiente alvo difere (Python
+      32 bits no Windows, aarch64 emulado em x86_64).
+    procedencia:
+      conserto: https://github.com/python-poetry/poetry/pull/10361
+      consertado_em: 2025-05-04
+      pos_corte: false
+      # 🚨 AQUI A FERRAMENTA E' QUE E' CEGA, e a distincao importa. O corpo do
+      # #10361 diz "#9304 introduced a regression" com todas as letras, mas o
+      # #9304 esta' LOCKED e nenhum evento `cross-referenced` foi gravado. A
+      # referencia existe no texto e nao existe na timeline.
+      #
+      # E' por isso que a conferencia declara por entrada em vez de deduzir do
+      # silencio: "nao achei" tem duas causas -- nao ha o que achar (scrapy) e
+      # nao consigo achar (aqui) -- e trata-las igual e' a R3 de 17/08 de novo.
+      referencia_visivel: false
+      porque_invisivel: "o PR esta' LOCKED; a citacao existe no corpo do conserto, o evento nao"
+    nota: >-
+      🚨 A SONDA DE CONTAMINACAO. Unico com conserto ANTERIOR ao corte. Ir
+      melhor aqui que nos outros tres e' sinal de memoria, nao de deteccao.
+
+grupo_b:                     # rotina: nenhum defeito conhecido ate' hoje
+  # ⚠️ "Nenhum defeito conhecido" NAO e' "sem defeito" -- e' ausencia de prova,
+  # e o `--conferir` reconsulta o GitHub antes de pontuar, porque a ausencia
+  # pode deixar de valer a qualquer momento.
+  #
+  # 🚨 Condenacao aqui NAO e' automaticamente falso positivo. Pode ser achado
+  # de verdade em codigo de terceiro, que seria o melhor resultado possivel do
+  # conjunto. Por isso toda condenacao no grupo B vai para ADJUDICAR A MAO --
+  # e' a unica conferencia humana que o CLAUDE.md ja prescreve, 30 segundos
+  # olhando o artefato.
+  #
+  # Todos mergeados em jul-ago/2026, DEPOIS do corte: o modelo nao pode ter
+  # lido nem o PR nem discussao sobre ele.
+  - pr: https://github.com/celery/celery/pull/10470
+    titulo: "Raise ImproperlyConfigured with install hint when ephem is missing"
+    tamanho: "+32/-2 em 3 arquivos"
+    merge: 2026-08-09
+  - pr: https://github.com/celery/celery/pull/10468
+    titulo: "Reheap beat entries that request to retry later"
+    tamanho: "+59/-6 em 2 arquivos"
+    merge: 2026-08-16
+  - pr: https://github.com/scrapy/scrapy/pull/8022
+    titulo: "Do not log from the shutdown signal handlers"
+    tamanho: "+90/-6 em 2 arquivos"
+    merge: 2026-08-19
+  - pr: https://github.com/pallets/flask/pull/6096
+    titulo: "Fix `.partition(\":\")` usage on potential IPv6 addresses"
+    tamanho: "+23/-5 em 4 arquivos"
+    merge: 2026-08-11
+    # A conferencia acha esta referencia toda vez. Ela e' a issue que o PR
+    # CONSERTA (aberta 13/07, PR mergeado 11/08) -- causa, nao consequencia.
+    # Registrada para a conferencia poder ficar quieta: alarme que dispara
+    # sempre ensina a pular a linha, e ai' a referencia NOVA passaria batida.
+    referencias_conhecidas: ["6093"]
+    porque_conhecidas: "#6093 e' a issue que este PR conserta"
+  - pr: https://github.com/urllib3/urllib3/pull/5101
+    titulo: "Preserve explicit port 0 in connection_from_url and HTTPConnection"
+    tamanho: "+49/-3 em 5 arquivos"
+    merge: 2026-08-02
