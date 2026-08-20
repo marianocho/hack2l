@@ -144,14 +144,99 @@ e a decisão é do dono da conta. Ver a pergunta no fim.
 
 ---
 
+## ✅ A régua contra o mundo real — pronta para disparar, US$0,00 gastos
+
+`regua/gabarito.yml` + `regua_de_terceiros.py`. **Nove PRs**, gabarito escrito
+por terceiros, e tudo o que não custa API já foi conferido.
+
+| grupo | quantos | o que é |
+|---|---|---|
+| **A** | 4 | PRs que **introduziram** defeito, confirmado depois por outro PR |
+| **B** | 5 | rotina, todos mergeados jul–ago/2026 (**depois** do corte dos modelos) |
+
+O melhor do grupo A é `aiohttp#12130`: **+4/-4 linhas**, e o título do PR afirma
+que a mudança é intencional e segura (*"Replace unintentional except
+BaseException with except Exception"*). Quatro meses depois, `#12798` mostrou
+que ela devolve conexão dessincronizada ao pool keep-alive.
+
+🚨 **O que ela NÃO mede.** Nenhum desses repos tem `veredito.yml` ⇒ só
+`read_file` e `grep` ⇒ **PROVADO por artefato é inalcançável** e a R2 limita
+tudo a MEDIA. *"Achou N de M defeitos"* a partir daqui seria número sem
+gabarito. Ela mede cobertura, qualidade da refutação e falso positivo.
+
+🚨 **Contaminação, com direção conhecida.** Três dos quatro consertos são de
+jun–jul/2026, pós-corte. `poetry#9304` é o único com conserto anterior e fica de
+propósito: **é a sonda** — ir melhor nele que nos outros três é sinal de memória,
+não de detecção. E como contaminação só **ajuda** o grupo A, o número do grupo A
+é um **teto** e o do grupo B é o robusto.
+
+🚫 `pallets/flask#6095` **excluído**: foi nele que a R3 foi decidida em 17/08.
+Medir o caso em que o instrumento foi calibrado produz o próprio reflexo.
+
+**Conferido, de graça:** 4/4 consertos ainda MERGED · 5/5 do grupo B sem
+referência nova · **9/9 resolvem, clonam e montam** · encanamento da pontuação
+provado contra uma rodada real já gravada.
+
+### O padrão de bug apareceu três vezes dentro do próprio arnês
+
+1. **A conferência do grupo B conclui do SILÊNCIO.** A primeira versão buscava
+   `"#NNNN"` por texto — o tokenizador do GitHub descarta o `#`, e ela devolvia
+   **27 menções para todo PR do celery**. Virou consulta à *timeline*
+   (`cross-referenced` é evento, logo fato), com **controle positivo**: a mesma
+   consulta roda nos PRs do grupo A, onde o conserto *tem* que aparecer.
+2. **O controle reprovou 2 de 4, por causas diferentes** — scrapy: o conserto
+   culpa o commit, nunca o PR, então não há o que achar. poetry: o PR está
+   LOCKED e o evento não foi gravado, então ali a consulta **é** cega. Tratar as
+   duas igual seria a R3 de 17/08 outra vez. Cada uma declarada com a causa.
+3. **`_custo` procurava chaves `usd`/`total_usd` que não existem** em
+   `custo.json` nenhum — convenção de string que eu mesmo inventei. Virou
+   `_gasto`, que reporta o que o arquivo tem e 🚫 não converte para dólar:
+   tabela de preço dentro do código envelhece.
+
+**Para disparar** (~US$13): `py -3.12 regua_de_terceiros.py --rodar`, depois
+`--pontuar`.
+
+---
+
+## 🚨 NÃO É MEU, E É URGENTE: 176 linhas que só existem em dois lugares frágeis
+
+A trava do vault ficou vermelha na minha worktree. **O vault está À FRENTE, não
+atrás** — 1339 linhas contra 1163 no repo — com uma seção nova,
+*"A asserção estática — proposta de 20/08"*.
+
+Procurei em todo lugar:
+
+| onde | tem? |
+|---|---|
+| `main` e os cinco ramos de trilha | **não** (1163 linhas em todos) |
+| worktrees de t1, t2, t3, t4 | **não** |
+| **`hack2l/PROXIMOS_PASSOS.md`, não commitado** | **sim** (1339) |
+| o vault | **sim** |
+
+Ou seja: existe em **zero commits**. Um `git checkout` ou `git restore` em
+`hack2l/` apaga a única cópia editável.
+
+🚫 **E o `--sincronizar` que a própria trava sugere DESTRUIRIA a outra.** A
+sincronia é repo → vault e só detecta *diferente*, nunca *qual é mais novo*;
+rodá-lo daqui sobrescreveria as 176 linhas com a versão antiga. **Não rodei.**
+
+É a regra do *"um arquivo só, sem cópia"* ao contrário: três cópias, e a única
+durável — o git — não tem nada. Quem escreveu aquilo precisa commitar.
+
+⚠️ **Segunda emenda ao protocolo:** o vault espelha `main`, nunca um ramo de
+trilha. Rodar `--sincronizar` de dentro de uma worktree publica o estado do ramo
+como se fosse canônico.
+
+---
+
 ## 📍 Onde retomar
 
-1. **Publicar** — depende da resposta abaixo.
-2. **Canário de egresso** — a contenção de rede é a única camada sem validação
+1. **Publicar o parecer na demo** — falta só o secret `ANTHROPIC_API_KEY` em
+   `luisfelp07/veredito-demo`; depois é `gh run rerun` nos dois.
+2. **Disparar a régua** — `--rodar`, ~US$13. Depende do OK.
+3. **Canário de egresso** — a contenção de rede é a única camada sem validação
    empírica em direção nenhuma. 🚫 Não detectando `smtplib` nem mantendo lista
    de API perigosa: isso é predição, e predição já perdeu duas vezes.
-3. **A régua contra o mundo real** — ~10 PRs já mergeados de repos públicos,
-   ~US$15. ⚠️ Pontuar **pelo parecer**, nunca por `veredictos.json`.
 
 ## PEDIDOS a outras trilhas
 
