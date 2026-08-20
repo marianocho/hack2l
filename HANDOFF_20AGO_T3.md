@@ -97,6 +97,95 @@ Quatro mutações, quatro conjuntos exatos. **12 travas, todas verdes.**
 
 ---
 
+---
+
+## ✅ Feito: a escala, ROTULADA (item 5 / item E da fila)
+
+Commit `3a368bd`. Medido no `next.js`: ~220s por acusação contra ~30s nos
+outros, **6 de 8 inconclusivos** — *"quando a fatia não cabe, ele não degrada
+para 'não sei' com elegância: gasta 220s e aí diz não sei"*.
+
+### O quarto sinal: `parcial`
+
+Entra ao lado de `ok` / `erro` / `indisponivel` no registro de cada chamada, e é
+**ortogonal aos três**: a chamada deu certo e a ferramenta existe — ela olhou um
+pedaço.
+
+```python
+ferramentas.leitura_parcial_da_acusacao("correcao_01")
+# ['read_file: app/main.py tem 4200 linhas e nao coube: o corte deixou o FIM ...',
+#  'grep: /session/ parou no teto de 200 resultados: ha mais ocorrencias ...']
+```
+
+🚫 **`parcial` NUNCA vira `erro`.** Marcar assim faria a R3 converter em
+INCONCLUSIVO **toda refutação obtida em repositório grande** — é o erro de 17/08
+(`indisponivel` contado como erro no `pallets/flask`) reentrando pela porta do
+**tamanho** do repo. `test_parcial_NUNCA_vira_erro` é a trava dessa ponta.
+
+Três fatias passam a ser ditas: arquivo cortado no `CORTE_SAIDA`, grep parado no
+teto de achados, arquivo pulado por convenção de segredo.
+
+### 🚨 E o achado que não era o item da fila
+
+O resgate por sufixo do `_resolve_caminho` era **ilimitado e não podava nada**.
+`rglob` anda a árvore inteira por dentro — `node_modules`, `.next`, `.git` — a
+cada `read_file` que erra a raiz, **que é o caso comum** (29 acusações disseram
+`app/routers/shares.py` e 20 disseram `app/api/app/routers/shares.py` para o
+mesmo arquivo). O `_grep` sempre honrou `_IGNORA`; este caminho não, e a
+assimetria não tinha motivo.
+
+**O pior não era o tempo, era a mentira no fim dele.** Sem alvo, o `read_file`
+respondia *"não existe em head"*. Num repositório grande isso é **falso** — o
+arquivo pode muito bem estar lá, nós só paramos de procurar. O advogado que lê
+"não existe" refuta a acusação em cima disso, e absolvição falsa é o desfecho
+que este produto existe para impedir. Agora quem desiste **diz que desistiu**,
+com frase diferente da de ausência.
+
+E a poda não é só tempo: com uma cópia vendorizada casando o **mesmo sufixo**, o
+resgate ficava ambíguo (`len(casam) != 1`) e devolvia `None` — um arquivo que
+**existe** passava a "não existir" porque alguém vendorizou uma cópia.
+
+**Medido** (resgate por chamada, árvore sintética com `node_modules`):
+
+| arquivos | antes (`rglob`) | agora (`os.walk` podado) |
+|---|---|---|
+| 2.001 | 0,025s | ~0s |
+| 10.001 | 0,116s | ~0s |
+| 40.001 | 0,501s | ~0s |
+
+⚠️ **Isto não é "220s → 0s", e não vou dizer que é.** O que foi medido é o
+resgate, numa árvore sintética. Os 220s do `next.js` incluem latência de modelo
+e muito mais; o `next.js` real é bem maior que 40 mil arquivos com
+`node_modules` instalado, então extrapolar é plausível e **não foi medido**.
+
+### A guarda foi vista falhando
+
+```bash
+py -3.12 tests/mutacao_leitura_parcial.py
+```
+
+6 mutações, cada uma matando exatamente o conjunto que alega prender; 13 travas.
+**Duas lições novas do arnês, as duas registradas dentro dele:**
+
+1. Mutação que troca o **nome** de uma função levanta `NameError`: as travas
+   certas ficam vermelhas **pela causa errada**, e o arnês daria OK. É o defeito
+   de 19/08 outra vez. O `ast.parse` não pega — nome indefinido só explode em
+   execução. O arnês agora levanta ao ver `NameError`/`ImportError`/etc., e a
+   mutação usa `False and f(...)`, que curto-circuita sem quebrar o módulo.
+2. **Minha previsão estava errada** numa das seis: eu disse que remover
+   `_marca_parcial` do corte mataria uma trava, e mata **três** — as outras duas
+   montam o cenário delas com um arquivo cortado. O arnês reprovou a previsão, e
+   é exatamente para isso que se prevê antes.
+
+⚠️ **Uma coisa que eu NÃO provei, e não vou alegar:** o `_PARCIAL_DA_CHAMADA.clear()`
+dentro do `_fecha_chamada` é redundante — o `_abre_chamada` já limpa, e nenhuma
+violação o deixa vermelho sozinho. Mantive por simetria com os dois irmãos
+(`_FALHA_*`, `_INDISPONIVEL_*`, que limpam nas duas pontas pelo motivo
+documentado lá), mas pela régua da casa ele é decoração até alguém achar o caso
+que o exercita.
+
+---
+
 ## 📋 PEDIDOS
 
 ### Para a T1 — desenhar o campo (é o encontro previsto no protocolo)
@@ -115,17 +204,51 @@ dado existe; **quem desenha é você**. Duas coisas que valem no parecer:
 
 ⚠️ Nada disso muda regra do juiz. Se você precisar que mude, volta para mim.
 
+**E o segundo campo, da escala:** `ferramentas.leitura_parcial_da_acusacao(id)`
+devolve a lista do que aquela acusação **não conseguiu olhar**. Mesma tese do
+`corrida_do_mount`: um INCONCLUSIVO por teto nosso não é um INCONCLUSIVO sobre o
+PR do autor, e hoje o parecer não distingue os dois. Sugestão (sua a decisão):
+uma linha na lista de inconclusivos dizendo *"a perícia trabalhou sobre uma
+visão parcial do repositório"* com os itens.
+
+⚠️ Lista vazia significa *"leu inteiro tudo que pediu"*, **não** *"leu tudo que
+existe"* — o advogado pode simplesmente não ter pedido, e isso não aparece aqui.
+Não renderize como cobertura.
+
+### Para a T2 (dona do `config.py`)
+
+`_teto_da_varredura()` mora em `ferramentas.py` com `VEREDITO_TETO_VARREDURA` e
+padrão 20000, lido **em execução**. Deveria estar no `config.py` junto com
+`CORTE_SAIDA` e os `TIMEOUT_*` — não pus lá para não colidir com você. Mova
+quando estiver com o arquivo na mão; a função é o único ponto de leitura.
+
 ### Para a sessão principal (dona de `PROXIMOS_PASSOS.md` e dos dois `CLAUDE.md`)
 
 1. **Seção D, "A corrida do bind-mount":** a opção 2 está feita. A opção 1
    (conferir visibilidade antes de rodar, +1 container por prova) **continua
    aberta e não recomendada por enquanto** — o rótulo custa zero no caminho
    quente e a falha já é para o lado seguro.
-2. **Padrão de bug, duas linhas novas** (as duas do bloco acima): *"o arnês de
-   mutação acusando a trava por um defeito dele"* e *"a condição redundante que
-   nenhuma violação deixa vermelha sozinha"*. A segunda é uma variação que a
-   tabela ainda não tem: **guarda que não pode ser vista falhando porque outra
-   guarda chega antes**.
+2. **Item E, "Escala":** deixou de ser só "não sabemos ainda". A leitura agora
+   degrada rotulada, e o resgate ilimitado do `_resolve_caminho` — que ninguém
+   tinha olhado — era metade do problema. O que **continua aberto** é ler
+   centrado na linha da acusação: hoje `_corta` fica com o **fim** do arquivo, e
+   a acusação quase sempre aponta para o começo. Isso é conserto, não rótulo, e
+   é o próximo passo óbvio dali.
+3. **Padrão de bug, quatro linhas novas** — as duas do bloco da corrida mais:
+   - **o resgate por sufixo que mentia no fim:** `_grep` honrava `_IGNORA` e
+     `_resolve_caminho` não. A mesma pergunta feita a duas funções irmãs recebia
+     tratamento diferente, e a que não podava terminava afirmando *"não existe"*
+     sobre um arquivo que existe. É o primo do "meio-nu não é nu": **duas portas
+     para o mesmo repositório, com regras diferentes.**
+   - **a mutação que mata a trava certa pela causa errada:** trocar o nome de
+     uma função dá `NameError`; as travas ficam vermelhas e o arnês diz OK. O
+     `ast.parse` não alcança. Terceira variação de *"mutação que não mede o que
+     alega"* em dois dias.
+4. **`test_sync_vault.py::test_o_vault_desta_maquina_esta_em_dia` ficou vermelho
+   durante a sessão** — o espelho diverge em `PROXIMOS_PASSOS.md`. Não é meu (só
+   toquei `veredito/ferramentas.py`) e **não sincronizei de propósito**: minha
+   cópia do arquivo é a de `04fb1d7` e sincronizar a partir daqui sobrescreveria
+   o que você escreveu. É seu, e é a trava funcionando.
 
 ### Para quem for mexer em `veredito/advogado.py` (T2)
 
@@ -221,12 +344,23 @@ esconde**, e são cinco sessões commitando: vale alguém adotar.
 | # | item | estado |
 |---|---|---|
 | 1 | corrida do bind-mount, rotular | ✅ `c6e01cd` |
+| 5 | escala: falhar **rotulado** em vez de morrer no timeout | ✅ `3a368bd` |
 | 2 | lente `performance` emitindo achado de segurança com rótulo errado, não determinístico | aberto |
 | 3 | medir a não-determinância (mesmo PR, mesmo commit, 5 rodadas) | aberto — **precisa do Docker e de API**, ~US$7 |
 | 4 | chave rígida do `promotores.deduplica` | aberto — 🚫 **ler `MEDICAO_CHAVE_PRE_ADVOGADO.md` antes**, quatro ideias plausíveis já foram medidas e engavetadas |
-| 5 | escala: falhar **rotulado** em vez de morrer no timeout | aberto — é o mesmo formato do item 1 |
 
-**Onde eu retomaria:** o item 5. É a mesma forma do que acabou de ser feito
-(inconclusivo por causa nossa que se disfarça de limite do PR), não precisa de
-Docker nem de API, e o item 2 depende de reproduzir uma não-determinância que o
-item 3 é quem mede.
+**Onde eu retomaria:** o **item 3**, e ele destrava o 2. Hoje sabemos que o trio
+condenado muda entre rodadas e não sabemos *quanto* — e o item 2 (a lente
+`performance` com rótulo errado, que aconteceu na rodada 1 e não na 2) é um caso
+particular disso. Medir primeiro evita caçar um sintoma que talvez nem reproduza.
+
+⚠️ É o primeiro item da T3 que **gasta**: 5 rodadas × ~US$1,38 ≈ **US$7**, e
+**precisa do Docker exclusivo** — anuncie aqui ao pegar. Se o Docker estiver
+ocupado, o item 4 é o único que anda sem ele (é leitura + medição em cima de
+`MEDICAO_CHAVE_PRE_ADVOGADO.md`).
+
+⚠️ E uma armadilha para o item 3: **medir a não-determinância com as duas
+rodadas disputando o Docker mede a corrida do bind-mount, não o modelo.** Rode
+as cinco em série, e use o `corrida_do_mount` que acabou de entrar para
+descartar as que forem contaminadas — é literalmente para isso que o campo
+serve.
