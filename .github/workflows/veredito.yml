@@ -78,15 +78,49 @@ jobs:
       # 🚨 Antes de gastar: chave ausente falha AQUI, com a causa dita. Sem este
       # passo o erro aparece no meio da rodada, depois dos promotores, e le como
       # defeito do produto em vez de secret faltando.
+      #
+      # 🚨 E A CAUSA DITA TEM QUE SER A CAUSA -- 20/08. A versao anterior dizia
+      # "nao esta nos secrets DESTE repositorio" para qualquer valor vazio. Mas
+      # `gh secret set` le o valor do STDIN, e quando o stdin nao e' um terminal
+      # ele grava STRING VAZIA sem reclamar: o secret passa a existir, aparece
+      # no `gh secret list` com data e tudo, e chega vazio no runner.
+      #
+      # Aconteceu de verdade: o operador leu "nao esta nos secrets", foi la',
+      # criou o secret -- e a rodada seguinte falhou no MESMO passo com a MESMA
+      # mensagem, que continuava dizendo que faltava o que ja estava la'.
+      # Guarda que acusa a causa errada manda consertar a coisa errada, e e' o
+      # padrao de bug da casa aplicado ao texto do alarme.
+      #
+      # 🚫 O valor nunca e' impresso. O Actions mascara secret no log, mas a
+      # classificacao aqui e' deliberadamente grosseira -- vazia / curta demais
+      # / prefixo estranho -- porque ela precisa caber no log publico de um
+      # repositorio de demonstracao.
       - name: Conferir a chave
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::ANTHROPIC_API_KEY nao esta nos secrets deste repositorio."
-            echo "Settings -> Secrets and variables -> Actions -> New repository secret"
+          limpa="$(printf '%s' "$ANTHROPIC_API_KEY" | tr -d '[:space:]')"
+          if [ -z "$limpa" ]; then
+            echo "::error::ANTHROPIC_API_KEY chegou VAZIA no runner."
+            echo "Duas causas possiveis, e o log nao distingue as duas:"
+            echo "  1. o secret nao existe neste repositorio; ou"
+            echo '  2. ele existe com valor vazio -- "gh secret set" le o valor'
+            echo "     do stdin e grava string vazia quando o stdin nao e' um"
+            echo "     terminal, e ai o secret aparece na lista mas chega vazio."
+            echo "Confira com:  gh secret list -R \$GITHUB_REPOSITORY"
+            echo "Se ele JA aparece na lista, o caso e' o (2): regrave o valor"
+            echo "pela web (Settings -> Secrets and variables -> Actions) ou com"
+            echo "  gh secret set ANTHROPIC_API_KEY -R \$GITHUB_REPOSITORY < arquivo-com-a-chave"
             exit 1
           fi
+          # Não valida formato a fundo de propósito: prefixo de chave é coisa do
+          # provedor e muda sem avisar. Só o bastante para pegar aspas coladas
+          # no paste e arquivo com lixo, que sao os enganos que sobram.
+          case "$limpa" in
+            sk-*) ;;
+            *) echo "::warning::a chave nao comeca com 'sk-'. Se a rodada falhar"
+               echo "com 401, suspeite de aspas ou espaco colados no valor." ;;
+          esac
 
       - name: Revisar o PR
         env:
