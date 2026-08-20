@@ -254,3 +254,152 @@ status` e a suíte não eram evidência sobre o meu trabalho.** Conferi os dois
 achados centrais deste handoff contra o hash do blob (`motor.py` e `advogado.py`
 idênticos entre `3be9750` e o merge `04fb1d7`), e não contra o que estava na
 árvore.
+
+---
+
+# Item 1 — `VEREDITO_MOTOR=bedrock` rodado de verdade (20/08)
+
+> **Custo: US$ 0,00.** A rodada abortou no pré-voo, antes de qualquer chamada.
+> **Docker: não peguei** — rodei com `APP_SUBIR=0`, que basta para chegar ao
+> motor e não tira o recurso das outras sessões.
+
+O comando, contra o PR da bancada:
+
+```bash
+VEREDITO_MOTOR=bedrock CHALLENGE_REPO=C:/hack_agents/Hack2L/bancada \
+  WORKTREES_DIR=C:/hack_agents/Hack2L/.worktrees-bancada \
+  BASE_BRANCH=main PR_BRANCH=pr/tarefa-por-link APP_SUBIR=0 \
+  py -3.12 -m veredito.orquestrador --top-n 1
+```
+
+## O motor NÃO quebrou — e essa é a notícia
+
+A trilha dizia *"esperar que quebre"*, comparando com o `posta_parecer.py`, que
+em 18/08 quebrou em quatro lugares na primeira execução real. **Não foi o caso.**
+Na primeira vez que o `motor.py` falou com o mundo, ele fez exatamente o que o
+desenho promete:
+
+```
+pre-voo falhou na API da Anthropic: o motor nao resolveu: RuntimeError:
+VEREDITO_MOTOR=bedrock foi pedido e nao ha' credencial AWS utilizavel: a cadeia
+de credenciais do boto3 nao resolveu nada.
+Cair para a API direta aqui faturaria a rodada na conta errada em silencio.
+Configure a credencial, ou peca VEREDITO_MOTOR=anthropic de proposito.
+A rodada nao comeca: sem modelo nao ha promotor nem advogado.
+```
+
+Os três comportamentos que importavam, todos observados:
+
+1. **forçado levanta** — não caiu calado para a API direta, que faturaria a
+   rodada na conta errada e a faria parecer perfeita;
+2. o pré-voo **abortou antes de gastar** — zero chamada, zero dólar;
+3. a mensagem diz a causa **e a saída**, em vez de "sem credencial AWS".
+
+⚠️ Isto é o caminho de recusa, não o caminho feliz. **O caminho feliz continua
+sem nunca ter rodado** — e é lá que o `posta_parecer.py` quebrou em quatro
+lugares. Não confunda "a recusa funciona" com "o Bedrock funciona".
+
+## 🚨 O que BLOQUEIA a T2 inteira — e não é a credencial
+
+`veredito/orquestrador.py:253`:
+
+```python
+if not cfg.ANTHROPIC_API_KEY:
+    raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
+```
+
+**Incondicional.** Medido:
+
+```bash
+ANTHROPIC_API_KEY= VEREDITO_MOTOR=bedrock ... py -3.12 -m veredito.orquestrador
+# -> ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.   (exit 1)
+```
+
+Quem roda **inteiramente em crédito da AWS** — que é o motivo do motor existir,
+item 5 da trilha — corretamente **não tem** `ANTHROPIC_API_KEY`. E é parado por
+uma chave que aquela rodada nunca usaria, com uma mensagem que manda pôr no
+`.env` o que a pessoa deliberadamente não tem.
+
+E o `motor.py` **já sabe a regra certa** — `descreve()` faz
+`if m.nome == "anthropic" and not cfg.ANTHROPIC_API_KEY`. O orquestrador
+contradiz uma regra que o módulo do lado já acertou. É a guarda aplicada onde não
+é o caso: a mesma classe do acento vazando para o comentário do PR, na T1.
+
+🚫 **Não editei** — `orquestrador.py` não está na minha tabela. Vai como pedido.
+
+## Duas quebras que o worktree acordou
+
+A mudança de hoje (worktree por trilha) quebra o pipeline, e o erro aponta para
+o lugar errado.
+
+**(a) `.env` não vai junto.** Ele está no `.gitignore`, então `git worktree add`
+não o leva. Sem ele o produto cai em **todos** os padrões do `config.py` — a
+dívida do `or <valor do desafio>` que o `CLAUDE.md` documenta — e não avisa. O
+sintoma aparece longe:
+
+```
+open C:\...\.worktrees-trilhas\hack2l-challenge\docker-compose.yml:
+The system cannot find the path specified.
+```
+
+`hack2l-challenge` é o **padrão do código**, um diretório que não existe em
+lugar nenhum desta máquina. Lê-se como "falta clonar o repo do desafio".
+
+**(b) e o `.env` copiado não basta**, porque os caminhos dele são **relativos**:
+`CHALLENGE_REPO=../desafio` resolve contra a raiz do *worktree*. O erro só troca
+de nome, para `.worktrees-trilhas\desafio`.
+
+A suposição "o repo mora ao lado de `desafio/` e `bancada/`" está em três
+lugares, e os três quebram em worktree:
+
+| arquivo | linha |
+|---|---|
+| `veredito/config.py:71` | `DESAFIO = (RAIZ / _s("CHALLENGE_REPO", "../hack2l-challenge"))` |
+| `roda_bancada.py:23` | `BANCADA = RAIZ.parent / "bancada"` |
+| `roda_bancada.py:56` | `WORKTREES_DIR = RAIZ.parent / ".worktrees-bancada"` |
+
+Contornável por variável de ambiente absoluta (foi o que fiz), mas **cada trilha
+vai tropeçar nisto sozinha**, e o erro não diz "você está num worktree".
+
+## O que funcionou, e vale registrar
+
+- a guarda do `.env` sombreado **disparou certo**: *"o .env NAO esta valendo
+  para: CHALLENGE_REPO, PR_BRANCH"* — exatamente as duas que eu havia
+  sobreposto de propósito. Ela consegue ficar quieta e não ficou à toa.
+- o pré-voo alcança o motor com `APP_SUBIR=0`: dá para exercitar a fiação da AWS
+  sem Docker e sem tirar o recurso de ninguém.
+- as contas da bancada pedem `VEREDITO_SENHA_*` no ambiente (trabalho de 19/08).
+  Não estão setadas aqui, e o pré-voo listou as quatro **com o nome da variável
+  que falta**. Para a rodada paga valer, elas precisam estar no ambiente — senão
+  a prova ponta a ponta fica desligada e a rodada mede menos do que parece.
+
+## Onde o item 1 para
+
+Sem credencial AWS, o caminho feliz é inalcançável. **Ordem para quando ela
+existir:**
+
+1. o pedido do `ANTHROPIC_API_KEY` (senão nem começa em crédito puro);
+2. `medir_bedrock.py --motor bedrock` — cinco chamadas mínimas, ~US$0,01, fecha
+   o item 2 e valida credencial/região/habilitação antes de gastar de verdade;
+3. só então o item 1 completo, com Docker e `VEREDITO_SENHA_*` no ambiente.
+
+Fazer (2) antes de (3) é deliberado: se o modelo não estiver habilitado na
+conta, o erro é um 404 que se lê como "o modelo não existe" — e custa uma tarde.
+
+---
+
+## PEDIDOS (continuação)
+
+### 5 → sessão principal / T3: `orquestrador.py:253` bloqueia rodada em crédito AWS
+
+Trocar o `if not cfg.ANTHROPIC_API_KEY` incondicional por algo que respeite o
+motor. O `motor.descreve()` já tem a regra certa e o pré-voo já aborta com boa
+mensagem — a checagem antecipada pode virar motor-aware ou simplesmente sair.
+🚨 **Enquanto isso não mudar, os itens 1, 3 e 5 da T2 não rodam em crédito puro.**
+
+### 6 → sessão principal: worktree quebra o pipeline (as três linhas acima)
+
+Sugestão, na ordem de custo: documentar no `CLAUDE.md` que worktree precisa de
+`.env` copiado **com caminhos absolutos**; ou derivar a raiz do repositório com
+`git rev-parse --path-format=absolute --git-common-dir` em vez de `RAIZ.parent`,
+que é o que resolve de verdade e vale para as cinco trilhas.
