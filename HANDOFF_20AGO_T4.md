@@ -7,6 +7,19 @@
 > **`veredito/` não foi aberto para escrita.** Nenhum arquivo de outra trilha
 > foi tocado.
 
+## Estado do ramo
+
+`t4-narrativa` está **no remoto**, ramificado de `04fb1d7` (que é o
+`origin/main` de hoje). **Não foi mergeado no `main`** — o merge ficou para
+quem coordena, e é ele que destrava o link do rodapé (PEDIDO 3).
+
+⚠️ O ramo saiu de um **worktree separado**, em `.worktrees/t4-narrativa`, e não
+do checkout principal. Foi de propósito: o checkout principal estava com
+`t2-aws` em uso pela sessão da T2, e trocar o ramo dele no meio do trabalho
+alheio é conflito garantido. Quem for continuar a T4 pode usar o mesmo worktree;
+quem for apagá-lo, `git worktree remove` — nunca `rm -rf`, que deixa o registro
+órfão.
+
 ## Custo desta sessão
 
 **US$ 0,00 em API.** Nenhuma rodada foi disparada; todo o material saiu de
@@ -87,21 +100,24 @@ benigno. ✅ E **não** é o pulo perigoso do `../CLAUDE.md`:
 
 ## PEDIDOS
 
-### 1. 🚨 Para a sessão principal — o trabalho de 19/08 e as trilhas não estão no `origin/main`
+### 1. ✅ RESOLVIDO — as trilhas já estão no `origin/main`
 
-Este é o achado operacional da sessão, e ele atinge as cinco trilhas.
+*(Ficou aberto por cerca de uma hora. Fica registrado porque a janela existiu e
+porque quem abrir a T1, a T3 ou a T5 vai querer saber que ela fechou.)*
 
 `TRILHAS_ATE_01SET.md` foi commitado em `3be9750`, no ramo
-`19ago/canario-raiz-de-import-e-senha-em`. A sessão da T2 mergeou esse ramo em
-`04fb1d7` — mas **`04fb1d7` está só local, no ramo `t2-aws`**. O `origin/main`
-continua em `ec109a5`.
+`19ago/canario-raiz-de-import-e-senha-em`, e mergeado em `04fb1d7`. Durante a
+maior parte desta sessão esse merge existia **só local**, no ramo `t2-aws`,
+enquanto o `origin/main` continuava em `ec109a5`.
 
-Consequência direta: o protocolo manda `git checkout -b t<n>-<nome> origin/main`,
-e quem obedecer literalmente **não recebe o arquivo de contrato das trilhas nem
-o trabalho de 19/08**. A trilha começa sem saber o que é dela.
+O risco era concreto: o protocolo manda `git checkout -b t<n>-<nome> origin/main`,
+e quem obedecesse literalmente **não receberia o arquivo de contrato das trilhas
+nem o trabalho de 19/08** — a trilha começaria sem saber o que é dela. Eu
+contornei ramificando de `04fb1d7` em vez de `origin/main`.
 
-Eu contornei ramificando de `04fb1d7`. Sugestão: empurrar esse merge para
-`origin/main` antes que a T1, a T3 e a T5 abram seus ramos.
+✅ **Conferido no fim da sessão: `origin/main` está em `04fb1d7`.** A sessão da
+T2 empurrou enquanto eu escrevia. `git checkout -b t<n> origin/main` agora traz
+o arquivo certo, e não há nada a fazer aqui.
 
 ### 2. Para a T3 — a suíte rápida não é hermética
 
@@ -140,7 +156,13 @@ que o cliente lê** — a mesma classe do `Artefato: artefatos/prova_correcao_01
 apontando para um caminho que o autor do PR não tem, que é o defeito nº 6 da
 lista da T1.
 
-Entra assim que `NARRATIVA.md` chegar ao `main`, e não antes.
+⚠️ **E continua valendo depois do push do ramo.** `t4-narrativa` está no remoto,
+então `NARRATIVA.md` já tem URL — mas é a URL de um **ramo de trabalho**, que
+muda de lugar no merge e some quando o ramo for apagado. Link de produção
+apontando para ramo é o mesmo caminho morto, com validade maior.
+
+A condição é uma só e não mudou: **`NARRATIVA.md` no `main`.** Aí o link entra
+apontando para `blob/main/`.
 
 ---
 
