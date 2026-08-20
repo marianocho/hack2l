@@ -44,7 +44,7 @@ def sem_secao_de_banco(monkeypatch, tmp_path):
 def test_descartado_e_explicado_como_NAO_e_problema_do_autor():
     """A frase que impede o comentario de acusar o que ele inocentou."""
     corpo = comentario.monta(_org(descartados=[_v("a1")]), {"a1": _a("a1")}, {})
-    assert "nao e' um problema no seu PR" in corpo, (
+    assert "não é um problema no seu PR" in corpo, (
         "o autor vai ler 'descartado' como 'achado'")
 
 
@@ -63,7 +63,7 @@ def test_resumo_com_condenado_poe_o_achado_na_frente():
              descartados=[_v("a1")]),
         {"c1": _a("c1"), "a1": _a("a1")}, {})
     primeira = [l for l in corpo.splitlines() if l.startswith("**")][0]
-    assert "1 achado(s) com evidencia" in primeira
+    assert "1 achado com evidência" in primeira
 
 
 def test_condenado_fica_ABERTO_e_o_resto_colapsado():
@@ -75,6 +75,64 @@ def test_condenado_fica_ABERTO_e_o_resto_colapsado():
         {"c1": _a("c1"), "a1": _a("a1")}, {})
     antes = corpo.index("c1") if "c1" in corpo else corpo.index("vaza")
     assert antes < corpo.index("<details>"), "o achado ficou depois do colapsavel"
+
+
+# ------------------------------------- 🚨 a superficie do CLIENTE, nao a nossa
+
+# As duas travas abaixo guardam os defeitos 1 e 2 da trilha T1, medidos no
+# comentario que estava no ar em `bancada#1`. Nenhuma delas olha o texto do
+# MODELO -- so' o nosso, que e' o unico que nos escrevemos e o unico que tinha
+# como estar errado.
+
+def _corpo_de_exemplo(**contagens):
+    """Um comentario com condenado, descartado e inconclusivo, sem tocar em API."""
+    c = [{"id": "c1", "veredito": "PROVADO", "severidade": "ALTA",
+          "motivo": "vaza", "conserto": "restaurar a checagem"}]
+    d = [_v(f"d{i}") for i in range(contagens.get("d", 3))]
+    i = [_v(f"i{n}") for n in range(contagens.get("i", 2))]
+    ac = {v["id"]: _a(v["id"]) for v in c + d + i}
+    # Com escopo: exercita tambem a secao das nao-testadas, que e' onde o
+    # defeito 7 mora e onde a palavra "orcamento" aparece.
+    escopo = {
+        "levantadas": 9, "nao_testadas": 2, "teto": 3,
+        "fora_do_orcamento": [
+            {"id": "f1", "categoria": "performance", "local": "app/x.py:10",
+             "hipotese": "h1", "posicao": 4, "motivo": "abaixo do corte do teto"},
+            {"id": "f2", "categoria": "prd", "local": "app/x.py:11",
+             "hipotese": "h2", "posicao": 5, "motivo": "abaixo do corte do teto"},
+        ],
+    }
+    return comentario.monta(_org(c, d, i), ac, {}, escopo=escopo)
+
+
+# Plural de formulario: `1 achado(s)`, `0 suspeita(s)`, `2 lente(s)`. O leitor
+# le "o robo nao sabe contar" antes de ler o achado, e le isso na PRIMEIRA linha.
+def test_o_plural_nao_e_de_formulario():
+    """🚨 Estava no ar: `**1 achado(s) com evidencia.**`, na linha de abertura."""
+    for d, i in ((3, 2), (1, 1), (0, 0)):
+        corpo = _corpo_de_exemplo(d=d, i=i)
+        assert "(s)" not in corpo, (
+            f"plural de formulario sobreviveu com d={d}, i={i}: "
+            + next(l for l in corpo.splitlines() if "(s)" in l))
+
+
+# Acento: a restricao do console cp1252 vazou para o navegador, onde ela nunca
+# valeu -- e nem no console ela pedia isto, porque acento CABE em cp1252.
+_NOSSAS_PALAVRAS = [
+    ("evidência", "evidencia"), ("verificação", "verificacao"),
+    ("acusação", "acusacao"), ("não", "nao"), ("é", "e'"),
+    ("reproduzível", "reproduzivel"), ("orçamento", "orcamento"),
+]
+
+
+def test_o_texto_que_o_autor_le_vem_acentuado():
+    """🚨 `1 achado(s) com evidencia` ao lado de `Remoção` do modelo, na mesma
+    tela. Restricao de uma superficie aplicada onde ela nao vale."""
+    corpo = _corpo_de_exemplo()
+    faltando = [certo for certo, _ in _NOSSAS_PALAVRAS if certo not in corpo]
+    assert not faltando, f"sumiram do comentario (nosso texto): {faltando}"
+    sobrando = [errado for _, errado in _NOSSAS_PALAVRAS if errado in corpo]
+    assert not sobrando, f"forma sem acento no texto do cliente: {sobrando}"
 
 
 # ------------------------------------------- e o bot nao empilha

@@ -256,3 +256,44 @@ def test_sem_token_nao_tenta_e_diz_por_que(gh, monkeypatch, capsys):
     assert pp.main() == 2
     assert falso.chamadas == []
     assert "GH_TOKEN" in capsys.readouterr().err
+
+
+# ------------------------------- 🚨 de onde sai o endereco que o autor clica
+
+def test_o_repo_sai_da_URL_do_PR_e_nao_do_ambiente(monkeypatch, tmp_path):
+    """⚠️ Os dois divergem, e e' no modo de DEMONSTRAR que eles divergem.
+
+    `GITHUB_REPOSITORY` e' onde o workflow roda; a URL e' o PR que estamos
+    comentando. No `workflow_dispatch` apontado para um PR de terceiro sao
+    repositorios diferentes, e usar o do ambiente mandaria o autor para um
+    arquivo de OUTRO projeto -- a mesma classe do caminho normalizado contra a
+    worktree errada, que o `_local` ja pagou em 17/08.
+    """
+    from veredito import config as cfg
+    rodada = tmp_path / "20260818T1928-61cc0a7"
+    rodada.mkdir()
+    monkeypatch.setattr(cfg, "RODADA", rodada)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "marianocho/hack2l")
+    monkeypatch.setenv("GITHUB_RUN_ID", "17654321")
+
+    meta = pp._meta_da_rodada(
+        "https://github.com/luisfelp07/bancada/pull/1")
+    assert meta["repo"] == "luisfelp07/bancada", "o repo veio do ambiente"
+    assert meta["head"] == "61cc0a7", "o commit nao saiu do carimbo"
+    assert meta["execucao"] == "17654321"
+
+
+def test_sem_carimbo_com_commit_o_campo_head_NAO_e_inventado(monkeypatch, tmp_path):
+    """`_carimbo_da_rodada` deixa cair o sufixo quando o git nao responde.
+    Sem commit, sem link -- nunca um sha fabricado a partir do horario."""
+    from veredito import config as cfg
+    rodada = tmp_path / "20260818T1928"
+    rodada.mkdir()
+    monkeypatch.setattr(cfg, "RODADA", rodada)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+
+    meta = pp._meta_da_rodada("https://github.com/d/r/pull/1")
+    assert "head" not in meta
+    from veredito import superficie
+    assert superficie.Ligacao.de(meta) is None

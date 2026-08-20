@@ -102,7 +102,7 @@ def test_evidencia_http_mostra_o_contraste_nao_so_a_ultima_chamada():
              "status": 404, "erro": None, "corpo": "{}"},
         ],
     }
-    linha = juiz._evidencia_http(art)
+    linha = "\n".join(juiz._evidencia_http(art))
     assert "HTTP 201" in linha and "HTTP 404" in linha
 
 
@@ -112,9 +112,11 @@ def test_evidencia_http_nao_vira_dump():
         "chamadas": [{"metodo": "GET", "caminho": f"/x/{i}", "como": "carol",
                       "status": 200, "erro": None, "corpo": ""} for i in range(9)],
     }
-    linha = juiz._evidencia_http(art)
+    linha = "\n".join(juiz._evidencia_http(art))
     assert linha.count("HTTP 200") == 4
-    assert "+5 chamada(s) antes" in linha
+    # ⚠️ `chamadas`, e nao `chamada(s)`: o plural de formulario saiu do texto
+    # que o cliente le em 20/08, e a contagem passa pela mesma funcao.
+    assert "+5 chamadas antes" in linha
 
 
 def test_404_conta_como_ter_alcancado_a_api_e_isso_e_deliberado():

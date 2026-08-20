@@ -39,13 +39,42 @@ from veredito import comentario, entrada  # noqa: E402
 API = "https://api.github.com"
 
 
-def _meta_da_rodada() -> dict:
-    """O que identifica esta rodada, para o rodape do comentario."""
+def _meta_da_rodada(url: str = "") -> dict:
+    """O que identifica esta rodada -- e de onde sai um endereco clicavel.
+
+    🚨 As tres pecas do link nascem AQUI porque e' aqui que as tres existem ao
+    mesmo tempo, e em lugar nenhum antes:
+
+        repo      da URL do PR que estamos comentando (ou de GITHUB_REPOSITORY)
+        head      do CARIMBO da rodada, que e' o commit de fato revisado
+        execucao  de GITHUB_RUN_ID, onde o `upload-artifact` deixou o rastro
+
+    ⚠️ `repo` sai da URL ANTES do ambiente. A URL e' o PR que este comando esta
+    comentando; `GITHUB_REPOSITORY` e' o repositorio onde o workflow RODA, e os
+    dois divergem no `workflow_dispatch` apontado para um PR de terceiro --
+    justamente o modo de demonstrar. Ali o ambiente daria o repo errado, e o
+    permalink levaria o autor a um arquivo de outro projeto. E' a mesma classe
+    do caminho normalizado contra a worktree errada, que o `_local` ja pagou.
+
+    🚫 Nada aqui LEVANTA. Sem carimbo com commit, sem URL utilizavel ou sem
+    ambiente de Action, o campo simplesmente nao entra no `meta` -- e
+    `Ligacao.de` devolve None, o comentario sai em texto puro, e ninguem e'
+    mandado para um 404. Ausente nao e' vazio.
+    """
     import json
 
     from veredito import config as cfg
+    from veredito import superficie
 
-    meta = {"rodada": cfg.RODADA.name}
+    meta = {"rodada": cfg.RODADA.name, **superficie.do_ambiente()}
+    try:
+        dono, repo, _ = entrada.partes(url)
+        meta["repo"] = f"{dono}/{repo}"
+    except entrada.EntradaFalhou:
+        pass                      # fica o GITHUB_REPOSITORY, se houver
+    head = superficie.head_do_carimbo(cfg.RODADA.name)
+    if head:
+        meta["head"] = head
     try:
         custo = json.loads((cfg.RODADA / "custo.json").read_text(encoding="utf-8"))
         meta["segundos"] = custo.get("segundos")
@@ -99,7 +128,7 @@ def main() -> int:
                    help="grava o corpo num arquivo, para conferir antes")
     args = p.parse_args()
 
-    corpo = comentario.do_disco(_meta_da_rodada())
+    corpo = comentario.do_disco(_meta_da_rodada(args.url))
 
     if args.saida:
         Path(args.saida).write_text(corpo, encoding="utf-8")

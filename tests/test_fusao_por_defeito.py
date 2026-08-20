@@ -223,7 +223,8 @@ def test_ordem_de_severidade_do_juiz_sobrevive():
 
 # ------------------------------------------- o bloco que o autor le
 
-from veredito import juiz  # noqa: E402
+from veredito import juiz
+from veredito import superficie  # noqa: E402
 
 
 def _v(id_, sev="ALTA", conserto="restaurar a checagem"):
@@ -263,8 +264,11 @@ def test_convergencia_vem_antes_do_conserto():
     """A ordem e' do leitor: primeiro "e' um defeito", por ultimo a acao."""
     cond, ac, art = _cena()
     bloco = juiz.bloco_agrupado(fusao.agrupa(cond, ac)[0], ac, art)
-    assert bloco.index("CONVERGENCIA:") < bloco.index("CONSERTO SUGERIDO:")
-    assert bloco.index("O QUE:") < bloco.index("CONVERGENCIA:")
+    # ⚠️ Pergunta ao ESTILO como o rotulo sai, em vez de repetir a convencao:
+    # a constante e' "Convergência" e o terminal imprime "CONVERGÊNCIA:".
+    r = superficie.TERMINAL.rotulo
+    assert bloco.index(r(juiz.CONVERGENCIA)) < bloco.index(r(juiz.CONSERTO))
+    assert bloco.index(r(juiz.O_QUE)) < bloco.index(r(juiz.CONVERGENCIA))
 
 
 def test_cabecalho_mostra_a_extensao_do_defeito():
@@ -280,7 +284,9 @@ def test_convergencia_nao_conta_a_mesma_lente_duas_vezes():
         _a("c2", "app/main.py:104", REGRAS),
     ]}
     bloco = juiz.bloco_agrupado(fusao.agrupa([_v("c1"), _v("c2")], ac)[0], ac, {})
-    assert "1 lente(s)" in bloco, "duas acusacoes da MESMA lente viraram duas lentes"
+    # ⚠️ `1 lente`, e nao `1 lente(s)`: o plural de formulario saiu em 20/08.
+    assert "1 lente " in bloco, "duas acusacoes da MESMA lente viraram duas lentes"
+    assert "lente(s)" not in bloco
 
 
 def test_achado_solitario_sai_igual_ao_bloco_de_sempre():
@@ -299,4 +305,4 @@ def test_sem_conserto_o_conteudo_nao_se_perde():
         v.pop("conserto")
     bloco = juiz.bloco_agrupado(fusao.agrupa(cond, ac)[0], ac, art)
     assert "padroes_01" in bloco and "performance_01" in bloco
-    assert "CONVERGENCIA:" in bloco
+    assert superficie.TERMINAL.rotulo(juiz.CONVERGENCIA) in bloco

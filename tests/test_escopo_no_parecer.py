@@ -180,7 +180,7 @@ def test_nao_testada_nunca_e_apresentada_como_descarte():
              for i in range(1, 5)]}
     texto = juiz.formata_parecer(_org(condenados=1), {}, {}, escopo=e)
     corpo = texto.split("## LEVANTADAS E NAO TESTADAS")[1]
-    assert "Nao sao descartes" in corpo
+    assert "Não são descartes" in corpo
     assert "nenhuma tem veredito" in corpo
     # E nao contaminou a contagem da pericia: as 4 nao viraram descartados.
     assert "0 descartados com motivo" in texto
@@ -224,7 +224,7 @@ def test_escopo_ausente_ainda_conta_pelas_brutas(rodada):
     assert "25 suspeitas levantadas" in texto
     # O que NAO se reconstroi tem que ser dito, nao suposto: sem escopo gravado
     # nao da' para separar duplicata fundida de acusacao nao olhada.
-    assert "nao foi gravado nesta rodada" in texto
+    assert "não foi gravado nesta rodada" in texto
 
 
 def test_escopo_gravado_vence_a_reconstrucao(rodada):
