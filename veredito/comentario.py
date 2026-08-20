@@ -37,6 +37,7 @@ precisam ser enquadradas em voz alta OU VIRAM ACUSACAO.
 from __future__ import annotations
 
 from . import fusao
+from . import superficie
 from . import prova_de_fusao as pfus
 from . import segredo
 from . import juiz
@@ -63,29 +64,70 @@ def _legenda() -> list[str]:
     """
     return [
         "<sub>",
-        "**provado** = ha artefato reproduzivel (um teste que passa no commit "
-        "base e falha com esta mudanca, ou chamadas HTTP registradas). "
-        "**descartado** = a suspeita foi levantada e a verificacao a derrubou "
-        "&mdash; nao e' um problema no seu PR, e' ruido que ja foi filtrado. "
-        "**inconclusivo** = nao deu para decidir, e a causa esta dita.",
+        "**provado** = há artefato reproduzível (um teste que passa no commit "
+        "base e falha com esta mudança, ou chamadas HTTP registradas). "
+        "**descartado** = a suspeita foi levantada e a verificação a derrubou "
+        "&mdash; não é um problema no seu PR, é ruído que já foi filtrado. "
+        "**inconclusivo** = não deu para decidir, e a causa está dita.",
         "</sub>",
         "",
     ]
 
 
+def _maiuscula(frase: str) -> str:
+    """Primeira letra em caixa alta, sem mexer no resto.
+
+    `str.capitalize()` abaixaria o resto da frase, e a frase carrega sigla e
+    nome de arquivo dentro.
+    """
+    return frase[:1].upper() + frase[1:] if frase else frase
+
+
 def _resumo(c: int, d: int, i: int) -> str:
-    """Uma linha, e ela e' a unica que muita gente vai ler."""
+    """Uma linha, e ela é a única que muita gente vai ler.
+
+    🚨 As contagens ZERO saem da frase, em vez de virarem "Outras 0 suspeita(s)".
+    Não é economia de texto: um zero numa frase afirmativa faz o leitor parar
+    para conferir se o robô contou certo -- e ele para justamente na linha que
+    devia entregar o veredito. As listas colapsadas já aparecem só quando têm
+    conteúdo; o resumo passa a seguir a mesma regra.
+
+    ⚠️ O que NÃO sai é a legenda. Ela explica as três palavras do produto, e é
+    o enquadramento que impede "descartado" de ser lido como acusação.
+    """
+    caudas = []
+    if d:
+        caudas.append("1 outra suspeita foi verificada e descartada" if d == 1
+                      else f"{d} outras suspeitas foram verificadas e descartadas")
+    if i:
+        caudas.append("1 ficou inconclusiva" if i == 1
+                      else f"{i} ficaram inconclusivas")
+    cauda = f" {_maiuscula('; '.join(caudas))}." if caudas else ""
+
     if c:
-        return (f"**{c} achado(s) com evidencia.** "
-                f"Outras {d} suspeita(s) foram verificadas e descartadas; "
-                f"{i} ficaram inconclusivas.")
+        return f"**{superficie.conta(c, 'achado')} com evidência.**{cauda}"
     if d and not i:
-        return (f"**Nada a apontar neste PR.** {d} suspeita(s) foram levantadas "
-                "e a verificacao derrubou todas.")
+        return ("**Nada a apontar neste PR.** " + (
+            "1 suspeita foi levantada, e a verificação a derrubou."
+            if d == 1 else
+            f"{d} suspeitas foram levantadas, e a verificação derrubou todas."))
     if d or i:
-        return (f"**Nenhum achado sustentado por evidencia.** {d} suspeita(s) "
-                f"foram descartadas com motivo e {i} ficaram inconclusivas.")
+        return f"**Nenhum achado sustentado por evidência.**{cauda}"
     return "**Nenhuma suspeita chegou a ser verificada nesta rodada.**"
+
+
+def _sem_cabecalho(linhas: list[str]) -> list[str]:
+    """Tira o titulo `##` do parecer de terminal, e as bordas em branco.
+
+    ⚠️ As linhas em branco do MEIO ficam: sao elas que separam paragrafo em
+    markdown. Ver o comentario em `monta`.
+    """
+    corpo = [l for l in linhas if not l.startswith("## ")]
+    while corpo and not corpo[0].strip():
+        corpo.pop(0)
+    while corpo and not corpo[-1].strip():
+        corpo.pop()
+    return corpo
 
 
 def _detalhes(titulo: str, linhas: list[str], aberto: bool = False) -> list[str]:
@@ -95,13 +137,14 @@ def _detalhes(titulo: str, linhas: list[str], aberto: bool = False) -> list[str]
             f"<summary>{titulo}</summary>", "", *linhas, "", "</details>"]
 
 
-def _lista(veredictos: list[dict], acusacoes: dict) -> list[str]:
+def _lista(veredictos: list[dict], acusacoes: dict, estilo=None) -> list[str]:
+    estilo = estilo or superficie.TERMINAL
     fora = []
     for v in veredictos:
         a = acusacoes.get(v["id"], {})
         rotulo = juiz._CATEGORIA_DO_DESAFIO.get(a.get("categoria"),
                                                 a.get("categoria", "?"))
-        fora.append(f"- **{rotulo}** em `{juiz._local(a)}`  \n  {v.get('motivo', '-')}")
+        fora.append(f"- **{rotulo}** em {estilo.local(juiz._local(a))}  \n  {v.get('motivo', '-')}")
     return fora
 
 
@@ -122,8 +165,8 @@ def _rodape(meta: dict) -> list[str]:
         partes.append(f"rodada `{meta['rodada']}`")
     linha = " &middot; ".join(partes) if partes else "sem metadados da rodada"
     return ["", "---", "",
-            "<sub><b>Veredito</b> &mdash; cada suspeita e' tratada como "
-            "acusacao, e nada vira parecer sem prova reproduzivel. "
+            "<sub><b>Veredito</b> &mdash; cada suspeita é tratada como "
+            "acusação, e nada vira parecer sem prova reproduzível. "
             f"{linha}</sub>"]
 
 
@@ -137,8 +180,8 @@ def corta(corpo: str, teto: int) -> tuple[str, bool]:
     """
     if len(corpo) <= teto:
         return corpo, False
-    aviso = ("\n\n> [!WARNING]\n> **Comentario truncado** no limite de "
-             f"{teto:,} caracteres do GitHub. O parecer completo esta nos "
+    aviso = ("\n\n> [!WARNING]\n> **Comentário truncado** no limite de "
+             f"{teto:,} caracteres do GitHub. O parecer completo está nos "
              "artefatos da rodada.")
     # ⚠️ Teto menor que o proprio aviso so' acontece em teste -- e e' justamente
     # por isso que precisa estar certo: guarda vista respeitar o limite apenas
@@ -171,39 +214,59 @@ def monta(organizado: dict, acusacoes: dict, artefatos: dict,
     # que o cliente le.
     # Refinado pela PROVA quando ela existe no disco; senao, a heuristica --
     # e o bloco diz qual das duas foi. Ler do arquivo mantem esta funcao pura.
+    # 🚨 AQUI o parecer deixa de ser tela de terminal. Até 20/08 este corpo saía
+    # com `O QUE:` e `[ALTA] [alta]` -- tipografia de console dentro de um
+    # navegador -- e com `app/main.py:103-106` como TEXTO, mandando o autor
+    # procurar à mão a linha que o produto já sabia.
+    #
+    # A `Ligacao` pode ser None (rodada local, sem repo/commit conhecidos): aí o
+    # markdown continua e só o link não sai. 🚫 Nunca um link chutado -- um 404
+    # é o mesmo defeito do caminho morto, com roupa melhor.
+    estilo = superficie.Markdown(superficie.Ligacao.de(meta))
+
     grupos = pfus.aplica(fusao.agrupa(c, acusacoes), pfus.do_disco())
     p: list[str] = [MARCA, "", "## Veredito", ""]
     p += [_resumo(len(grupos), len(d), len(i)), ""]
     p += _legenda()
 
     if levantadas:
-        p += [f"<sub>{levantadas} suspeita(s) levantadas, "
-              f"{len(c) + len(d) + len(i)} verificadas dentro do orcamento "
-              "desta rodada.</sub>", ""]
+        examinadas = len(c) + len(d) + len(i)
+        p += [f"<sub>{superficie.conta(levantadas, 'suspeita')} "
+              f"{superficie.plural(levantadas, 'levantada')}, {examinadas} "
+              f"{superficie.plural(examinadas, 'verificada')} dentro do "
+              "orçamento desta rodada.</sub>", ""]
 
     # Condenados ABERTOS e por extenso: e' o que o autor precisa agir.
     for grupo, ver, det in grupos:
-        p += [juiz.bloco_agrupado(grupo, acusacoes, artefatos, http, (ver, det)), ""]
+        p += [juiz.bloco_agrupado(grupo, acusacoes, artefatos, http, (ver, det),
+                                  estilo), ""]
 
     # E o resto colapsado. Presente, nunca omitido -- as duas listas sao a peca
     # que o produto tem e ninguem mais tem -- mas sem competir com o achado.
-    p += _detalhes(f"{len(d)} suspeita(s) verificadas e descartadas, com motivo",
-                   _lista(d, acusacoes))
-    p += _detalhes(f"{len(i)} inconclusiva(s), com a causa",
-                   _lista(i, acusacoes))
+    p += _detalhes(f"{superficie.conta(len(d), 'suspeita')} "
+                   f"{superficie.plural(len(d), 'verificada')} e "
+                   f"{superficie.plural(len(d), 'descartada')}, com motivo",
+                   _lista(d, acusacoes, estilo))
+    p += _detalhes(f"{superficie.conta(len(i), 'inconclusiva')}, com a causa",
+                   _lista(i, acusacoes, estilo))
 
-    nao_testadas = juiz._secao_nao_testadas(escopo)
+    nao_testadas = juiz._secao_nao_testadas(escopo, estilo)
     if nao_testadas:
         # Sem o cabecalho `##` do parecer de terminal: dentro do <details> ele
         # viraria um titulo solto no meio do comentario.
-        corpo = [l for l in nao_testadas if l.strip() and not l.startswith("## ")]
-        p += _detalhes("Levantadas e nao testadas (fora do orcamento da rodada)",
+        #
+        # 🚨 Mas as linhas EM BRANCO ficam. Ate' 20/08 este filtro tirava toda
+        # linha vazia junto com o titulo, e em markdown isso cola os paragrafos:
+        # o aviso das duplicatas, a nota do detalhamento e a lista viravam um
+        # bloco unico de texto corrido. Tirar o titulo e tirar a estrutura eram
+        # a mesma linha de codigo, e so' a segunda era de proposito.
+        corpo = _sem_cabecalho(nao_testadas)
+        p += _detalhes("Levantadas e não testadas (fora do orçamento da rodada)",
                        corpo)
 
     banco = juiz._secao_efeito_no_banco()
     if banco:
-        p += _detalhes("Efeito no banco do app",
-                       [l for l in banco if l.strip() and not l.startswith("## ")])
+        p += _detalhes("Efeito no banco do app", _sem_cabecalho(banco))
 
     corpo, _ = corta("\n".join(p), TETO - FOLGA_RODAPE)
     corpo = corpo + "\n".join(_rodape(meta)) + "\n"

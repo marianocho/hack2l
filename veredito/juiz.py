@@ -13,12 +13,13 @@ milissegundos, sem rede, e tem teste.
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from . import arbitro
+from . import fontes
 from . import fusao
 from . import prova_de_fusao as pfus
+from . import superficie
 from . import config as cfg
 from . import llm_alvo
 
@@ -343,8 +344,8 @@ def _local(acusacao: dict) -> str:
     return bruto
 
 
-def _evidencia_http(art: dict | None) -> str | None:
-    """A linha de evidencia de uma prova contra o app rodando.
+def _evidencia_http(art: dict | None, estilo=None) -> list[str] | None:
+    """A evidencia de uma prova contra o app rodando: lead + as chamadas.
 
     O `REVIEW_TASK.md` aceita TRES vias -- teste que falha, **reproducao contra o
     app rodando**, e trace/log/estado do banco. So' a primeira virava linha de
@@ -359,23 +360,28 @@ def _evidencia_http(art: dict | None) -> str | None:
     justamente a metade sem graca.
 
     Teto de 4 para o bloco nao virar dump; o artefato em disco tem tudo.
+
+    ⚠️ Devolve LISTA, e nao um bloco de texto ja' formatado com `\\n` e recuo de
+    dois espacos. O recuo era tipografia de terminal embutida no dado: para
+    virar item de lista no comentario do PR, `bloco_agrupado` tinha que
+    desmontar a string de volta com `.replace("EVIDENCIA: ", "")`. Quem monta o
+    fato entrega o fato; o recuo e' do estilo.
     """
+    estilo = estilo or superficie.TERMINAL
     if not (art or {}).get("alcancou_a_api"):
         return None
     completas = [c for c in art["chamadas"] if c["status"] is not None and not c["erro"]]
     mostradas = completas[-4:]
     linhas = [
-        f"  {c['metodo']} {c['caminho']} como {c['como']} -> HTTP {c['status']}"
+        estilo.monoespaco(
+            f"{c['metodo']} {c['caminho']} como {c['como']} -> HTTP {c['status']}")
         for c in mostradas
     ]
     omitidas = len(completas) - len(mostradas)
     if omitidas:
-        linhas.insert(0, f"  (+{omitidas} chamada(s) antes, no artefato)")
-    return (
-        "EVIDENCIA: contra o app rodando --\n"
-        + "\n".join(linhas)
-        + f"\n  Artefato: artefatos/http_{art['id']}.json"
-    )
+        linhas.insert(0, f"(+{superficie.conta(omitidas, 'chamada')} antes, no artefato)")
+    return ["Contra o app rodando:", *linhas,
+            estilo.artefato(f"artefatos/http_{art['id']}.json")]
 
 
 # O desafio nomeia cinco categorias; nos usamos seis, mais granulares. Traduzir
@@ -391,16 +397,50 @@ _CATEGORIA_DO_DESAFIO = {
 }
 
 
-def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = None) -> str:
+# Os rotulos, num lugar so'. A fusao remonta o bloco por ELES, entao um rotulo
+# escrito duas vezes -- aqui e la' -- e' a "chave em dois lugares" do CLAUDE.md
+# esperando para divergir na primeira vez que alguem reescrever um texto.
+O_QUE = "O que"
+ARBITRO = "Árbitro"
+CORROBORADO = "Corroborado por"
+CONVERGENCIA = "Convergência"
+FUSAO = "Fusão"
+EVIDENCIA = "Evidência"
+E_TAMBEM = "E também"
+TAMBEM_PROVADO = "Também provado por"
+CONSERTO = "Conserto sugerido"
+REGRAS = "Regras"
+
+
+def _campos(v: dict, acusacao: dict, artefato: dict | None,
+            http: dict | None = None, estilo=None) -> tuple[dict, list]:
+    """O bloco como FATOS rotulados: a cabeca, e os campos `(rotulo, valor)`.
+
+    🚨 Separado de `_bloco` porque a fusao precisa MEXER na estrutura -- por o
+    "Convergência" logo depois do "O que", as outras provas logo antes do
+    conserto -- e ate' aqui ela fazia isso procurando `"O QUE:"` dentro do texto
+    ja' formatado. Convencao de string carregando estrutura e' o item 4 do "como
+    procurar" do CLAUDE.md, e o preco chegou no dia em que a saida ganhou uma
+    SEGUNDA superficie: em markdown os rotulos mudam de forma, e todo o
+    remonte apagaria em silencio -- o bloco sairia sem convergencia, e um
+    defeito voltaria a parecer tres.
+
+    O valor de um campo e' texto, ou uma lista onde o primeiro item e' a frase e
+    o resto sao sub-linhas (recuo no terminal, item de lista no markdown).
+    """
+    estilo = estilo or superficie.TERMINAL
     interna = acusacao.get("categoria", "?")
-    rotulo = _CATEGORIA_DO_DESAFIO.get(interna, interna)
-    linhas = [
-        f"[{v.get('severidade','?')}] [{acusacao.get('confianca','?')}] "
-        f"{rotulo} - {_local(acusacao)}",
-        f"O QUE: {acusacao.get('hipotese','-')}",
+    cabeca = {
+        "severidade": v.get("severidade", "?"),
+        "confianca": acusacao.get("confianca", "?"),
+        "categoria": _CATEGORIA_DO_DESAFIO.get(interna, interna),
+        "local": _local(acusacao),
+    }
+    campos = [
+        (O_QUE, acusacao.get("hipotese", "-")),
         # Com procedencia a linha vira "a regra (arquivo:linha)", e o leitor do
         # parecer pode ir conferir. Era isso que "ARBITRO: AC2" nunca permitiu.
-        f"ARBITRO: {arbitro.formata(acusacao.get('arbitro'))}",
+        (ARBITRO, arbitro.formata(acusacao.get("arbitro"))),
     ]
     # Ferramenta deterministica e INDEPENDENTE apontou o mesmo lugar. E' sinal
     # de forca diferente de "duas lentes concordaram" -- as duas lentes sao o
@@ -411,36 +451,52 @@ def _bloco(v: dict, acusacao: dict, artefato: dict | None, http: dict | None = N
     # afirmou uma coisa especifica sobre aquela linha, e quem le tem que poder
     # julgar se aquilo sustenta este achado ou so' cai perto.
     for s in acusacao.get("_scanner", [])[:2]:
-        linhas.append(
-            f"CORROBORADO POR: {s.get('ferramenta', '?')} em {s.get('local', '?')} "
-            f'-- "{str(s.get("texto") or "")[:110]}"'
-        )
-    linha_http = _evidencia_http(http)
+        campos.append((
+            CORROBORADO,
+            f"{s.get('ferramenta', '?')} em {s.get('local', '?')} "
+            f'-- "{str(s.get("texto") or "")[:110]}"',
+        ))
+    http_ = _evidencia_http(http, estilo)
     if artefato and artefato.get("estado") == "PROVADO":
-        linhas.append(
-            f"EVIDENCIA: {artefato['arquivo_do_teste']} passa em {artefato['commit_base']} "
-            f"e falha em {artefato['commit_head']} (exit {artefato['exit_base']} -> "
-            f"{artefato['exit_head']}). Artefato: artefatos/prova_{artefato['id']}.json"
-        )
+        campos.append((EVIDENCIA, [
+            f"{estilo.monoespaco(artefato['arquivo_do_teste'])} passa em "
+            f"{artefato['commit_base']} e falha em {artefato['commit_head']} "
+            f"(exit {artefato['exit_base']} -> {artefato['exit_head']}).",
+            estilo.artefato(f"artefatos/prova_{artefato['id']}.json"),
+        ]))
         # Causalidade e alcance sao provas diferentes, e as duas juntas valem
         # mais: o teste diz que foi esta mudanca, o HTTP diz que da' para fazer
         # agora, de fora.
-        if linha_http:
-            linhas.append(linha_http.replace("EVIDENCIA:", "E TAMBEM:", 1))
-    elif linha_http:
-        linhas.append(linha_http)
+        if http_:
+            campos.append((E_TAMBEM, http_))
+    elif http_:
+        campos.append((EVIDENCIA, http_))
     else:
-        linhas.append(f"EVIDENCIA: nao fechou. {v.get('motivo') or 'sem motivo registrado'}")
+        campos.append((EVIDENCIA,
+                       f"Não fechou. {v.get('motivo') or 'sem motivo registrado'}"))
     if v.get("conserto"):
-        linhas.append(f"CONSERTO SUGERIDO: {v['conserto']}")
+        campos.append((CONSERTO, v["conserto"]))
     if v.get("regras_aplicadas"):
-        linhas.append("REGRAS: " + " | ".join(v["regras_aplicadas"]))
-    return "\n".join(linhas)
+        campos.append((REGRAS, " | ".join(v["regras_aplicadas"])))
+    return cabeca, campos
 
 
-# O trecho " - arquivo:linha" no fim do cabecalho de um bloco. Ancorado no FIM
-# para nao casar um hifen que apareca no rotulo da categoria.
-_RE_LOCAL_DO_CABECALHO = re.compile(r" - [^\s].*$")
+def _bloco(v: dict, acusacao: dict, artefato: dict | None,
+           http: dict | None = None, estilo=None) -> str:
+    estilo = estilo or superficie.TERMINAL
+    return estilo.bloco(*_campos(v, acusacao, artefato, http, estilo))
+
+
+def _posicao(campos: list, rotulo: str, depois: bool) -> int:
+    """O indice onde entra um campo novo, relativo ao `rotulo`.
+
+    Sem ancora, o fim: perder a ordem custa legibilidade, perder o conteudo
+    custa o achado. E' a mesma escolha que a versao por string ja fazia.
+    """
+    for n, (r, _) in enumerate(campos):
+        if r == rotulo:
+            return n + 1 if depois else n
+    return len(campos)
 
 
 def _principal(grupo: list[dict], artefatos: dict, http: dict) -> dict:
@@ -458,7 +514,8 @@ def _principal(grupo: list[dict], artefatos: dict, http: dict) -> dict:
 
 def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
                    http: dict | None = None,
-                   prova: tuple[str, dict] | None = None) -> str:
+                   prova: tuple[str, dict] | None = None,
+                   estilo=None) -> str:
     """Um defeito, com toda a prova que as lentes juntaram nele.
 
     🚨 O grupo NAO descarta os outros membros. Cada um continua com id, arquivo
@@ -469,28 +526,34 @@ def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
     ⚠️ "lentes", nunca "revisores independentes": sao seis chamadas do mesmo
     modelo. E' a mesma honestidade que `_corroborado` guarda em promotores.py.
     """
+    estilo = estilo or superficie.TERMINAL
     http = http or {}
     if len(grupo) == 1:
         v = grupo[0]
         return _bloco(v, acusacoes.get(v["id"], {}), artefatos.get(v["id"]),
-                      http.get(v["id"]))
+                      http.get(v["id"]), estilo)
     # `prova` chega do disco (fusao.json). Sem ela o bloco continua saindo -- so'
     # que dizendo que o agrupamento foi indicio, nunca calando a diferenca.
 
     chefe = _principal(grupo, artefatos, http)
-    linhas = _bloco(chefe, acusacoes.get(chefe["id"], {}), artefatos.get(chefe["id"]),
-                    http.get(chefe["id"])).split("\n")
+    cabeca, campos = _campos(chefe, acusacoes.get(chefe["id"], {}),
+                             artefatos.get(chefe["id"]), http.get(chefe["id"]), estilo)
+
+    # O cabecalho passa a mostrar a extensao do DEFEITO, e nao a linha do membro
+    # que por acaso liderou: o autor recebe um lugar so' para olhar, e ele cobre
+    # o que as lentes apontaram.
+    cabeca["local"] = fusao.local_do_grupo(grupo, acusacoes)
 
     nomes = [_CATEGORIA_DO_DESAFIO.get(c, c) for c in fusao.lentes(grupo, acusacoes)]
-    local = fusao.local_do_grupo(grupo, acusacoes)
     # ⚠️ Acusacoes e lentes sao contagens DIFERENTES, e a rodada 2 tinha 3
     # acusacoes de 2 lentes -- uma lente acusou duas vezes. Dizer "2 lentes,
     # nao 3 problemas" na mesma frase faz o leitor procurar o numero que falta.
     convergencia = (
-        f"CONVERGENCIA: {len(grupo)} acusacoes independentes, de {len(nomes)} "
-        f"lente(s) do revisor ({', '.join(nomes)}), caem neste mesmo defeito, "
-        f"cada uma com prova propria. E' UM defeito com UM conserto, "
-        f"nao {len(grupo)} problemas separados."
+        f"{superficie.conta(len(grupo), 'acusação', 'acusações')} independentes, "
+        f"de {superficie.conta(len(nomes), 'lente')} do revisor "
+        f"({', '.join(nomes)}), caem neste mesmo defeito, cada uma com prova "
+        f"própria. É UM defeito com UM conserto, não "
+        f"{len(grupo)} problemas separados."
     )
     extras = []
     for v in grupo:
@@ -503,37 +566,29 @@ def bloco_agrupado(grupo: list[dict], acusacoes: dict, artefatos: dict,
         # fusao fabricada a partir de caracteres soltos -- e sem os testes de
         # render isso teria ido para o comentario de PR de alguem.
         if art.get("estado") == "PROVADO":
-            evidencia = (f"{art.get('arquivo_do_teste')} passa em {art.get('commit_base')} "
-                         f"e falha em {art.get('commit_head')}")
+            evidencia = (f"{estilo.monoespaco(str(art.get('arquivo_do_teste')))} passa "
+                         f"em {art.get('commit_base')} e falha em {art.get('commit_head')}")
         else:
-            evidencia = _evidencia_http(http.get(v["id"])) or v.get("motivo") or "sem artefato"
-            evidencia = str(evidencia).replace("EVIDENCIA: ", "").replace("\n", " ")[:160]
-        extras.append(f"  E TAMBEM ({v['id']}): {evidencia}")
+            achado = _evidencia_http(http.get(v["id"]), estilo)
+            evidencia = "; ".join(achado) if achado else (v.get("motivo") or "sem artefato")
+            evidencia = str(evidencia).replace("\n", " ")[:160]
+        extras.append(f"{v['id']}: {evidencia}")
 
-    # O cabecalho passa a mostrar a extensao do DEFEITO, e nao a linha do membro
-    # que por acaso liderou: o autor recebe um lugar so' para olhar, e ele cobre
-    # o que as lentes apontaram.
-    linhas[0] = _RE_LOCAL_DO_CABECALHO.sub(f" - {local}", linhas[0], count=1)
-
-    # 🚨 A ordem e' do leitor, nao do codigo. CONVERGENCIA sobe para logo depois
-    # do "O QUE" -- e' a primeira coisa que muda a leitura de "tres problemas"
-    # para "um" -- e o CONSERTO fica sendo a ultima linha, que e' a acao.
-    # Sem ancora reconhecivel, acrescenta no fim: perder conteudo e' pior que
-    # perder a ordem.
-    def _indice(prefixo: str) -> int | None:
-        return next((n for n, l in enumerate(linhas) if l.startswith(prefixo)), None)
-
-    pos = _indice("O QUE:")
-    onde = pos + 1 if pos is not None else len(linhas)
-    linhas.insert(onde, convergencia)
+    # 🚨 A ordem e' do leitor, nao do codigo. A convergencia sobe para logo
+    # depois do "O que" -- e' a primeira coisa que muda a leitura de "tres
+    # problemas" para "um" -- e o conserto fica sendo o ultimo campo, que e' a
+    # acao.
+    campos.insert(_posicao(campos, O_QUE, depois=True), (CONVERGENCIA, convergencia))
     if prova is not None:
-        linhas.insert(onde + 1, pfus.frase(prova[0], prova[1], len(grupo)))
-    fim = _indice("CONSERTO SUGERIDO:")
-    if fim is None:
-        fim = _indice("REGRAS:")
-    linhas[fim if fim is not None else len(linhas):
-           fim if fim is not None else len(linhas)] = extras
-    return "\n".join(linhas)
+        campos.insert(_posicao(campos, CONVERGENCIA, depois=True),
+                      (FUSAO, pfus.frase(prova[0], prova[1], len(grupo))))
+    if extras:
+        # Antes do conserto; sem conserto, antes das regras; sem as duas, no fim.
+        antes = min(_posicao(campos, CONSERTO, depois=False),
+                    _posicao(campos, REGRAS, depois=False))
+        campos.insert(antes, (TAMBEM_PROVADO,
+                              ["As outras lentes, cada uma com a prova dela:", *extras]))
+    return estilo.bloco(cabeca, campos)
 
 
 def _cabecalho_do_escopo(escopo: dict | None, examinadas: int) -> list[str]:
@@ -558,7 +613,7 @@ def _cabecalho_do_escopo(escopo: dict | None, examinadas: int) -> list[str]:
     return [linha]
 
 
-def _secao_nao_testadas(escopo: dict | None) -> list[str]:
+def _secao_nao_testadas(escopo: dict | None, estilo=None) -> list[str]:
     """As levantadas que ficaram fora do orcamento -- com o motivo de cada uma.
 
     ⚠️ Elas NAO sao descartes, e a secao diz isso na primeira linha. Um descarte
@@ -566,20 +621,24 @@ def _secao_nao_testadas(escopo: dict | None) -> list[str]:
     a lista de descartados seria a mesma absolvicao falsa que somar INCONCLUSIVO
     com REFUTADO -- so' que na entrada do funil em vez da saida.
     """
+    estilo = estilo or superficie.TERMINAL
     if not escopo or not escopo.get("nao_testadas"):
         return []
     n = escopo["nao_testadas"]
     fora = escopo.get("fora_do_orcamento") or []
     p = ["", "## LEVANTADAS E NAO TESTADAS", ""]
     p.append(
-        f"{n} suspeita(s) nao entraram no orcamento desta rodada. Nao sao "
-        "descartes: nenhuma foi examinada, nenhuma tem veredito. Estao na ordem "
-        "em que a fila as alcancaria com um teto maior."
+        f"{superficie.conta(n, 'suspeita')} não "
+        f"{superficie.plural(n, 'entrou', 'entraram')} no orçamento desta "
+        "rodada. Não são descartes: nenhuma foi examinada, nenhuma tem "
+        "veredito. Estão na ordem em que a fila as alcançaria com um teto maior."
     )
     fundidas = escopo.get("fundidas_por_duplicata")
     if fundidas:
-        p.append(f"(Outras {fundidas} eram duplicatas e foram fundidas na "
-                 "acusacao equivalente, antes da fila.)")
+        p += ["", "(Outra suspeita era duplicata e foi fundida na acusação "
+              "equivalente, antes da fila.)" if fundidas == 1 else
+              f"(Outras {fundidas} eram duplicatas e foram fundidas na "
+              "acusação equivalente, antes da fila.)"]
     # 🚨 Com HIPOTESE, e nao so' a contagem acima. A fundida por engano some da
     # verificacao; se ela sumir tambem do texto, o autor do PR nunca fica
     # sabendo que aquela suspeita existiu. A cortada por orcamento sempre teve
@@ -589,11 +648,11 @@ def _secao_nao_testadas(escopo: dict | None) -> list[str]:
         # Rodada anterior a 18/08: o escopo gravou a contagem e nao a lista.
         # Dizer que nao se sabe e' o unico desfecho honesto -- e' o mesmo
         # tratamento que `fora_do_orcamento` ja da' ao caso equivalente.
-        p.append("_o detalhamento das fundidas nao foi gravado nesta rodada._")
+        p += ["", "_o detalhamento das fundidas não foi gravado nesta rodada._"]
     if detalhe_fundidas:
         p.append("")
         p.append("_Fundidas como duplicata (mesmo local e mesma regra citada). "
-                 "Nao foram verificadas em separado:_")
+                 "Não foram verificadas em separado:_")
         for f in detalhe_fundidas:
             rotulo = _CATEGORIA_DO_DESAFIO.get(f.get("categoria"), f.get("categoria", "?"))
             hip = str(f.get("hipotese") or "-")
@@ -606,16 +665,70 @@ def _secao_nao_testadas(escopo: dict | None) -> list[str]:
         # Rodada anterior ao registro do escopo. A contagem se reconstroi do
         # `acusacoes_brutas.json`; o detalhamento, nao. Dizer que nao se sabe e'
         # o unico desfecho honesto -- calar seria voltar ao bug de origem.
-        p.append("_o detalhamento nao foi gravado nesta rodada; a contagem vem "
-                 "de `acusacoes_brutas.json`, e pode incluir duplicatas._")
+        p += ["", "_o detalhamento não foi gravado nesta rodada; a contagem "
+              "vem de `acusacoes_brutas.json`, e pode incluir duplicatas._"]
         return p
-    for f in fora:
-        rotulo = _CATEGORIA_DO_DESAFIO.get(f.get("categoria"), f.get("categoria", "?"))
-        hip = str(f.get("hipotese") or "-")
-        if len(hip) > 140:
-            hip = hip[:137] + "..."
-        p.append(f"- {f.get('posicao','?')}o na fila | {rotulo} em "
-                 f"{_local(f)}: {hip} _({f.get('motivo','-')})_")
+    return p + _fila_por_regiao(fora, estilo)
+
+
+def _fila_por_regiao(fora: list[dict], estilo) -> list[str]:
+    """A fila agrupada pelo PEDACO DE ARQUIVO que ela aponta.
+
+    🚨 O defeito que isto conserta esta publicado no `bancada#1`: oito
+    marcadores, todos sobre `app/main.py:97-108`, logo abaixo de um cabecalho
+    que diz "1 achado com evidencia". O autor le nove problemas. E' a inflacao
+    de acusacao que a fusao existe para matar, sobrevivendo do outro lado da
+    mesma tela.
+
+    🚫 E o conserto NAO e' aplicar a fusao aqui. Medido em 20/08 sobre a rodada
+    que esta no ar: a chave estrita colapsa os oito em SETE -- tres tem
+    `arbitro` nulo, tres apontam regiao mais larga que o teto de corroboracao.
+    Seria um no-op com cara de conserto, que e' pior que nao mexer.
+
+    O que da' para afirmar sem artefato e' o ENDERECO, e so' ele. Por isso o
+    agrupamento e' por endereco e **diz que e'**: estas suspeitas nunca foram
+    examinadas, e chamar de "um defeito" o que ninguem testou seria a fusao
+    inferindo em vez de provar -- o unico lugar do pipeline que a tese do
+    produto proibe.
+    """
+    grupos = fusao.agrupa_por_endereco(fora)
+    varios = [g for g in grupos if len(g) > 1]
+    p: list[str] = []
+    if varios:
+        maior = max(varios, key=len)
+        quantas = (f"Todas as {len(maior)}" if len(maior) == len(fora)
+                   else f"{len(maior)} destas suspeitas")
+        p.append("")
+        p.append(
+            f"⚠️ **{quantas} apontam o mesmo trecho** "
+            f"({estilo.local(fusao.regiao(maior))}). Estão juntas abaixo para "
+            "você ler o trecho uma vez &mdash; agrupar por endereço **não** é "
+            "dizer que são o mesmo defeito, e nenhuma delas foi examinada."
+        )
+    for g in grupos:
+        p.append("")
+        if len(g) > 1:
+            p.append(f"**{estilo.local(fusao.regiao(g))}** &mdash; "
+                     f"{superficie.conta(len(g), 'suspeita')} sobre este trecho:")
+        for f in g:
+            rotulo = _CATEGORIA_DO_DESAFIO.get(f.get("categoria"),
+                                               f.get("categoria", "?"))
+            hip = str(f.get("hipotese") or "-")
+            if len(hip) > 140:
+                hip = hip[:137] + "..."
+            # ⚠️ Dentro de um grupo o caminho sai, mas a LINHA fica. A
+            # primeira versao apagava o endereco inteiro do item agrupado e
+            # deixava so' o cabecalho da regiao -- o que trocava oito
+            # repeticoes de `app/main.py` por perder a linha exata de cada
+            # suspeita. O ruido era o caminho repetido, nao a linha.
+            faixa = fontes._faixa(_local(f))
+            if len(g) > 1 and faixa is not None:
+                _, ini, fim = faixa
+                onde = f" (linha {ini})" if ini == fim else f" (linhas {ini}-{fim})"
+            else:
+                onde = f" em {estilo.local(_local(f))}"
+            p.append(f"- {f.get('posicao','?')}º na fila | {rotulo}{onde}: "
+                     f"{hip} _({f.get('motivo','-')})_")
     return p
 
 

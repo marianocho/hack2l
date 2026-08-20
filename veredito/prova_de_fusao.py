@@ -144,18 +144,24 @@ def parte(grupo: list[dict], veredito: str, detalhe: dict) -> list[list[dict]]:
 
 def frase(veredito: str, detalhe: dict, n: int) -> str:
     """A linha que vai ao parecer. Quem le tem que saber se foi PROVA ou palpite."""
+    # ⚠️ Sem caixa alta e comecando em maiuscula. O estado ("provada",
+    # "desfeita") era gritado em CAPS porque no terminal a linha comecava com
+    # `FUSAO PROVADA:` e nao havia negrito para carregar a hierarquia. Agora o
+    # ROTULO do campo diz "Fusão" nas duas superficies, e repetir a palavra em
+    # caixa alta dentro do valor e' tipografia de console vazando para o
+    # markdown -- o mesmo defeito 4 que esta trilha veio consertar.
     if veredito == MESMO:
-        return (f"FUSAO PROVADA: revertendo um unico trecho do diff, os {n} "
-                f"testes param de falhar. A causa e' a mesma -- medido por exit "
-                f"code, nao inferido por semelhanca.")
+        return (f"Provada por medição: revertendo um único trecho do diff, os "
+                f"{n} testes param de falhar. A causa é a mesma &mdash; exit "
+                f"code, não semelhança de texto.")
     if veredito == DIFERENTES:
-        return (f"FUSAO DESFEITA POR PROVA: o trecho que conserta "
-                f"{', '.join(detalhe.get('explica') or [])} NAO conserta "
-                f"{', '.join(detalhe.get('nao_explica') or [])}. Sao causas "
+        return (f"Desfeita por prova: o trecho que conserta "
+                f"{', '.join(detalhe.get('explica') or [])} NÃO conserta "
+                f"{', '.join(detalhe.get('nao_explica') or [])}. São causas "
                 f"diferentes, apesar de caírem no mesmo lugar.")
-    return (f"AGRUPAMENTO NAO PROVADO ({detalhe.get('causa','sem causa registrada')}). "
-            f"Os {n} achados foram agrupados por endereco e procedencia, que e' "
-            f"indicio e nao prova.")
+    return (f"Não provada ({detalhe.get('causa','sem causa registrada')}). "
+            f"Os {n} achados foram agrupados por endereço e procedência, que é "
+            f"indício e não prova.")
 
 
 # --------------------------------------------------------------- a execucao
@@ -323,7 +329,7 @@ def aplica(grupos: list[list[dict]], resultados: dict
     for g in grupos:
         chave = frozenset(v.get("id") for v in g)
         veredito, detalhe = resultados.get(
-            chave, (INCONCLUSIVO, {"causa": "a fusao nao foi medida nesta rodada"}))
+            chave, (INCONCLUSIVO, {"causa": "a fusão não foi medida nesta rodada"}))
         for pedaco in parte(g, veredito, detalhe):
             fora.append((pedaco, veredito, detalhe))
     return fora

@@ -97,4 +97,4 @@ def test_rodada_antiga_com_contagem_e_sem_lista_DIZ_que_nao_sabe():
     esc = {"nao_testadas": 1, "fora_do_orcamento": [], "levantadas": 3,
            "fundidas_por_duplicata": 1, "teto": 10}   # sem a chave `fundidas`
     texto = "\n".join(juiz._secao_nao_testadas(esc))
-    assert "nao foi gravado nesta rodada" in texto
+    assert "não foi gravado nesta rodada" in texto

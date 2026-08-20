@@ -133,7 +133,7 @@ def test_MESMO_mantem_junto():
 def test_so_diz_PROVADA_quando_provou():
     """A palavra "provado" e' o produto inteiro. Ela nao pode aparecer num
     agrupamento que foi palpite."""
-    assert "PROVADA" in pf.frase(pf.MESMO, {"trecho": 1}, 3)
+    assert "Provada por medição" in pf.frase(pf.MESMO, {"trecho": 1}, 3)
     for ver in (pf.INCONCLUSIVO, pf.DIFERENTES):
         assert "FUSAO PROVADA" not in pf.frase(ver, {"causa": "x", "explica": [],
                                                      "nao_explica": []}, 3)
@@ -142,4 +142,4 @@ def test_so_diz_PROVADA_quando_provou():
 def test_inconclusivo_diz_a_CAUSA_e_se_assume_indicio():
     f = pf.frase(pf.INCONCLUSIVO, {"causa": "o projeto nao declara codigo"}, 2)
     assert "o projeto nao declara codigo" in f
-    assert "indicio e nao prova" in f
+    assert "indício e não prova" in f

@@ -216,6 +216,66 @@ def local_do_grupo(grupo: list[dict], acusacoes: dict) -> str:
     return f"{arquivo}:{menor}" if menor == maior else f"{arquivo}:{menor}-{maior}"
 
 
+def agrupa_por_endereco(itens: list[dict]) -> list[list[dict]]:
+    """Junta o que aponta o MESMO PEDACO DE ARQUIVO. Para LER, nunca para afirmar.
+
+    🚫 Isto NAO e' `agrupa`, e a diferenca e' a tese do produto. `agrupa` exige
+    os dois fatos -- endereco vizinho E mesma procedencia -- porque "local igual
+    nao e' defeito igual": no `encode/httpx#3730` quatro acusacoes na MESMA
+    linha eram quatro preocupacoes diferentes. Esta funcao olha so' o endereco,
+    entao ela e' fraca de proposito e nao pode sustentar afirmacao nenhuma.
+
+    Existe para a fila das NAO TESTADAS, e so' para ela. Ali nao ha veredito,
+    nao ha artefato, e portanto nao ha como provar que duas suspeitas sao a
+    mesma -- `prova_de_fusao` precisa de teste que falha, e nenhuma delas foi
+    testada. Medido em 20/08 na rodada `20260818T1928-61cc0a7`: a chave ESTRITA
+    aplicada aos oito itens da fila colapsa oito em SETE. Tres tem `arbitro`
+    nulo e tres apontam regiao mais larga que o teto de corroboracao, entao nao
+    produzem chave -- aplicar a fusao ali seria um no-op que pareceria conserto.
+
+    O problema que sobra e' de LEITURA, nao de contagem: oito marcadores quase
+    iguais sobre as mesmas linhas, logo abaixo de um cabecalho que diz "1
+    achado". Juntar por endereco resolve a leitura sem afirmar sameness -- e
+    quem imprime precisa DIZER que o agrupamento e' por endereco.
+
+    Transitivo de proposito: 97-108 encosta em 103, que encosta em 104. Aqui a
+    cadeia e' o comportamento certo, porque a pergunta e' "que pedaco do arquivo
+    esta sob suspeita", e nao "quantos defeitos ha".
+    """
+    baldes: list[tuple[str, int, int, list[dict]]] = []
+    soltos: list[list[dict]] = []
+    for it in itens:
+        faixa = _faixa(it.get("local_normalizado") or it.get("local"))
+        if faixa is None:
+            soltos.append([it])
+            continue
+        arq, ini, fim = faixa
+        for n, (a, p, u, membros) in enumerate(baldes):
+            if a == arq and ini - TOLERANCIA_LINHAS <= u and p - TOLERANCIA_LINHAS <= fim:
+                membros.append(it)
+                baldes[n] = (a, min(p, ini), max(u, fim), membros)
+                break
+        else:
+            baldes.append((arq, ini, fim, [it]))
+    return [m for _, _, _, m in baldes] + soltos
+
+
+def regiao(grupo: list[dict]) -> str:
+    """`app/main.py:89-108` -- a extensao coberta pelo grupo de enderecos."""
+    arquivo, menor, maior = None, None, None
+    for it in grupo:
+        faixa = _faixa(it.get("local_normalizado") or it.get("local"))
+        if faixa is None:
+            continue
+        arq, p, u = faixa
+        arquivo = arquivo or arq
+        menor = p if menor is None else min(menor, p)
+        maior = u if maior is None else max(maior, u)
+    if arquivo is None:
+        return str(grupo[0].get("local") or "?")
+    return f"{arquivo}:{menor}" if menor == maior else f"{arquivo}:{menor}-{maior}"
+
+
 def lentes(grupo: list[dict], acusacoes: dict) -> list[str]:
     """As categorias que convergiram, sem repetir e em ordem estavel.
 

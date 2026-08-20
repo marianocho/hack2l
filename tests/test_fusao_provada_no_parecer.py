@@ -79,8 +79,8 @@ def test_ausencia_de_prova_NAO_vira_provado(rodada):
     _, ver, det = grupos[0]
     assert ver == pf.INCONCLUSIVO
     bloco = juiz.bloco_agrupado(grupos[0][0], ac, {}, {}, (ver, det))
-    assert "FUSAO PROVADA" not in bloco
-    assert "indicio e nao prova" in bloco
+    assert "Provada por medição" not in bloco
+    assert "indício e não prova" in bloco
 
 
 def test_grupo_sem_resultado_no_arquivo_tambem_e_indicio(rodada):
@@ -100,7 +100,7 @@ def test_MESMO_mantem_junto_e_diz_que_provou(rodada):
     grupos = pf.aplica(fusao.agrupa(cond, ac), pf.do_disco())
     assert len(grupos) == 1 and len(grupos[0][0]) == 3
     bloco = juiz.bloco_agrupado(grupos[0][0], ac, {}, {}, (grupos[0][1], grupos[0][2]))
-    assert "FUSAO PROVADA" in bloco
+    assert "Provada por medição" in bloco
 
 
 # ------------------------------------------- 🚨 a prova DESFAZ
@@ -131,14 +131,14 @@ def test_a_CONTAGEM_do_comentario_segue_a_prova(rodada):
     pf.grava([{"ids": ["c1", "p1", "f1"], "veredito": pf.DIFERENTES,
                "detalhe": {"explica": ["c1", "p1"], "nao_explica": ["f1"]}}])
     corpo = comentario.monta(_org(cond), ac, {})
-    assert "**2 achado(s) com evidencia.**" in corpo, (
+    assert "**2 achados com evidência.**" in corpo, (
         "a heuristica dizia 1; a prova disse 2, e o resumo ficou no numero velho")
 
 
 def test_sem_prova_a_contagem_e_a_da_heuristica(rodada):
     cond, ac = _cena()
     corpo = comentario.monta(_org(cond), ac, {})
-    assert "**1 achado(s) com evidencia.**" in corpo
+    assert "**1 achado com evidência.**" in corpo
 
 
 # ------------------------------------------- o texto do desfazer
@@ -147,7 +147,7 @@ def test_o_bloco_do_grupo_desfeito_diz_QUEM_nao_e_explicado(rodada):
     cond, ac = _cena()
     det = {"explica": ["c1", "p1"], "nao_explica": ["f1"]}
     bloco = juiz.bloco_agrupado([_v("c1"), _v("p1")], ac, {}, {}, (pf.DIFERENTES, det))
-    assert "FUSAO DESFEITA POR PROVA" in bloco
+    assert "Desfeita por prova" in bloco
     assert "f1" in bloco
 
 
