@@ -1,6 +1,6 @@
 <!-- tag: hack2l -->
 
-# Próximos passos — atualizado em 19/08/2026
+# Próximos passos — atualizado em 20/08/2026
 
 Quadro geral e fila completa. **Esta é a fila viva** — o `ESTADO.md` é do dia do
 hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
@@ -852,6 +852,176 @@ e nunca olhado durante o ajuste.
 
 ---
 
+## 🎯 A asserção estática — proposta de 20/08
+
+**A pergunta que a gerou**, e ela é boa o bastante para ficar registrada: *se o
+diferencial é o veredito ser um exit code, por que agentes? Não dava para o
+código pegar todo PR, rodar o teste novo contra o antigo e mostrar que o novo
+quebra?*
+
+A resposta curta é que **o teste não existe** — é ele que o produto fabrica.
+Medido no próprio fixture: o `desafio` tem **5 testes** (`test_chat.py`,
+`test_documents.py`) e **os 5 passam** no commit `1dd2e5c`, que é o que carrega
+o SQL injection em `app/api/app/routers/shares.py:31`. Rodar a suíte do PR
+contra a do base é determinístico, é grátis, e fecha o PR como limpo. É o que
+toda CI do mundo já faz — e é exatamente por isso que aquele defeito chegou até
+nós.
+
+O que a rodada produziu foi um teste que não existia em lugar nenhum:
+
+```
+test_bogus_email_never_resolves_to_a_recipient
+   exit_base = 0   exit_head = 1   29,2s
+   saidas/final/rodada_final_1440/prova_correcao_01.json
+```
+
+Repare no nome: ele não fala de SQL, nem de `text()`, nem de f-string. Ele
+afirma uma **invariante**. É essa formulação que faz o teste passar no base e
+falhar no head — a versão ingênua (*"POST /share com um payload de OR sempre
+verdadeiro devolve 200"*) dá 404 no base por ausência de rota e sai
+INCONCLUSIVO. A regra *"escreva o teste sobre a INVARIANTE, não sobre o
+endpoint"* está no `SISTEMA` do advogado porque custou rodadas descobrir.
+
+> **A regra que isso deixa escrita: em todo lugar onde o modelo aparece, ele
+> escreve o EXPERIMENTO. Nunca o RESULTADO.**
+
+| peça | o modelo produz | quem decide |
+|---|---|---|
+| promotor | uma hipótese | ninguém — é conjectura, e essa lista ninguém vê |
+| advogado | um arquivo `.py` | `exit_base == 0 and exit_head != 0`, em Python |
+| juiz | *(nada — `MODEL_JUIZ` não é consumido)* | `aplica_regras`, com teste |
+
+### O alvo real, e ele está medido
+
+Do `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`, varredura de 503 `provado_se`:
+
+| lente | prescreve leitura |
+|---|---|
+| `padroes` | **57%** |
+| as outras cinco | 0–8% |
+
+E o desfecho **dentro da mesma lente** — o corte que controla o tipo de defeito:
+
+| `provado_se` | PROVADO | REFUTADO | INCONCLUSIVO | n |
+|---|---|---|---|---|
+| execução | 6 | 0 | 0 | 6 |
+| **leitura** | 4 | **6** | 1 | 11 |
+
+Aquelas 6 refutações são **argumentadas**: o advogado leu, não achou, concluiu.
+É a absolvição falsa que o produto existe para impedir, entrando pela porta de
+casa — e custando US$0,071 de Opus cada uma para chegar lá.
+
+⚠️ **n=6 e n=11, e o classificador é heurística de palavra-chave.** A direção é
+consistente com o mecanismo observado nas duas rodadas; isto **não estabelece
+taxa**. A ressalva completa está no ACHADO.
+
+### O desenho
+
+O promotor emite, **ao lado** do `provado_se` em prosa, um campo opcional
+`assercao_estatica`: uma **regra semgrep**, não um regex.
+
+🚫 **Regex está fora, e o motivo é o padrão de bug nº 4** — *toda checagem que
+depende de convenção de string: e se a convenção não valer?* `text(f"...")` é um
+nó de AST; procurá-lo por texto casa com o comentário que explica por que ele
+está errado — exatamente como as duas travas de 13/08 que casaram por substring
+(`kb` dentro de `kb_veredito_app`, e `override=True` dentro do comentário que
+explicava por que ele está desligado).
+
+É a mesma forma do advogado, um nível mais barato:
+
+| | o modelo escreve | quem executa |
+|---|---|---|
+| advogado | o `pytest` | o pytest |
+| **asserção estática** | **a regra semgrep** | **o semgrep** |
+
+A máquina já existe: `veredito/fontes.py` roda semgrep e há `regras_semgrep/`. A
+diferença é que hoje é **catálogo fixo rodando às cegas**; aqui a regra é escrita
+para *aquela* hipótese, naquele arquivo.
+
+🚨 **E ela é DIFERENCIAL também**: ausente no base, presente no head. Sem isso
+ela reporta código pré-existente como se o PR o tivesse trazido — a mesma falha
+que o filtro `_dentro_do_diff` já conserta para o scanner (bandit no
+`psf/requests`: 708 achados no repo inteiro, quase todos `assert` em teste).
+
+### O teto, e ele é BAIXO de propósito
+
+Casamento de AST prova que o **padrão existe**, não que o defeito é
+**alcançável**. Interpolação em SQL dentro de código morto não é
+vulnerabilidade, e a tese inteira deste produto é que alcançável vale mais que
+presente.
+
+| via | teto | o que ela demonstra |
+|---|---|---|
+| ponta a ponta (`http_request`) | CRITICA (R1) | alcance: dá para fazer isso de fora, agora |
+| prova diferencial | MEDIA (R2) | causalidade: foi esta mudança que quebrou |
+| **asserção estática** | **BAIXA, rotulada** | o padrão está lá; **não medimos se é alcançável** |
+
+**O ganho não é condenar mais — é parar de absolver por argumento.** Tira a maior
+parte da lente `padroes` do laço caro e troca *"o advogado leu e concluiu"* por
+*"a árvore sintática diz"*. O que hoje sai REFUTADO sem teste passa a sair como
+fato de baixa severidade, ou como silêncio honesto.
+
+### 🚨 A armadilha, e é o padrão de bug da casa em roupa nova
+
+**Asserção estática não gera `prova_*.json`.** E as regras do juiz leem o
+artefato:
+
+| regra | o que ela olha | fica muda porque |
+|---|---|---|
+| R0 | o exit code do artefato | não há artefato |
+| R0b | `prova_ponta_a_ponta` contra o artefato | já morava dentro de `if artefato is not None`; este é o **mesmo vão**, agora com uma quarta via passando por ele |
+| R3 | `artefato.erro` | verificação só estática não gera artefato nenhum |
+| R3b | ferramentas bem-sucedidas | o semgrep conta como sucesso? **decidir ANTES de escrever a via, não depois** |
+
+Uma quarta via de condenação que as regras do juiz não enxergam **nasce muda por
+construção** — é literalmente a linha 1 do "Como procurar". Então a via só entra
+com as três coisas juntas:
+
+1. **artefato próprio** — `assercao_<id>.json` no mesmo formato de desfecho
+   (`estado` / `motivo` / `erro` / `indisponivel`), com o `estado` calculado em
+   Python e **o LLM não toca**;
+2. **`indisponivel` quando o semgrep não está instalado, nunca `erro`** — é a
+   distinção que a R3 comprou em 17/08, e ignorá-la faria toda rodada sem
+   semgrep virar inconclusivo falso;
+3. **regra nova e explícita no juiz, com o teto de BAIXA em código**, não em
+   prosa no prompt. *Regra escrita em prosa não acontece sob pressão.*
+
+### 🚨 E a via precisa ser vista FALHANDO
+
+Mutação obrigatória antes de acreditar em qualquer trava:
+
+- regra que casa **nos dois lados** ⇒ tem que sair como *não introduzido por este
+  PR*, e não como provado;
+- semgrep ausente ⇒ `indisponivel`, e o parecer diz que **não olhou**;
+- asserção que casa ⇒ sai **BAIXA**, e o teste fica vermelho se alguém subir o
+  teto para MEDIA.
+
+⚠️ E a mutação tem que ser **conferida ao aplicar**. 19/08 custou uma tarde com
+um `replace` que virou no-op por causa de uma continuação de linha no literal, e
+a suíte inteira passou verde — o que se lê exatamente como *"a trava é fraca"*.
+**Mutação que não dispara é indistinguível de trava que não pega.**
+
+### O que isto NÃO muda
+
+🚫 **Não substitui promotor nem advogado, e não vira o motor.** O teto da fonte
+determinística já está medido em `fontes.py:22`: bandit no desafio dá **2 achados
+contra 45 dos promotores**, e não viu a quebra de isolamento, nem a config morta,
+nem o `/shared-with-me` errado. Precisão **sem** cobertura. A asserção estática é
+uma via de prova mais barata para hipótese que **já existe** — ela não gera
+hipótese nenhuma, e o dia em que alguém propuser trocar os promotores por ela é
+o dia de reler esta linha.
+
+### Custo
+
+| | |
+|---|---|
+| tamanho | **1–2 dias** — campo no esquema, executor, regra no juiz, travas com mutação |
+| economia | a maior parte da lente `padroes` fora do laço Opus, a US$0,071/acusação |
+| risco | a armadilha acima. É o que faz o item ser 1–2 dias e não meio dia |
+
+---
+
+
 ## 📍 16/08 — o dia da troca de máquina, e o que ela expôs
 
 A máquina nova funcionou como **segundo ambiente**: o mesmo papel que a bancada
@@ -983,6 +1153,12 @@ conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
 - 🆕 **A corrida do bind-mount na prova diferencial** *(19/08)* — falha
   **intermitente**, falha para o lado seguro, e o custo é inconclusivo espúrio.
   Ver abaixo
+- 🆕 **A lente `padroes` absolve por ARGUMENTO** *(medido 15–16/08,
+  encarado 20/08)* — 57% dos `provado_se` dela mandam **ler**, e leitura rende
+  6 refutações argumentadas contra **0** de quem manda executar. É a absolvição
+  falsa entrando pela porta de casa, na única lente cujo próprio prompt pede
+  leitura. O conserto não é mudar o prompt — é dar a ela uma via de prova que
+  **executa** e é barata. Ver "A asserção estática — proposta de 20/08"
 
 #### 🆕 A corrida do bind-mount — diagnosticada em 19/08, NÃO consertada
 
