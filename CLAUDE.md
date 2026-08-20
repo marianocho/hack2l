@@ -789,6 +789,79 @@ verificar, Sonnet para sintetizar — modelo caro só onde a decisão acontece."
 
 Custo medido: **US$0,071 por acusação verificada** (Opus 5, read_file + grep).
 
+### 🧩 O MOTOR — quem fatura a chamada (`veredito/motor.py`, 19/08)
+
+Até 19/08 as três peças que falam com a Anthropic construíam o cliente **cada
+uma por conta própria** — `anthropic.Anthropic(api_key=...)`, três vezes, em
+`promotores.py`, `advogado.py` e `fontes.py`. É a mesma classe do `app/api/app`
+chumbado: valor de infraestrutura espalhado dentro do código que faz o trabalho.
+
+Agora há **um** lugar que responde três perguntas:
+
+```
+cliente()          com quem eu falo
+modelo(id)         como aquele provedor chama este modelo
+ajusta_chamada()   o que aquele provedor NÃO aceita
+```
+
+| motor | o que é | paridade |
+|---|---|---|
+| `anthropic` | API direta. Paga com `ANTHROPIC_API_KEY` | total |
+| `aws` | Claude Platform on AWS — operada pela Anthropic sobre infra AWS (SigV4, cobrança via Marketplace). IDs de modelo sem prefixo | total, no mesmo dia |
+| `bedrock` | Amazon Bedrock — operado pela AWS. É onde crédito promocional costuma valer | **menor** — ver abaixo |
+
+`VEREDITO_MOTOR=auto|anthropic|aws|bedrock`. Precedência: variável de ambiente >
+detecção — a mesma do `veredito.yml`. Lido **em execução**, nunca no import, para
+`VEREDITO_MOTOR=bedrock py -3.12 -m veredito.orquestrador` funcionar.
+
+🚨 **A degradação do Bedrock é dita em voz alta, nunca silenciosa.** Ele recusa
+exatamente dois parâmetros que este produto manda, e os dois doem:
+
+```
+task_budget          o advogado deixa de saber o próprio orçamento e fecha
+                     no corte do max_tokens, não por decisão dele
+fallback_de_recusa   recusa do classificador de cibersegurança vira
+                     INCONCLUSIVO direto, sem segunda tentativa
+```
+
+Remover os dois e seguir seria **o padrão de bug de novo**: a guarda —
+`fallbacks="default"`, que impede a categoria carro-chefe de se esvaziar — some
+justamente no motor onde ela não existe, e nada avisa. Por isso o que foi
+removido fica em `Motor.sem`, legível de fora; `descreve()` entra no pré-voo ao
+lado dos scanners; e `advogado._diagnostico_da_recusa` consulta
+`tem("fallback_de_recusa")` antes de culpar rate limit por um fallback que nunca
+foi armado.
+
+🚨 **Ausente não é vazio, errado não é ausente** — mesma doutrina do
+`veredito.yml`:
+
+| | |
+|---|---|
+| sem credencial AWS, em `auto` | cai para a API direta, **e diz que caiu** |
+| sem credencial AWS, **forçado** | **levanta** |
+
+O segundo é o que importa: quem escreveu `VEREDITO_MOTOR=bedrock` está gastando
+crédito da AWS de propósito. Cair calado para a API direta **faturaria a rodada
+na conta errada** e a rodada pareceria perfeita.
+
+⚠️ Dois detalhes que só aparecem medindo:
+
+- **`_ha_sinal_aws()` existe para não pagar rede.** `boto3.Session().get_credentials()`
+  percorre a cadeia inteira e, fora da EC2, o último elo é o IMDS —
+  `169.254.169.254`, que só morre no timeout. Sem nenhum sinal barato de AWS no
+  ambiente, o boto3 nem é chamado.
+- **`modelo()` passa batido em id que já tem prefixo.** Perfil de inferência
+  (`us.anthropic....`) é id legítimo do Bedrock; prefixar de novo geraria
+  `anthropic.us.anthropic....` — um 404 que se lê como *"modelo não habilitado
+  na conta"* e manda o operador procurar no console errado.
+
+🚫 **Não escrevemos wrapper boto3 à mão sobre o bedrock-runtime.** O
+`tool_runner` **é** o advogado; reimplementá-lo para trocar quem fatura seria
+bifurcar a única peça do produto que é agente de verdade. Os clientes de
+Bedrock/AWS do próprio SDK assinam com SigV4 pelo boto3 e expõem
+`beta.messages.tool_runner` igual — o boto3 entra onde ele é de fato bom:
+resolver credencial.
+
 ---
 
 ## DISCIPLINA DE EXECUÇÃO
