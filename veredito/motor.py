@@ -80,7 +80,20 @@ CUSTO = {
                            "INCONCLUSIVO direto, sem segunda tentativa em "
                            "outro modelo -- e ciberseguranca e' a categoria "
                            "carro-chefe deste produto"),
+    "tool_runner": ("o advogado NAO RODA: o loop pensa -> ferramenta -> decide "
+                    "e' o `tool_runner` do SDK, e o cliente legado do Bedrock "
+                    "nao o expoe. Sem ele nao ha' quem TESTE a acusacao"),
 }
+
+# Toda capacidade que ALGUM motor pode perder -- nao so' as que o Bedrock recusa
+# por parametro. `tool_runner` entra aqui e nao em `SEM_NO_BEDROCK` porque nao e'
+# propriedade do Bedrock: e' propriedade do CLIENTE LEGADO dele, ligado pela
+# escotilha `VEREDITO_BEDROCK_LEGADO`. Enfia-la na constante faria todo Bedrock
+# declarar uma perda que o caminho padrao nao tem -- guarda morrendo de excesso.
+#
+# ⚠️ `perdas()` procura o nome em `CUSTO`; nome sem texto sai do pre-voo como
+# rotulo cru e o operador nao fica sabendo o que muda. O teste amarra as duas.
+CAPACIDADES = SEM_NO_BEDROCK | {"tool_runner"}
 
 # Betas que so existem no primeiro-parte. Casadas com a capacidade que as pede:
 # tirar a capacidade e deixar a beta gera 400, e foi assim que a mascara quebrou
@@ -215,9 +228,32 @@ def _aws(porque: str, regiao: str | None) -> Motor:
     return Motor("aws", f"Claude Platform on AWS ({regiao})", porque)
 
 
+def _legado_pedido() -> bool:
+    """A escotilha do caminho legado, lida em UM lugar so'.
+
+    ⚠️ Ela decide duas coisas -- qual cliente construir e o que o motor perde --
+    e as duas precisam concordar. Ler a variavel nos dois lugares e' a "chave em
+    dois lugares" que ja' custou quatro tentativas neste projeto.
+    """
+    return (os.getenv("VEREDITO_BEDROCK_LEGADO") or "").strip().lower() in (
+        "1", "true", "sim")
+
+
 def _bedrock(porque: str, regiao: str | None) -> Motor:
+    # 🚨 MEDIDO em 20/08, construindo os dois clientes: o legado
+    # (`AnthropicBedrock`) NAO tem `beta.messages.tool_runner` -- o
+    # `lib/bedrock/_beta_messages.Messages` define `create` e mais nada. O
+    # Mantle tem, porque o `MantleBeta.messages` devolve a classe de primeira
+    # parte. O docstring de `_fab_bedrock` tratava o legado como alternativa
+    # equivalente, e ele nao e': a escotilha derrubaria o advogado com
+    # AttributeError em TODA acusacao, e o `try` de `julga` converteria cada uma
+    # em INCONCLUSIVO opaco. A categoria carro-chefe se esvaziando sozinha, com
+    # cara de rigor -- o desfecho exato que o terceiro estado existe para evitar.
+    sem = set(SEM_NO_BEDROCK)
+    if _legado_pedido():
+        sem.add("tool_runner")
     return Motor("bedrock", f"Amazon Bedrock ({regiao})", porque,
-                 sem=SEM_NO_BEDROCK, prefixo_de_modelo="anthropic.")
+                 sem=frozenset(sem), prefixo_de_modelo="anthropic.")
 
 
 _ATIVO: Motor | None = None
@@ -258,8 +294,11 @@ def _fab_bedrock():
     # sempre, `beta.messages.tool_runner` incluso. O `AnthropicBedrock` sem
     # Mantle e' o caminho legado por InvokeModel; fica atras de uma escotilha
     # porque nem toda conta tem o Mantle habilitado.
-    legado = (os.getenv("VEREDITO_BEDROCK_LEGADO") or "").strip().lower()
-    if legado in ("1", "true", "sim"):
+    #
+    # 🚫 E o legado NAO e' equivalente: ele nao expoe `tool_runner`, entao o
+    # advogado nao roda nele. Quem perde o que esta em `_bedrock`, e o pre-voo
+    # reprova antes de a rodada gastar -- ver `descreve`.
+    if _legado_pedido():
         return anthropic.AnthropicBedrock()
     return anthropic.AnthropicBedrockMantle()
 
@@ -362,5 +401,19 @@ def descreve() -> dict:
     if m.nome == "anthropic" and not cfg.ANTHROPIC_API_KEY:
         return {"motor": {"ok": False,
                           "detalhe": f"{cabeca}; e ANTHROPIC_API_KEY esta vazia"}}
+
+    # 🚨 Perder `task_budget` ou `fallback_de_recusa` DEGRADA a rodada, e o
+    # operador decide se aceita. Perder `tool_runner` nao degrada: cancela. Sem
+    # ele nao ha' advogado, e sem advogado nada e' testado -- restaria o
+    # promotor acusando e ninguem verificando, que e' o produto ao contrario.
+    # Por isso esta perda reprova o pre-voo em vez de virar mais uma linha de
+    # aviso: alarme que so' informa, num caso que nao tem como dar certo,
+    # ensina a seguir em frente.
+    if not m.tem("tool_runner"):
+        return {"motor": {"ok": False, "detalhe": (
+            f"{cabeca}; o cliente legado do Bedrock nao expoe tool_runner, "
+            f"entao o advogado nao roda. Tire VEREDITO_BEDROCK_LEGADO para usar "
+            f"o Mantle, ou peca VEREDITO_MOTOR=aws/anthropic")}}
+
     return {"motor": {"ok": True,
                       "detalhe": " | ".join([cabeca] + [f"SEM {p}" for p in m.perdas()])}}
