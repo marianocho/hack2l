@@ -32,13 +32,79 @@ hackathon e virou histórico; o `HANDOFF_12AGO.md` também.
 > alguns pontos.** Não saía por causa de uma coisa só, e o texto é anterior à
 > medição.
 
-> 🎯 **A sessão de 18–19/08 tem handoff próprio: `HANDOFF_18AGO.md`. Comece por
-> lá — é o mais recente.** O parecer virou comentário de PR e foi publicado de
-> verdade; a fusão de achados existe e é **provada por exit code**; os quatro
-> PRs da bancada foram refeitos pela porta da frente (4 de 4 com o gabarito).
+> 🎯 **A sessão de 18–19/08 tem handoff próprio: `HANDOFF_18AGO.md`.** O parecer
+> virou comentário de PR e foi publicado de verdade; a fusão de achados existe e
+> é **provada por exit code**; os quatro PRs da bancada foram refeitos pela porta
+> da frente (4 de 4 com o gabarito).
 >
-> **Próximo passo:** repo de demonstração público — é o que converte, e o único
-> jeito de mostrar isto sem dar acesso à bancada privada.
+> ~~**Próximo passo:** repo de demonstração público.~~ ✅ **Saiu em 20/08** — ver
+> abaixo. **Os handoffs mais recentes são os cinco `HANDOFF_20AGO_T<n>.md`**, um
+> por trilha, todos no `main`.
+
+---
+
+## 🆕 20/08, fim do dia — a vitrine está no ar, e o saldo acabou
+
+**Cinco trilhas em paralelo, todas entregaram, todas com US$ 0,00 de API.** Os
+cinco ramos foram mergeados no `main` (`4f984e5`) e empurrados; a suíte fechou
+**836 verdes, 1 pulado** depois do merge, e os quatro arnesses de mutação foram
+rodados em série sobre o resultado — cada mutação matando exatamente o conjunto
+que alega prender.
+
+### ✅ O repo de demonstração existe, é público, e postou parecer
+
+`github.com/luisfelp07/veredito-demo`. Dois PRs, duas rodadas da Action verdes,
+dois pareceres publicados por `github-actions[bot]`:
+
+| PR | esperado | veio |
+|---|---|---|
+| #1 `contagem-de-tarefas` (limpo) | nada a apontar | **"Nada a apontar neste PR"** — 4 suspeitas levantadas, 4 derrubadas com motivo |
+| #2 `tarefa-por-link` (CWE-639) | PROVADO | **[ALTA] provado** — prova diferencial `exit 0 → 1`, fusão provada por exit code, chamadas HTTP, e árbitro com procedência em `docs/REGRAS.md` |
+
+O PR limpo é o que mais importa: **zero falso positivo em repositório público**.
+🚫 O gabarito não mora na árvore — ele vai na **descrição do PR**, que a T5
+provou não atravessar para o prompt (`test_descricao_do_pr_nao_atravessa.py`, 4
+mutações). Visível para o leitor, invisível para o agente.
+
+### 🚨 O saldo da conta Anthropic ESGOTOU, e isso está publicado
+
+```
+sonda_api() -> FALHOU | SALDO esgotado na conta -- a chave esta ok
+```
+
+Não é a chave. E o sintoma **está no ar**: o único inconclusivo do PR #2 tem
+como causa publicada *"Your credit balance is too low to access the Anthropic
+API"*, num repositório público, no comentário que existe para vender o produto.
+
+**Enquanto não recarregar, nada que gasta anda:** a não-determinância (item 3 da
+T3, ~US$7), a régua de terceiros (T5, ~US$13) e a paridade de parecer (T2). E o
+`gh run rerun` que trocaria o parecer da vitrine pelo formato novo também falha.
+
+### O que cada trilha deixou pronto
+
+| trilha | entregue | o que sobrou |
+|---|---|---|
+| **T1** parecer | os 7 defeitos do comentário · `veredito/superficie.py` (um conteúdo, dois estilos) · permalink e link do rastro no lugar dos caminhos mortos · 14 mutações | bloco ` ```suggestion `, comentário único vs. review inline (**decidir medindo**, na demo), `veredito init` |
+| **T2** AWS | `medir_bedrock.py` (5 células) validado por mutação · o legado do Bedrock **não tem `tool_runner`** · o motor **recusou certo** na 1ª execução real | 🚨 falta credencial AWS. E `orquestrador.py:253` bloqueia rodada em crédito puro — ver abaixo |
+| **T3** bugs | corrida do bind-mount **rotulada** · escala degradando rotulada (`parcial`) · o resgate por sufixo que mentia · 25 travas | não-determinância (precisa de Docker + US$7), a lente `performance` com rótulo errado, a chave rígida do pré-advogado |
+| **T4** narrativa | `NARRATIVA.md`, 12 seções, toda cifra com endereço · site alinhado | o link do rodapé (destravado pelo merge), e o destino do documento |
+| **T5** vitrine | a demo publicada · o canal humano com trava · `regua/gabarito.yml` + `regua_de_terceiros.py`, 9 PRs prontos · `scripts/worktree_de_trilha.py` | **disparar a régua** (~US$13) e o canário de egresso |
+
+### 🚨 `orquestrador.py:253` — o bloqueio que a T2 achou e não podia consertar
+
+```python
+if not cfg.ANTHROPIC_API_KEY:
+    raise SystemExit("ANTHROPIC_API_KEY ausente no .env -- nada roda sem ela.")
+```
+
+**Incondicional.** Quem roda inteiramente em crédito da AWS — o motivo de o motor
+existir — corretamente **não tem** essa chave, e é parado por uma chave que
+aquela rodada nunca usaria. O `motor.descreve()` já tem a regra certa
+(`if m.nome == "anthropic" and not cfg.ANTHROPIC_API_KEY`) e o pré-voo já aborta
+com boa mensagem: o orquestrador contradiz o módulo do lado. É a guarda aplicada
+onde não é o caso. **Enquanto não mudar, os itens 1, 3 e 5 da T2 não rodam.**
+
+---
 
 ## Onde o produto está
 
@@ -68,11 +134,20 @@ positivo na Action seria pior que qualquer defeito não encontrado.
 ⚠️ **Isto mede o INSTRUMENTO, não a capacidade de achar defeito.** Com n=4 o
 segundo não se conclui, e o `roda_bancada.py` imprime esse aviso sozinho.
 
-**O que impede uso real** — sobrou UM:
+**O que impede uso real:**
 
 1. ~~**Não tem onde entregar.**~~ ✅ **Saiu em 18/08, e foi verificado
    publicando de verdade.** Ver abaixo.
-2. **Escala quebra.** No `next.js`: 220s por acusação, 6 de 8 inconclusivos.
+2. ~~**Escala quebra.**~~ 🔶 **Meio resolvido em 20/08, e o que foi resolvido é
+   a parte que mentia.** No `next.js` eram 220s por acusação e 6 de 8
+   inconclusivos. A T3 fez a leitura **degradar rotulada** (`parcial`, o quarto
+   sinal ao lado de `ok`/`erro`/`indisponivel`) e podou o resgate por sufixo do
+   `_resolve_caminho`, que andava a árvore inteira e no fim respondia *"não
+   existe em head"* sobre arquivo que existe. **O que continua aberto** é ler
+   **centrado na linha da acusação**: hoje `_corta` fica com o *fim* do arquivo e
+   a acusação quase sempre aponta para o começo. Isso é conserto, não rótulo.
+3. 🆕 **O saldo da conta.** Não é do produto, mas hoje é o que impede qualquer
+   medição — ver o bloco de 20/08 acima.
 
 ### 🆕 E o comentário parou de exagerar — 18–19/08
 
@@ -145,7 +220,7 @@ e a troca perde diversidade de lente).
 | ✅ **`veredito.yml`** *(14–15/08)* | | contas, layout, login, bancos, como o app sobe. **Cinco chumbados saíram do código**, todos achados apontando para o segundo projeto |
 | 🎯 **Parecer como comentário de PR** | 1–2 dias | com a entrada pronta, é o que falta para a Action. Ver os cinco pontos em "A Action não é só seguir passo a passo" |
 | **GitHub Action** | 1–2 dias | ver "Por que Action" abaixo |
-| **Repo de demonstração** | 1 dia | PR deliberadamente quebrado, público. É o que converte |
+| ✅ **Repo de demonstração** *(20/08)* | | `luisfelp07/veredito-demo`, público. Dois PRs, duas rodadas verdes, dois pareceres publicados — e o **PR limpo saiu limpo**. O gabarito vai na descrição do PR, que foi provado não atravessar para o prompt |
 | 🆕 **Detector de `veredito.yml`** | 1 dia | **medido em 19/08: 12 campos saem de compose+Dockerfile com 0 erro.** Encolhe o onboarding de 26 campos para 2 perguntas — mas os 2 que sobram são os que sustentam CRÍTICA. Ver abaixo |
 | ✅ **`senha_em`** *(19/08)* | | a senha sai do yml commitado e vira **nome de variável**. 🚨 Não era questão de UX: `read_file` não bloqueia nada, não há redação em lugar nenhum, e o parecer vai para o PR. Ver abaixo |
 | ✅ **Segredo: entrada e saída** *(19/08)* | | `veredito/segredo.py`. `read_file`/`grep` recusam convenção universal de arquivo de segredo — **recusando o conteúdo e confirmando a existência**, que é o que preserva a acusação legítima; e o corpo do comentário passa por redação. 50 travas, 5 mutações. Ver abaixo |
@@ -1150,9 +1225,10 @@ conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
   injetando a violação de propósito
 - ✅ **A cópia do quadro que envelhecia em silêncio** *(19/08)* —
   `scripts/sync_vault.py` + `tests/test_sync_vault.py`. Ver abaixo
-- 🆕 **A corrida do bind-mount na prova diferencial** *(19/08)* — falha
-  **intermitente**, falha para o lado seguro, e o custo é inconclusivo espúrio.
-  Ver abaixo
+- 🔶 **A corrida do bind-mount na prova diferencial** *(19/08, **rotulada em
+  20/08**)* — falha **intermitente**, falha para o lado seguro, e o custo é
+  inconclusivo espúrio. O inconclusivo continua (a opção 2 não o evita, e nunca
+  prometeu); o que mudou é que ele **diz que a culpa é nossa**. Ver abaixo
 - 🆕 **A lente `padroes` absolve por ARGUMENTO** *(medido 15–16/08,
   encarado 20/08)* — 57% dos `provado_se` dela mandam **ler**, e leitura rende
   6 refutações argumentadas contra **0** de quem manda executar. É a absolvição
@@ -1160,7 +1236,7 @@ conteúdo. Detalhe em `ACHADO_PROVADO_SE_DECIDE_O_VEREDITO.md`.
   leitura. O conserto não é mudar o prompt — é dar a ela uma via de prova que
   **executa** e é barata. Ver "A asserção estática — proposta de 20/08"
 
-#### 🆕 A corrida do bind-mount — diagnosticada em 19/08, NÃO consertada
+#### 🔶 A corrida do bind-mount — diagnosticada em 19/08, ROTULADA em 20/08
 
 **O sintoma, capturado:** `_prova_diferencial` volta com `exit_head = 4` e a
 saída do container diz
@@ -1217,6 +1293,35 @@ solução foi rotular; aqui ainda não há rótulo.
 em que o arquivo realmente não foi gravado — que é defeito de verdade, e é
 justamente o que a recusa de 17/08 (`testes_no_repo` errado) existe para gritar.
 
+##### ✅ A opção 2 está feita — 20/08 (T3, `c6e01cd`)
+
+`corrida_do_mount` e `corrida_do_mount_detalhe` estão no artefato da prova
+diferencial, e o campo **nasce `False` no molde** — inclusive nas saídas que
+voltam cedo (`indisponivel`, recusa do código, canário morto, exceção). Ali a
+causa já tem nome, e `False` significa *"não atribuído à corrida"*, nunca *"não
+olhei"*. Chave que some é o dedup de novo; esta não some.
+
+🚨 **O critério que impede o rótulo de mentir.** `ERROR: file or directory not
+found` é **também** a assinatura exata de `codigo.testes` apontando para fora do
+que `codigo.montagens` monta — o item que o `pallets/flask` expôs em 17/08. Lá o
+arquivo **também** está no worktree do host, e a frase é a mesma palavra por
+palavra; rotular isso como corrida mandaria o operador culpar o Docker Desktop
+por um `veredito.yml` torto. O que separa os dois: **config errada falha nos DOIS
+lados, sempre; corrida falha em UM.** Daí o critério ser *"o OUTRO lado rodou com
+o mesmo alvo"*.
+
+🚫 **O veredito não mudou, e o `erro` continua preenchido** — é ele que faz a R3
+converter. Só o **texto** mudou: de `"pytest nao executou no head"`, que se lê
+como culpa do repositório revisado, para a causa medida, que é nossa. A saída
+crua do container continua anexada: rótulo não substitui evidência.
+
+⚠️ **A opção 1 continua aberta e não recomendada por enquanto** — o rótulo custa
+zero no caminho quente e a falha já é para o lado seguro.
+
+E o campo tem uso imediato: **medir a não-determinância com duas rodadas
+disputando o Docker mede a corrida, não o modelo.** Rode as cinco em série e use
+`corrida_do_mount` para descartar as contaminadas.
+
 #### ✅ O sync do vault, e a trava — 19/08
 
 **O caso.** O mesmo quadro vivia em **três** lugares: `PROXIMOS_PASSOS.md` (o
@@ -1266,7 +1371,20 @@ wikilinks e síntese. Sobrescrevê-lo com o texto do repo destruiria trabalho.
 
 ### E — Capacidade que falta (não é "fazer", é "não sabemos ainda")
 
-- **Escala**: repositório grande derruba a leitura (220s/acusação no next.js)
+- 🔶 **Escala**: repositório grande derruba a leitura (220s/acusação no
+  next.js). **Deixou de ser só "não sabemos" em 20/08:** a leitura agora degrada
+  **rotulada** — `parcial` entra como quarto sinal, ortogonal a
+  `ok`/`erro`/`indisponivel`, e três fatias passam a ser ditas (arquivo cortado
+  no `CORTE_SAIDA`, grep parado no teto, arquivo pulado por convenção de
+  segredo). `ferramentas.leitura_parcial_da_acusacao(id)` devolve o que aquela
+  acusação **não conseguiu olhar**.
+  🚫 **`parcial` NUNCA vira `erro`** — seria o 17/08 reentrando pela porta do
+  **tamanho** do repo, convertendo em INCONCLUSIVO toda refutação obtida em
+  repositório grande.
+  ⚠️ Lista vazia significa *"leu inteiro tudo que pediu"*, **não** *"leu tudo
+  que existe"*: o advogado pode não ter pedido. Não renderizar como cobertura.
+  **Aberto:** ler centrado na linha da acusação — hoje `_corta` fica com o *fim*
+  do arquivo e a acusação aponta para o começo.
 - **Concorrência**: race condition e check-then-act são invisíveis — nenhuma
   ferramenta dispara requisições em paralelo
 - **Prova diferencial em superfície nova**: 404 no base é o inverso do padrão

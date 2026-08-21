@@ -420,10 +420,16 @@ crítico e perguntar se ele convence. 30 segundos, e só nos críticos.
 > **A guarda existe, mas está condicionada ao mesmo sinal que ela deveria
 > vigiar. Então ela fica muda exatamente onde é necessária.**
 
-Aconteceu **uma dúzia de vezes**, sempre com cara diferente, sempre custando caro.
-Não é descuido pontual — é o formato de erro que esta arquitetura convida,
-porque quase toda regra aqui confere um artefato, e a ausência do artefato é
-justamente o caso perigoso.
+A tabela abaixo tem **26 linhas** — eram uma dúzia em 18/08 e seis entraram
+em 20/08 sozinhas. Sempre com cara diferente, sempre custando caro. Não é
+descuido pontual — é o formato de erro que esta arquitetura convida, porque
+quase toda regra aqui confere um artefato, e a ausência do artefato é justamente
+o caso perigoso.
+
+🚨 **E a concentração diz onde procurar:** das seis de 20/08, **quatro estão
+dentro de arnês de mutação ou de trava** — não no código de produção. O padrão
+migrou para a camada que existe para pegá-lo, que é exatamente onde ninguém
+desconfia.
 
 | onde | a guarda | ficava muda quando |
 |---|---|---|
@@ -448,6 +454,12 @@ justamente o caso perigoso.
 | **o pré-voo conflando infra com defeito** | 🆕 `montagens_vivas` fatal no pré-voo | ligar o canário como `ok = bool(canario["ok"])` jogou fora a distinção que o próprio canário calcula: **docker fora do ar abortava a rodada inteira**, inclusive a de um PR que só precisa de leitura. É a conflação que a R3 comprou em 17/08, reintroduzida na fiação de uma guarda nova. ✅ fatal só quando **mediu** e achou montagem morta; infra vira `NAO CONFERIDO`, dito em voz alta. |
 | **a montagem VIVA e mesmo assim sombreada** | 🆕 o canário conferia o **vizinho** do que importa | ele provava que o `-v` **pousa** em `/srv/app` — não que é de lá que o python **importa**. Montagem viva, nonce no lugar, e o pytest importando `app` de `/code/app` assado na imagem: os dois lados voltam iguais e a prova diferencial **absolve em silêncio**, com o canário verde. Mesmo desfecho do caso original, por um caminho que a guarda não alcançava. ⚠️ O limite estava **escrito no docstring** desde o primeiro dia, como limite conhecido — o que o tornou barato de fechar depois. ✅ 19/08: `import <pacote>` dentro do mesmo container, `<pacote>` derivado de `destino` relativo a `trabalho` (nunca campo novo no yml), e **só `outra` reprova** — pacote que não importa fica quieto, senão a guarda dispararia em todo diretório de teste. |
 | **a mutação que não aplica** | 🆕 o próprio arnês de mutação | injetei "`nao_importavel` passa a reprovar" por casamento exato de string, a string tinha uma continuação `\` que meu literal errou, o `replace` virou **no-op** e a suíte passou inteira — o que se lê exatamente como *"a trava é fraca"*. **Mutação que não dispara é indistinguível de trava que não pega.** ✅ passou a mutar por índice de linha, e a aplicação é conferida (`assert` no alvo) antes de rodar. |
+| **a beta que viaja no cabeçalho** | 🆕 20/08 · a sonda que confere se `ajusta_chamada` mascarou o que devia | ela procurava as betas em `corpo["anthropic_beta"]`. **No Mantle a beta viaja só no cabeçalho `anthropic-beta` e nunca chega ao corpo** — a lista vinha vazia nas cinco células, a exigência passava por **vacuidade**, e a sonda declarava "máscara perfeita" sem nunca ter olhado para uma beta. No Bedrock legado é o contrário: `_prepare_options` copia cabeçalho → corpo. **Guarda conferindo um dos dois campos possíveis, e a resposta certa depende de qual cliente foi construído.** Quinta vez que o padrão aparece dentro da guarda escrita contra o padrão. ✅ `_betas_no_fio` olha os dois; `--vacuidade` reproduz o predicado antigo sobre o dado capturado e mostra ele passando verde. |
+| **o resgate por sufixo que mentia no fim** | 🆕 20/08 · nenhuma — e é a variação por **duas portas com regras diferentes** | `_grep` sempre honrou `_IGNORA`; `_resolve_caminho` não podava nada e andava a árvore inteira por `rglob` (`node_modules`, `.next`, `.git`) a cada `read_file` que erra a raiz — que é o **caso comum** (29 acusações disseram `app/routers/shares.py` e 20 disseram `app/api/app/routers/shares.py` para o mesmo arquivo). **O pior não era o tempo, era a mentira no fim dele:** sem alvo, respondia *"não existe em head"*. Num repositório grande isso é falso — nós só paramos de procurar — e o advogado refuta em cima disso. ⚠️ E com uma cópia vendorizada casando o mesmo sufixo, o resgate ficava ambíguo e devolvia `None`: um arquivo que **existe** virava "não existe" porque alguém vendorizou. ✅ `os.walk` podado, e quem desiste **diz que desistiu**, com frase diferente da de ausência. |
+| **o arnês que acusa a trava de fraca** | 🆕 20/08 · o próprio arnês, de novo | três mutações tinham indentação errada, o módulo mutado não compilava, o pytest reportava `ERROR` (não `FAILED`), e o arnês lia isso como *"nenhuma trava pega"*. **Ele acusava as travas por um defeito dele.** ✅ casa **linha inteira** (a substring `art["erro"] = (` casava duas indentações) e **levanta** se o mutado não compilar. |
+| **a mutação que mata a trava certa pela CAUSA errada** | 🆕 20/08 · a especificidade do arnês | trocar o **nome** de uma função levanta `NameError`: as travas certas ficam vermelhas, o arnês diz OK, e ninguém mediu nada. `ast.parse` não pega — nome indefinido só explode em execução. ✅ o arnês levanta em `NameError`/`ImportError`, e a mutação usa `False and f(...)`, que curto-circuita sem quebrar o módulo. Terceira variação de *"mutação que não mede o que alega"* em dois dias. |
+| **a condição que era DECORAÇÃO** | 🆕 20/08 · uma das duas condições do rótulo de corrida | `len(suspeitos) != 1` **e** `o outro lado rodou`. Com dois lados suspeitos, nenhum "outro" produziu resumo, então o segundo filtro já esvaziava a lista: **não existia violação que deixasse a primeira vermelha sozinha.** Guarda que não pode ser vista falhando não é guarda. ✅ virou um critério só. |
+| **a trava lendo os dois lados do mutante** | 🆕 20/08 · `test_o_terminal_continua_em_caixa_alta` | escrita como `TERMINAL.rotulo(juiz.O_QUE) in bloco` — justamente para não duplicar a convenção de string em dois lugares — e com isso **os dois lados da comparação saíam da função mutada**. Passava verde com o terminal já convertido para markdown. ✅ o corte: afirmação sobre **ordem** vira pergunta ao estilo (sobrevive à troca de tipografia); afirmação sobre **tipografia** vira literal no teste, porque é a própria convenção que está sendo afirmada. |
 
 **Um primo, na mesma família:** métrica que mede a coisa errada. O diagnóstico
 contava *"árbitro preenchido"*, e 94 de 94 estavam preenchidos **com lixo
@@ -499,6 +511,17 @@ porque nenhuma sonda dependia disso — até uma passar a depender. **Meio-nu n�
    fatos do repositório; `arbitro.regra` e `conserto` são opinião do modelo
    sobre eles. Foi o que fez a fusão de 18/08 ignorar o texto da regra e casar
    pela procedência.
+
+9. 🆕 **Duas funções irmãs respondem à mesma pergunta do mesmo jeito?** `_grep` e
+   `_resolve_caminho` são as duas portas para o mesmo repositório, e só uma
+   honrava `_IGNORA`. A assimetria não tinha motivo, ninguém a tinha escolhido, e
+   a porta sem poda terminava afirmando *"não existe"* sobre arquivo que existe.
+   **Assimetria que ninguém decidiu é assimetria que ninguém conferiu.**
+
+10. 🆕 **Uma trava tem como ficar vermelha sozinha?** Se toda violação que a
+    deixa vermelha também derruba outra, ela é decoração — e você só descobre
+    tentando escrever a violação que a isola. Foi a segunda condição do rótulo de
+    corrida, e o corte foi apagar a condição, não escrever mais um teste.
 
 > **O `or <valor do desafio>` é cicatriz de migração.** O código nasceu contra o
 > desafio e o `veredito.yml` foi enxertado depois; o `or` era a ponte, e virou
@@ -563,6 +586,32 @@ CONSERTO SUGERIDO: uma frase.        ← só para condenados
 Mais **a lista dos descartados com motivo** e **a lista dos inconclusivos com a
 causa**. Essas duas listas são a peça que nenhum concorrente tem — e precisam ser
 enquadradas **em voz alta**, senão soam como confissão de erro.
+
+### 🆕 Um conteúdo, duas superfícies — `veredito/superficie.py` (20/08)
+
+O bloco acima é o **terminal**. O comentário de PR é markdown de verdade:
+títulos, `**negrito**`, permalink do GitHub no lugar de `arquivo:linha`, e link
+para o rastro da execução no lugar do caminho de artefato local — que o autor do
+PR não tem.
+
+⚠️ **A causa comum dos defeitos que isso consertou era uma só: restrição de uma
+superfície aplicada onde ela não vale.** O `evidencia` sem acento vinha do
+console cp1252, que nem pedia isso (acento *cabe* em cp1252; só emoji não) — e
+vazava para a tela que o cliente lê, onde a restrição não existe. É o padrão de
+bug em outra roupa: regra aplicada onde não é o caso.
+
+🚫 **O bloco do parecer não é mais texto remontado por casamento de prefixo.**
+Procurar `"O QUE:"` dentro da string já formatada era convenção de string
+carregando estrutura (item 4 do "como procurar"), e o preço chegaria calado na
+segunda superfície. Agora são campos `(rótulo, valor)`, e cada estilo renderiza.
+
+🚫 **`fusao.agrupa` e `fusao.agrupa_por_endereco` existem lado a lado, e a
+diferença é a tese do produto.** `agrupa` exige os **dois** fatos (endereço
+vizinho *e* mesma procedência) e sustenta *"é o mesmo defeito"*.
+`agrupa_por_endereco` é **fraca de propósito**: serve para a fila de não
+testadas, onde nenhuma suspeita tem veredito nem prova, e o texto diz ao autor
+que agrupar por endereço **não** é dizer que são o mesmo defeito. Trocar uma
+pela outra é a fusão inferindo onde ela deveria provar.
 
 ---
 
@@ -857,10 +906,47 @@ na conta errada** e a rodada pareceria perfeita.
 
 🚫 **Não escrevemos wrapper boto3 à mão sobre o bedrock-runtime.** O
 `tool_runner` **é** o advogado; reimplementá-lo para trocar quem fatura seria
-bifurcar a única peça do produto que é agente de verdade. Os clientes de
-Bedrock/AWS do próprio SDK assinam com SigV4 pelo boto3 e expõem
+bifurcar a única peça do produto que é agente de verdade. O cliente **Mantle**
+(o padrão) e o `aws` assinam com SigV4 pelo boto3 e expõem
 `beta.messages.tool_runner` igual — o boto3 entra onde ele é de fato bom:
 resolver credencial.
+
+### 🚨 O legado do Bedrock NÃO tem `tool_runner` — medido em 20/08
+
+⚠️ **Até 20/08 esta seção dizia que "os clientes de Bedrock/AWS expõem
+`tool_runner` igual", sem qualificar.** Vale para o Mantle e para o `aws`; é
+**falso** para o legado, e a frase convidava a ligar a escotilha justamente
+quando o Mantle falta.
+
+Medido construindo os dois clientes de verdade, não lido na doc:
+
+| cliente | `create` | `tool_runner` |
+|---|---|---|
+| `AnthropicBedrockMantle` (padrão) | sim | **sim** |
+| `AnthropicBedrock` (`VEREDITO_BEDROCK_LEGADO=1`) | sim | **NÃO** |
+
+**Por que isso não é detalhe de compatibilidade:** com a escotilha ligada, cada
+acusação morreria com `AttributeError` dentro do `try` de `julga`, que converte
+qualquer exceção em INCONCLUSIVO. A rodada terminaria com a categoria
+carro-chefe vazia **e o parecer parecendo rigoroso** — o desfecho que o terceiro
+estado existe para impedir, chegando pela porta da infraestrutura.
+
+- `CAPACIDADES` é separado de `SEM_NO_BEDROCK`: este último é só o que o Bedrock
+  recusa **por parâmetro**. `tool_runner` não é parâmetro e não tem beta; enfiar
+  na constante faria todo Bedrock declarar uma perda que o caminho padrão não
+  tem — guarda morrendo de excesso.
+- o pré-voo **reprova**, não avisa. Perder `task_budget` degrada e o operador
+  decide; perder `tool_runner` cancela. Alarme que só informa, num caso que não
+  tem como dar certo, ensina a seguir em frente.
+- `_legado_pedido()` lê a escotilha em **um** lugar. Lida em dois, o motor
+  prometeria `tool_runner` e construiria o cliente que não tem — a "chave em
+  dois lugares" que já custou quatro tentativas neste projeto.
+
+🚨 **E `SEM_NO_BEDROCK` continua LIDA, não medida.** O instrumento existe
+(`medir_bedrock.py`, cinco células isolando cada parâmetro), está validado por
+mutação e custa ~US$0,01 — falta credencial AWS nesta máquina. O comentário do
+próprio código diz *"conferido contra a matriz de disponibilidade"*, que é ler
+doc, e este arquivo inteiro é sobre a diferença.
 
 ---
 

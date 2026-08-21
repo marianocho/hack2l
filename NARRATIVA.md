@@ -208,6 +208,15 @@ e implementar compartilhamento por link com token opaco se o fluxo de chat for
 realmente necessario.
 ```
 
+⚠️ **Este é o formato de 18/08, e ele mudou.** O bloco acima está reproduzido
+como saiu naquele dia, sem edição — é registro, não vitrine. Desde 20/08 o
+comentário de pull request é escrito em markdown: os rótulos em caixa alta viram
+títulos, `app/main.py:104` vira um link que abre na linha exata, e a referência
+ao arquivo de prova vira um link para o rastro da execução em vez de um caminho
+no computador de outra pessoa. **O conteúdo é o mesmo — o que está abaixo,
+explicado campo a campo, continua valendo integralmente.** Ver o buraco 5 da
+seção 11: o formato novo ainda não substituiu o que está no ar.
+
 Linha por linha, para quem não lê código:
 
 - **`ARBITRO`** — a regra violada não foi inventada pelo modelo nem trazida de
@@ -452,17 +461,24 @@ teste ficar vermelho — e ele não ficou.
 
 ## 10. Estado hoje
 
-Medido em 20/08/2026, salvo onde indicado.
+Medido em 20/08/2026 **ao fim do dia**, salvo onde indicado.
 
 | | |
 |---|---|
-| suíte de testes | **787 passando**, 1 pulado, 6 fora do modo rápido |
+| suíte de testes | **836 passando**, 1 pulado, 6 fora do modo rápido |
 | custo por acusação verificada | **US$ 0,071** |
 | custo de um pull request completo | **US$ 1,23 a US$ 1,38** |
 | duração de uma rodada completa | **2 a 13 minutos**, conforme o tamanho |
 | entrega ao usuário | comentário no pull request, publicado pela integração contínua |
+| demonstração pública | `github.com/luisfelp07/veredito-demo` — dois pull requests, dois pareceres publicados |
 | reconhecimento | 2º lugar no Hack2L, agosto de 2026 |
 | código | aberto — `github.com/marianocho/hack2l` |
+
+⚠️ **A cifra da suíte envelhece a cada dia de trabalho, e por isso carrega o
+carimbo.** Ela foi **787** na manhã de 20/08 e **836** à noite, no mesmo dia:
+quarenta e nove travas novas entraram entre uma leitura e outra. Número sem
+carimbo aqui vira alegação — e a data sozinha não basta quando o dia rende duas
+medições diferentes.
 
 **A contenção funciona.** Um revisor automático que executa código pode destruir
 aquilo que ele testa — e isso aconteceu conosco duas vezes, em 11/08. Numa
@@ -505,13 +521,29 @@ ferramentas atuais. O sistema diz isso em vez de chutar, o que é o
 comportamento certo — mas é uma classe inteira de defeito que ele não alcança.
 
 **4. Repositório muito grande ainda degrada.** Em projetos de grande porte, a
-leitura fica lenta o bastante para estourar o tempo limite. A prioridade não é
-resolver: é **falhar rotulado** em vez de morrer em silêncio.
+leitura fica lenta o bastante para estourar o tempo limite. A prioridade não era
+resolver: era **falhar rotulado** em vez de morrer em silêncio — e isso foi
+feito em 20/08. O sistema agora diz **quais partes do repositório ele não
+conseguiu olhar**, uma por uma, em vez de apresentar uma leitura parcial como se
+fosse completa. ⚠️ **O buraco não fechou:** ele continua lento, e a leitura
+continua pegando o pedaço errado do arquivo. O que mudou é que ele para de
+fingir que leu tudo.
 
-**5. O parecer ainda parece um terminal.** O conteúdo está certo e a
-apresentação não: rótulos em caixa alta, referências de arquivo que não são
-links clicáveis, e caminhos de artefato que apontam para arquivos que o autor
-não tem. É trabalho de acabamento, já mapeado item a item.
+**5. ~~O parecer ainda parece um terminal.~~ Consertado no código em 20/08,
+ainda não publicado.** Rótulos em caixa alta, referências de arquivo que não
+eram links clicáveis, caminhos de artefato apontando para arquivos que o autor
+não tem: os sete defeitos foram corrigidos e estão no ramo principal.
+🚨 **Mas o comentário que está no ar continua sendo o antigo.** Só uma execução
+nova o substitui, e as execuções estão paradas por saldo de API — ver o buraco 6.
+**Consertado não é publicado**, e a distinção é a mesma que o produto cobra de si
+mesmo em toda parte: o que vale é o que dá para ver.
+
+**6. 🆕 O saldo da conta de API acabou, e o sintoma está publicado.** Nenhuma
+rodada nova roda até recarregar. O efeito visível: um dos itens do parecer que
+está no ar num repositório público traz, como causa declarada do "não deu para
+decidir", a mensagem de saldo insuficiente do provedor. É honesto — o sistema
+diz por que não concluiu, em vez de concluir sem base — e é constrangedor no
+lugar exato onde não deveria estar.
 
 ---
 
@@ -539,7 +571,8 @@ relativos à raiz do repositório `hack2l`.
 | comentário publicado sem empilhar: 1 comentário após 2 rodadas, 5.590 caracteres | `HANDOFF_18AGO.md` |
 | os doze bugs de 18/08 e as três lições | `HANDOFF_18AGO.md` |
 | 14 de 14 valores fixos usando o valor do projeto original; 9 divergentes | `HANDOFF_18AGO.md` |
-| suíte: 787 passando, 1 pulado, 6 fora do modo rápido | medido em 20/08/2026 — `py -3.12 -m pytest -q -m "not lento"` |
+| suíte: 836 passando, 1 pulado, 6 fora do modo rápido | medido em 20/08/2026 **ao fim do dia**, sobre o merge `4f984e5` — `py -3.12 -m pytest -q -m "not lento"` |
+| demonstração pública: 2 pull requests, 2 pareceres publicados | `github.com/luisfelp07/veredito-demo`, execuções de 20/08/2026 |
 
 ### O que este documento deliberadamente **não** afirma
 

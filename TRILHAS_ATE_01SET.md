@@ -12,6 +12,39 @@
 
 ---
 
+## 🆕 Estado em 20/08, fim do dia — leia antes de pegar uma trilha
+
+**As cinco rodaram no mesmo dia, todas entregaram, todas com US$ 0,00 de API.**
+Os cinco ramos estão mergeados no `main` (`4f984e5`) e empurrados; a suíte fechou
+**836 verdes** depois do merge, com os quatro arnesses de mutação rodados sobre o
+resultado.
+
+| item | estado |
+|---|---|
+| ranking #4 — repo de demonstração | ✅ `luisfelp07/veredito-demo`, público, 2 PRs, 2 pareceres publicados. **O PR limpo saiu limpo** |
+| T1 item 1 — os sete defeitos do parecer | ✅ ⚠️ no código, **não no ar** — só uma execução nova substitui o comentário publicado |
+| T3 item 1 — corrida do bind-mount | ✅ rotulada |
+| T3 item 5 — escala | ✅ degrada rotulada. Aberto: ler centrado na linha |
+| T5 item 1 — a demo | ✅ · T5 item 3 — a régua | pronta para disparar, **US$ 0,00 gastos** |
+| T4 — a narrativa | ✅ `NARRATIVA.md` no `main`, e o link do rodapé destravado |
+| ranking #2 — a primeira chamada real no Bedrock | 🔶 o **caminho de recusa** rodou e funcionou; o caminho feliz continua sem nunca ter rodado |
+
+🚨 **Dois bloqueios novos, e nenhum é de código nosso:**
+
+1. **O saldo da conta Anthropic esgotou.** `sonda_api()` devolve *"SALDO
+   esgotado -- a chave esta ok"*. Barra a não-determinância (T3, ~US$7), a régua
+   (T5, ~US$13), a paridade (T2) e o `gh run rerun` que trocaria o parecer da
+   vitrine. **Toda trilha que gasta está parada até recarregar.**
+2. **Não há credencial AWS nesta máquina** — conferido em quatro lugares. O
+   `medir_bedrock.py` está pronto e custa ~US$0,01; é a primeira coisa a rodar
+   quando a credencial existir, **antes** de gastar a tarde.
+
+⚠️ E o item que a T2 não podia consertar: `orquestrador.py:253` barra rodada em
+crédito puro da AWS com um `if not cfg.ANTHROPIC_API_KEY` incondicional. Está na
+fila, na seção de 20/08.
+
+---
+
 ## O ranking honesto — onde o SEU tempo (não o dos chats) vale mais
 
 Chat é barato e paralelo; a sua atenção não é. Em ordem de retorno:
@@ -21,7 +54,7 @@ Chat é barato e paralelo; a sua atenção não é. Em ordem de retorno:
 | 1 | **Taxa de aceitação** | de cada achado postado, qual fração o autor conserta. A própria fila chama isso de *"a métrica que prova a tese"*, e hoje ela tem **zero medições**. Tudo que temos é gabarito nosso, em repositório nosso |
 | 2 | **A primeira chamada real no Bedrock** | o `motor.py` está **exatamente** onde o `posta_parecer.py` estava em 18/08: coberto de teste com dublê, **nunca executado**. Naquele dia a primeira execução real quebrou em quatro lugares. Não há motivo para esta ser diferente |
 | 3 | **O bloco ```suggestion no comentário** | é a alavanca de conversão mais barata que existe, e é ela que **produz** o número do item 1 — "Commit suggestion" é um clique registrável |
-| 4 | **Repo de demonstração público** | sem ele nada disto é mostrável: a bancada é privada, e o 404 do GitHub **mente** ("not found" se lê como "não existe") |
+| 4 | ✅ **Repo de demonstração público** *(feito em 20/08)* | sem ele nada disto era mostrável: a bancada é privada, e o 404 do GitHub **mente** ("not found" se lê como "não existe"). `luisfelp07/veredito-demo` |
 
 ### E duas coisas para NÃO fazer
 
@@ -81,7 +114,9 @@ que hoje está morto no texto.
 **Entrega:** o comentário de PR reescrito como markdown de verdade, e o
 onboarding do cliente.
 
-1. Os sete defeitos da tabela acima, nesta ordem: 1, 2, 3 → 5, 6 → 4 → 7.
+1. ✅ *(feito em 20/08)* Os sete defeitos da tabela acima, nesta ordem:
+   1, 2, 3 → 5, 6 → 4 → 7. ⚠️ **No código, não no ar** — o comentário publicado
+   só muda com uma execução nova, e elas estão paradas por saldo.
 2. **Bloco ` ```suggestion `** para o `CONSERTO SUGERIDO` quando o conserto é
    local e cabe em poucas linhas. Quando não cabe, texto — 🚫 nunca
    `suggestion` inventado, que quebra o build de quem clicar.
@@ -132,7 +167,8 @@ comparado lado a lado contra a API direta.
 **Entrega:** o pipeline parando de produzir inconclusivo por culpa nossa, e a
 não-determinância medida em vez de anedótica.
 
-1. **A corrida do bind-mount** (diagnosticada em 19/08, não consertada). Fazer a
+1. ✅ *(feito em 20/08, `c6e01cd`)* **A corrida do bind-mount** (diagnosticada
+   em 19/08). Foi feita a
    **opção 2 da fila — rotular**: `ERROR: file or directory not found` com o
    arquivo presente no worktree vira `corrida_do_mount: true` no artefato.
    🚫 Não retry cego — esconderia o caso em que o arquivo realmente não foi
@@ -149,7 +185,8 @@ não-determinância medida em vez de anedótica.
 4. **A chave rígida do `promotores.deduplica`** — item aberto, já medido em
    `MEDICAO_CHAVE_PRE_ADVOGADO.md`. 🚫 **Não reconstruir sem ler aquele
    arquivo**: quatro ideias plausíveis já foram medidas e engavetadas.
-5. **Escala** (item E da fila): repositório grande derruba a leitura, 220s por
+5. ✅ *(feito em 20/08, `3a368bd`)* **Escala** (item E da fila): repositório
+   grande derrubava a leitura, 220s por
    acusação no next.js. Não precisa resolver; precisa **falhar rotulado** em vez
    de morrer no timeout.
 
@@ -180,7 +217,8 @@ nenhuma.
 **Entrega:** o repo de demonstração público, e o primeiro número sobre o mundo
 real.
 
-1. **O repo de demonstração** (1 dia, primeiro item da fila hoje). Público,
+1. ✅ *(feito em 20/08)* **O repo de demonstração** — `luisfelp07/veredito-demo`.
+   Público,
    pequeno, com `veredito.yml` na raiz e o workflow. 🚨 **O PR limpo é o que mais
    importa** — a bancada acabou de mostrar por quê: `pr/contagem-de-tarefas`
    levantou cinco suspeitas e derrubou as cinco. Falso positivo é pior que
@@ -234,16 +272,48 @@ Aplicado ao caso concreto que já existe: a T3 produz `corrida_do_mount` no
 artefato e para. A T1 desenha. As duas trilhas tocam o mesmo parecer, e nenhuma
 toca o mesmo arquivo.
 
-### 3. Ramo por trilha, e merge todo dia
+### 3. Ramo por trilha — e **worktree** por trilha, que é o que faltava aqui
 
 ```bash
-git checkout -b t1-parecer origin/main
+py -3.12 scripts/worktree_de_trilha.py t1-parecer
 ```
 
 `t1-parecer`, `t2-aws`, `t3-bugs`, `t4-narrativa`, `t5-vitrine`.
 `git pull --rebase origin main` antes de qualquer commit; merge para `main` no
 fim de cada bloco de trabalho. ⚠️ Acumular três dias de ramo transforma conflito
 de arquivo em conflito de arquitetura.
+
+🆕 **Primeira emenda ao protocolo (20/08).** A versão original mandava
+`git checkout -b tN origin/main` e **assumia, sem dizer, um checkout por
+sessão** — que não é o que existe. O que aconteceu no primeiro dia: a T2 viu
+`veredito/juiz.py` modificado e um `superficie.py` novo que não eram dela, e dois
+comandos depois os arquivos sumiram e o `HEAD` estava em outro ramo. Era a T1
+trabalhando no mesmo diretório. **A tabela de propriedade por arquivo não protege
+disso, porque a colisão é do checkout, um nível abaixo.**
+
+⚠️ E enquanto o diretório era compartilhado, **`git status` e a suíte não eram
+evidência sobre o próprio trabalho.** Conferir contra o hash do blob, não contra
+a árvore.
+
+🚫 **Não use `git worktree add` cru** — o `.env` está no `.gitignore` e não vai
+junto, e `CHALLENGE_REPO=../desafio` é relativo. A worktree nasce caindo em todos
+os padrões do código, e o erro **se anuncia como defeito do produto**
+(`RuntimeError: ref nao encontrada no repo do desafio: main`). Custou seis
+vermelhos a três sessões, cada uma diagnosticando do zero. O script resolve os
+dois, e deriva a raiz do git em vez de supor o layout.
+
+🚫 **Não use `git stash` enquanto o repo for compartilhado.** A pilha é do
+**repositório**, não da worktree: um `pop` segundos depois trouxe o stash de
+outra trilha, porque os índices `stash@{n}` mudam sob você. Para conferir uma
+linha de base, use uma worktree descartável. Se precisar mesmo do stash, resolva
+por SHA (`git stash list --format='%H %gs'`), **nunca por índice**.
+
+🆕 **Segunda emenda: o vault espelha `main`, nunca um ramo de trilha.** Rodar
+`sync_vault.py --sincronizar` de dentro de uma worktree publica o estado do ramo
+como se fosse canônico. ⚠️ E a sincronia é repo → vault e só detecta
+*diferente*, nunca *qual é mais novo*: se o vault estiver **à frente** — e já
+esteve, com 176 linhas que não existiam em commit nenhum — sincronizar
+**destrói** a versão nova. Confira o sentido antes de escrever.
 
 ### 4. 🚨 O Docker é recurso de UMA sessão por vez
 
