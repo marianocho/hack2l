@@ -14,11 +14,14 @@ quebravam o import, o pytest reportava ERROR e nao FAILED, e a leitura era
 "nenhuma trava pega": o arnes acusando as travas por um defeito dele.
 """
 import ast
+import os
 import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
+
+_SEM_PYC = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
 
 ALVO = pathlib.Path("veredito/ferramentas.py")
 SUITE = "tests/test_leitura_parcial.py"
@@ -84,7 +87,8 @@ def _roda() -> str:
     r = subprocess.run(
         [sys.executable, "-m", "pytest", SUITE, "-q", "--no-header",
          "-p", "no:cacheprovider"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace")
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=_SEM_PYC)
     return r.stdout + r.stderr
 
 

@@ -20,10 +20,13 @@ verdade no caminho ate' o disco. Linha inteira, comparada com `==`.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
 import sys
+
+_SEM_PYC = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
 
 RAIZ = pathlib.Path(__file__).resolve().parents[1]
 
@@ -214,7 +217,8 @@ def roda() -> tuple[int, set[str]]:
         [sys.executable, "-m", "pytest", *ARQUIVOS_DE_TESTE, "-q",
          "--no-header", "-p", "no:cacheprovider",
          *[a for d in DESELECIONADOS for a in ("--deselect", d)]],
-        cwd=RAIZ, capture_output=True, text=True, errors="replace")
+        cwd=RAIZ, capture_output=True, text=True, errors="replace",
+        env=_SEM_PYC)
     return p.returncode, falhas_de(p.stdout + p.stderr)
 
 

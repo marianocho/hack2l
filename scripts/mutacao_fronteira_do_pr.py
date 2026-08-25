@@ -9,6 +9,7 @@ pytest explodir.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,14 @@ from pathlib import Path
 # mesma classe do `app/api/app`, e este repositorio e' publico.
 RAIZ = Path(__file__).resolve().parent.parent
 ALVO = RAIZ / "veredito" / "entrada.py"
+# 🚨 O `.pyc` e' revalidado por (mtime, TAMANHO) do fonte: duas mutacoes
+# consecutivas de MESMO comprimento, no mesmo tique de mtime, fazem o
+# subprocesso importar o bytecode da rodada ANTERIOR, e o arnes reporta o
+# kill-set de uma mutacao que nao esta mais no disco. Medido em 20/08 no
+# `mutacao_detector.py`. Aqui nunca mordeu porque as mutacoes mudam o
+# tamanho do arquivo -- sorte, nao desenho.
+_SEM_PYC = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+
 TRAVA = "tests/test_descricao_do_pr_nao_atravessa.py"
 
 # (rotulo, texto que a linha-ancora PRECISA conter, o que injetar no lugar)
@@ -65,7 +74,7 @@ def roda_pytest() -> tuple[int, str]:
     r = subprocess.run([sys.executable, "-m", "pytest", TRAVA, "-q", "--no-header",
                         "-rf", "--tb=no"],
                        cwd=RAIZ, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+                       encoding="utf-8", errors="replace", env=_SEM_PYC)
     return r.returncode, r.stdout
 
 

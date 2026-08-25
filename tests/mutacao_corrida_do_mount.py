@@ -22,11 +22,14 @@ ou seja, o arnes acusava as travas de fracas por um defeito DELE. Mesmo formato
 de erro que ele existe para procurar.
 """
 import ast
+import os
 import pathlib
 import shutil
 import subprocess
 import sys
 import tempfile
+
+_SEM_PYC = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
 
 ALVO = pathlib.Path("veredito/ferramentas.py")
 
@@ -78,7 +81,8 @@ def main() -> int:
         base = subprocess.run(
             [sys.executable, "-m", "pytest", SUITE, "-q", "--no-header",
              "-p", "no:cacheprovider"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace")
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=_SEM_PYC)
         if _falhas(base.stdout + base.stderr):
             print("a suite ja esta vermelha SEM mutacao -- nada a medir")
             return 1
@@ -102,7 +106,8 @@ def main() -> int:
             r = subprocess.run(
                 [sys.executable, "-m", "pytest", SUITE, "-q", "--no-header",
                  "-p", "no:cacheprovider"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace")
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=_SEM_PYC)
             saida = r.stdout + r.stderr
             if " error" in saida.lower() and "errors" in saida.lower():
                 raise AssertionError(f"{nome}: a suite deu ERRO de coleta:\n{saida[-800:]}")
