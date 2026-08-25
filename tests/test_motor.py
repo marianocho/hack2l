@@ -333,9 +333,19 @@ def test_ajusta_nao_muta_o_dicionario_de_quem_chamou(monkeypatch):
 
 def test_a_mascara_cobre_exatamente_o_que_o_modulo_declara():
     """A lista de capacidades ausentes e a tabela de custo nao podem divergir --
-    duas fontes para a mesma informacao divergem em silencio."""
-    assert set(motor.SEM_NO_BEDROCK) == set(motor.CUSTO)
+    duas fontes para a mesma informacao divergem em silencio.
+
+    ⚠️ 20/08: as duas listas deixaram de ser a mesma, e a igualdade unica escondia
+    a diferenca. `CUSTO` cobre TODA capacidade que algum motor pode perder --
+    `perdas()` le por nome, e nome sem texto sai no pre-voo como rotulo cru.
+    `_BETA_DE` cobre so' as que sao parametro com beta casada: `tool_runner` nao
+    e' parametro, e' um metodo que o cliente legado nao tem, entao beta para ele
+    nao existiria. Somar os dois num `==` so' voltaria a mentir na proxima
+    capacidade que nao for parametro.
+    """
+    assert set(motor.CAPACIDADES) == set(motor.CUSTO)
     assert set(motor.SEM_NO_BEDROCK) == set(motor._BETA_DE)
+    assert set(motor.SEM_NO_BEDROCK) <= set(motor.CAPACIDADES)
 
 
 # =========================================== a degradacao dita em voz alta
