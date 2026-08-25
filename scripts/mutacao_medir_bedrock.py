@@ -32,6 +32,22 @@ import sys
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
+# 🚨 O `.pyc` e' revalidado por (mtime, TAMANHO) do fonte, e este arnes reescreve
+# o fonte e chama `importlib.reload`. Duas mutacoes consecutivas de MESMO
+# comprimento, escritas dentro do mesmo tique de mtime, fazem o reload servir o
+# bytecode da rodada ANTERIOR -- e o arnes reporta o desfecho de uma mutacao que
+# nao esta mais no disco. Medido em 20/08 no `mutacao_detector.py`, onde a
+# mutacao da procedencia matou a trava da mutacao anterior; reproduzido a mao, a
+# mesma mutacao matou exatamente as tres previstas.
+#
+# ⚠️ Este arnes nunca foi mordido porque as mutacoes dele mudam o tamanho do
+# arquivo. Isso e' sorte, nao desenho -- e a proxima mutacao acrescentada aqui
+# nao tem como saber disso.
+sys.dont_write_bytecode = True
+for _pasta in (RAIZ / "__pycache__", RAIZ / "veredito" / "__pycache__"):
+    for _velho in list(_pasta.glob("medir_bedrock.*.pyc")) + list(_pasta.glob("motor.*.pyc")):
+        _velho.unlink(missing_ok=True)
+
 # (nome, arquivo, linha de hoje (sem indentacao a direita), linha mutada,
 #  fragmento que DEVE aparecer em alguma falha)
 MUTACOES = [
